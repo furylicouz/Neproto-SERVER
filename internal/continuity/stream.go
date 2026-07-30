@@ -53,19 +53,20 @@ type ResumableStream struct {
 	ackMu     sync.Mutex
 	mu        sync.Mutex
 
-	physical        io.ReadWriteCloser
-	transmitted     uint64
-	receiveOffset   uint64
-	lastNotified    uint64
-	localFIN        bool
-	finTransmitted  bool
-	discard         uint64
-	writeAttemptEnd uint64
-	pendingAck      uint64
-	notify          chan struct{}
-	closed          bool
-	closeOnce       sync.Once
-	closeErr        error
+	physical         io.ReadWriteCloser
+	transmitted      uint64
+	receiveOffset    uint64
+	lastNotified     uint64
+	localFIN         bool
+	finTransmitted   bool
+	discard          uint64
+	writeAttemptEnd  uint64
+	writeAttemptDone chan struct{}
+	pendingAck       uint64
+	notify           chan struct{}
+	closed           bool
+	closeOnce        sync.Once
+	closeErr         error
 }
 
 func NewResumableStream(config ResumableStreamConfig) (*ResumableStream, error) {
@@ -143,6 +144,7 @@ func (s *ResumableStream) Write(payload []byte) (int, error) {
 			continue
 		}
 		s.writeAttemptEnd = end
+		s.writeAttemptDone = make(chan struct{})
 		s.mu.Unlock()
 		n, writeErr := physical.Write(payload[position:])
 		if n < 0 || n > len(payload)-position {
@@ -150,9 +152,10 @@ func (s *ResumableStream) Write(payload []byte) (int, error) {
 			writeErr = ErrResumableState
 		}
 		var deferredAck uint64
+		var attemptDone chan struct{}
 		invalidDeferredAck := false
 		s.mu.Lock()
-		if s.physical == physical && s.transmitted == transmitted {
+		if !s.closed && (s.physical == physical || s.physical == nil) && s.transmitted == transmitted {
 			if uint64(n) > protocol.MaxSequence-s.transmitted {
 				writeErr = ErrResumableState
 				n = 0
@@ -162,6 +165,8 @@ func (s *ResumableStream) Write(payload []byte) (int, error) {
 		}
 		if s.writeAttemptEnd != 0 {
 			s.writeAttemptEnd = 0
+			attemptDone = s.writeAttemptDone
+			s.writeAttemptDone = nil
 			if s.pendingAck != 0 {
 				if s.pendingAck <= s.transmitted {
 					deferredAck = s.pendingAck
@@ -176,14 +181,23 @@ func (s *ResumableStream) Write(payload []byte) (int, error) {
 		s.mu.Unlock()
 		if deferredAck != 0 {
 			if err := s.ackJournal(deferredAck, true); err != nil {
+				if attemptDone != nil {
+					close(attemptDone)
+				}
 				return writtenForRange(start, end, currentTransmitted), err
 			}
+		}
+		if attemptDone != nil {
+			close(attemptDone)
 		}
 		if invalidDeferredAck {
 			return writtenForRange(start, end, currentTransmitted), ErrResumableState
 		}
 		if closed {
 			return writtenForRange(start, end, currentTransmitted), ErrResumableClosed
+		}
+		if currentTransmitted >= end {
+			return len(payload), nil
 		}
 		if writeErr != nil || n == 0 {
 			if writeErr == nil {
@@ -415,6 +429,7 @@ func (s *ResumableStream) DetachPhysical() error {
 		return ErrResumableClosed
 	}
 	physical := s.physical
+	attemptDone := s.writeAttemptDone
 	s.physical = nil
 	if physical != nil {
 		s.signalLocked()
@@ -422,6 +437,12 @@ func (s *ResumableStream) DetachPhysical() error {
 	s.mu.Unlock()
 	if physical != nil {
 		_ = physical.Close()
+	}
+	if attemptDone != nil {
+		// Closing the superseded carrier unblocks this exact physical Write.
+		// A writer merely waiting for a replacement has no attempt channel, so
+		// the migration barrier cannot wait on itself.
+		<-attemptDone
 	}
 	return nil
 }

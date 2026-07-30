@@ -223,12 +223,49 @@ func TestResumableStreamDefersAckThatRacesPhysicalWriteReturn(t *testing.T) {
 	if offsets := stream.Offsets(); offsets.SendBase != 0 || offsets.SendEnd != 3 {
 		t.Fatalf("ack retired bytes before write return: %+v", offsets)
 	}
-	close(physical.release)
+	physical.unblock()
 	if err := <-written; err != nil {
 		t.Fatalf("write result: %v", err)
 	}
 	if offsets := stream.Offsets(); offsets.SendBase != 3 || offsets.SendEnd != 3 {
 		t.Fatalf("deferred acknowledgement not applied: %+v", offsets)
+	}
+}
+
+func TestResumableStreamDetachWaitsForDeliveredWriteAccounting(t *testing.T) {
+	physical := newBlockingWritePhysical()
+	stream, err := NewResumableStream(ResumableStreamConfig{
+		Context: context.Background(), Initial: physical, JournalBytes: 8,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	written := make(chan error, 1)
+	go func() {
+		_, writeErr := stream.Write([]byte("abc"))
+		written <- writeErr
+	}()
+	select {
+	case <-physical.started:
+	case <-time.After(time.Second):
+		t.Fatal("physical write did not start")
+	}
+	if err := stream.DetachPhysical(); err != nil {
+		t.Fatalf("detach physical: %v", err)
+	}
+	if err := <-written; err != nil {
+		t.Fatalf("delivered write result: %v", err)
+	}
+	if offsets := stream.Offsets(); offsets.SendEnd != 3 {
+		t.Fatalf("delivered write was not accounted: %+v", offsets)
+	}
+	second := newScriptedPhysical(nil, -1)
+	if err := stream.Replace(second, ResumeState{}); err != nil {
+		t.Fatalf("replace after delivered write: %v", err)
+	}
+	if got := second.written(); got != "abc" {
+		t.Fatalf("replacement replay=%q", got)
 	}
 }
 
@@ -388,9 +425,10 @@ type scriptedPhysical struct {
 }
 
 type blockingWritePhysical struct {
-	started chan struct{}
-	release chan struct{}
-	once    sync.Once
+	started     chan struct{}
+	release     chan struct{}
+	startOnce   sync.Once
+	releaseOnce sync.Once
 }
 
 func newBlockingWritePhysical() *blockingWritePhysical {
@@ -400,12 +438,17 @@ func newBlockingWritePhysical() *blockingWritePhysical {
 func (p *blockingWritePhysical) Read([]byte) (int, error) { return 0, io.EOF }
 
 func (p *blockingWritePhysical) Write(payload []byte) (int, error) {
-	p.once.Do(func() { close(p.started) })
+	p.startOnce.Do(func() { close(p.started) })
 	<-p.release
 	return len(payload), nil
 }
 
-func (*blockingWritePhysical) Close() error { return nil }
+func (p *blockingWritePhysical) unblock() { p.releaseOnce.Do(func() { close(p.release) }) }
+
+func (p *blockingWritePhysical) Close() error {
+	p.unblock()
+	return nil
+}
 
 func newScriptedPhysical(readData []byte, writeLimit int) *scriptedPhysical {
 	physical := &scriptedPhysical{writeLimit: writeLimit, failed: make(chan struct{})}

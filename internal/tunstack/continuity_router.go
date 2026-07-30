@@ -386,6 +386,12 @@ func (r *ClientContinuityRouter) migrationWorker() {
 func (r *ClientContinuityRouter) migrate(flow *clientContinuityFlow) {
 	ctx, cancel := context.WithTimeout(r.ctx, r.migrationTimeout)
 	defer cancel()
+	if err := flow.stream.DetachPhysical(); err != nil {
+		if !errors.Is(err, continuity.ErrResumableClosed) {
+			flow.finish(true)
+		}
+		return
+	}
 	for {
 		flow.mu.Lock()
 		if flow.finished {
