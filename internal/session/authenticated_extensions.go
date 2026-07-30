@@ -77,6 +77,9 @@ func startClientExtensionNegotiation(
 	authenticated *Authenticated,
 	config AuthenticatedConfig,
 ) error {
+	if authenticated != nil && authenticated.Cover != nil {
+		defer authenticated.Cover.ResumeDummies()
+	}
 	if config.ExtensionRequest == nil {
 		authenticated.extensions.complete(protocol.ExtensionParameters{}, false, nil)
 		return nil
@@ -114,6 +117,9 @@ func startServerExtensionNegotiation(authenticated *Authenticated, config Authen
 	}
 	offer := *config.ExtensionOffer
 	go func() {
+		if authenticated.Cover != nil {
+			defer authenticated.Cover.ResumeDummies()
+		}
 		ctx, cancel := context.WithTimeout(authenticated.Mux.ctx, extensionTimeout(config.ExtensionTimeout))
 		defer cancel()
 		selected, err := NegotiateServerExtensions(ctx, authenticated.Mux, offer, 1)
@@ -187,15 +193,6 @@ func applyClientForwardSecrecy(
 	if err != nil {
 		return errors.Join(ErrExtensionNegotiation, err)
 	}
-	if err := authenticated.encrypted.rekey(keys); err != nil {
-		return errors.Join(ErrExtensionNegotiation, err)
-	}
-	if authenticated.Datagrams != nil {
-		if err := authenticated.Datagrams.rekey(keys); err != nil {
-			return errors.Join(ErrExtensionNegotiation, err)
-		}
-	}
-	authenticated.Keys = keys
 	confirmation, err := authenticated.Mux.ReceiveExtension(ctx)
 	if err != nil || confirmation.Type != protocol.ExtensionUpdate || confirmation.MessageID != 3 ||
 		len(confirmation.TLVs) != 1 || confirmation.TLVs[0].Type != protocol.ExtensionTLVForwardSecretConfirm ||
@@ -205,6 +202,28 @@ func applyClientForwardSecrecy(
 	expected, err := protocol.ForwardSecretConfirmation(keys, serverPublic, clientPublic)
 	if err != nil || !hmac.Equal(confirmation.TLVs[0].Value, expected[:]) {
 		return errors.Join(ErrExtensionNegotiation, protocol.ErrForwardSecrecy)
+	}
+	if err := authenticated.encrypted.rekey(keys); err != nil {
+		return errors.Join(ErrExtensionNegotiation, err)
+	}
+	if authenticated.Datagrams != nil {
+		if err := authenticated.Datagrams.rekey(keys); err != nil {
+			return errors.Join(ErrExtensionNegotiation, err)
+		}
+	}
+	authenticated.Keys = keys
+	acknowledgement, err := protocol.ForwardSecretAcknowledgement(keys, serverPublic, clientPublic)
+	if err != nil {
+		return errors.Join(ErrExtensionNegotiation, err)
+	}
+	if err := authenticated.Mux.SendExtension(ctx, protocol.ExtensionEnvelope{
+		Type: protocol.ExtensionUpdate, MessageID: 4,
+		TLVs: []protocol.ExtensionTLV{{
+			Type:  protocol.ExtensionTLVForwardSecretAck,
+			Value: append([]byte(nil), acknowledgement[:]...),
+		}},
+	}); err != nil {
+		return errors.Join(ErrExtensionNegotiation, err)
 	}
 	return nil
 }
@@ -227,17 +246,11 @@ func applyServerForwardSecrecy(
 	if err != nil {
 		return errors.Join(ErrExtensionNegotiation, err)
 	}
-	if err := authenticated.encrypted.rekey(keys); err != nil {
-		return errors.Join(ErrExtensionNegotiation, err)
-	}
-	if authenticated.Datagrams != nil {
-		if err := authenticated.Datagrams.rekey(keys); err != nil {
-			return errors.Join(ErrExtensionNegotiation, err)
-		}
-	}
-	authenticated.Keys = keys
 	confirmation, err := protocol.ForwardSecretConfirmation(keys, serverPublic, clientPublic)
 	if err != nil {
+		return errors.Join(ErrExtensionNegotiation, err)
+	}
+	if err := authenticated.encrypted.rekeyAfterNextSend(keys); err != nil {
 		return errors.Join(ErrExtensionNegotiation, err)
 	}
 	if err := authenticated.Mux.SendExtension(ctx, protocol.ExtensionEnvelope{
@@ -248,6 +261,22 @@ func applyServerForwardSecrecy(
 		}},
 	}); err != nil {
 		return errors.Join(ErrExtensionNegotiation, err)
+	}
+	if authenticated.Datagrams != nil {
+		if err := authenticated.Datagrams.rekey(keys); err != nil {
+			return errors.Join(ErrExtensionNegotiation, err)
+		}
+	}
+	authenticated.Keys = keys
+	acknowledgement, err := authenticated.Mux.ReceiveExtension(ctx)
+	if err != nil || acknowledgement.Type != protocol.ExtensionUpdate || acknowledgement.MessageID != 4 ||
+		len(acknowledgement.TLVs) != 1 || acknowledgement.TLVs[0].Type != protocol.ExtensionTLVForwardSecretAck ||
+		len(acknowledgement.TLVs[0].Value) != 32 {
+		return errors.Join(ErrExtensionNegotiation, err)
+	}
+	expected, err := protocol.ForwardSecretAcknowledgement(keys, serverPublic, clientPublic)
+	if err != nil || !hmac.Equal(acknowledgement.TLVs[0].Value, expected[:]) {
+		return errors.Join(ErrExtensionNegotiation, protocol.ErrForwardSecrecy)
 	}
 	return nil
 }

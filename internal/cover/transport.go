@@ -62,6 +62,7 @@ type Transport struct {
 	paddingBytes   atomic.Uint64
 	dummyWireBytes atomic.Uint64
 	dummySequence  atomic.Uint64
+	dummiesPaused  atomic.Bool
 }
 
 var _ carrier.Carrier = (*Transport)(nil)
@@ -154,6 +155,22 @@ func (t *Transport) EnableMosaic() bool {
 	return t != nil && t.engine.EnableMosaic()
 }
 
+// PauseDummies temporarily suppresses background cover cells while a caller
+// performs a record-layer key transition. Real protocol cells keep flowing so
+// the authenticated rekey exchange itself can complete.
+func (t *Transport) PauseDummies() {
+	if t != nil {
+		t.dummiesPaused.Store(true)
+	}
+}
+
+// ResumeDummies re-enables background cover cells after a key transition.
+func (t *Transport) ResumeDummies() {
+	if t != nil {
+		t.dummiesPaused.Store(false)
+	}
+}
+
 func (t *Transport) runDummies() {
 	defer t.wait.Done()
 	for {
@@ -161,6 +178,9 @@ func (t *Transport) runDummies() {
 		case <-t.ctx.Done():
 			return
 		case <-t.dummies:
+			if t.dummiesPaused.Load() {
+				continue
+			}
 			t.planMu.Lock()
 			if t.ctx.Err() != nil {
 				t.planMu.Unlock()
@@ -177,6 +197,9 @@ func (t *Transport) runDummies() {
 			}
 			if err := waitUntil(t.ctx, t.done, decision.SendAt); err != nil {
 				return
+			}
+			if t.dummiesPaused.Load() {
+				continue
 			}
 			if err := t.sendRaw(t.ctx, raw); err != nil {
 				if t.ctx.Err() != nil {

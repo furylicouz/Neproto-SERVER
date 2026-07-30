@@ -108,11 +108,28 @@ func ForwardSecretConfirmation(
 	serverPublic [32]byte,
 	clientPublic [32]byte,
 ) ([32]byte, error) {
+	return forwardSecretProof(keys, serverPublic, clientPublic, "NP2 forward secrecy ready\x00")
+}
+
+func ForwardSecretAcknowledgement(
+	keys SessionKeys,
+	serverPublic [32]byte,
+	clientPublic [32]byte,
+) ([32]byte, error) {
+	return forwardSecretProof(keys, serverPublic, clientPublic, "NP2 forward secrecy acknowledged\x00")
+}
+
+func forwardSecretProof(
+	keys SessionKeys,
+	serverPublic [32]byte,
+	clientPublic [32]byte,
+	label string,
+) ([32]byte, error) {
 	if keys.Control == ([32]byte{}) || serverPublic == ([32]byte{}) || clientPublic == ([32]byte{}) {
 		return [32]byte{}, ErrForwardSecrecy
 	}
 	mac := hmac.New(sha256.New, keys.Control[:])
-	_, _ = mac.Write([]byte("NP2 forward secrecy ready\x00"))
+	_, _ = mac.Write([]byte(label))
 	_, _ = mac.Write(serverPublic[:])
 	_, _ = mac.Write(clientPublic[:])
 	return [32]byte(mac.Sum(nil)), nil

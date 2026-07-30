@@ -16,6 +16,7 @@ const (
 	ExtensionTLVContinuity            uint64              = 8
 	ExtensionTLVForwardSecretKeyShare uint64              = 9
 	ExtensionTLVForwardSecretConfirm  uint64              = 10
+	ExtensionTLVForwardSecretAck      uint64              = 11
 )
 
 var (

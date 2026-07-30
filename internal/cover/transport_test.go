@@ -113,6 +113,58 @@ func TestQuietTransportPreservesCellAndNeverSendsDummy(t *testing.T) {
 	}
 }
 
+func TestTransportPausesDummiesAcrossKeyTransition(t *testing.T) {
+	typeMap := transportTypeMap(t)
+	engine, err := NewEngine(Config{
+		Profile: ProfileWeb, MaxOverheadPercent: 100, MaxBudgetBytes: 65_535,
+		Seed: [32]byte{0x61, 0x83},
+	})
+	if err != nil {
+		t.Fatalf("create engine: %v", err)
+	}
+	underlying := newRecordingCarrier()
+	transport, err := NewTransport(TransportConfig{
+		Carrier: underlying, TypeMap: typeMap, Engine: engine, PaddingSeed: [32]byte{0x62, 0x19},
+	})
+	if err != nil {
+		t.Fatalf("create transport: %v", err)
+	}
+	defer transport.Close()
+	transport.PauseDummies()
+
+	raw, err := protocol.EncodeCell(typeMap, protocol.Cell{
+		Kind: protocol.CellData, StreamID: 1, Sequence: 1,
+		Payload: bytes.Repeat([]byte{0xa5}, protocol.MaxCellPayloadSize),
+	})
+	if err != nil {
+		t.Fatalf("encode cell: %v", err)
+	}
+	if err := transport.Send(context.Background(), raw); err != nil {
+		t.Fatalf("send while paused: %v", err)
+	}
+	<-underlying.sent
+	select {
+	case unexpected := <-underlying.sent:
+		t.Fatalf("paused transport sent background cell: %x", unexpected)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	transport.ResumeDummies()
+	if err := transport.Send(context.Background(), raw); err != nil {
+		t.Fatalf("send after resume: %v", err)
+	}
+	<-underlying.sent
+	select {
+	case dummy := <-underlying.sent:
+		cell, decodeErr := protocol.DecodeCell(typeMap, dummy)
+		if decodeErr != nil || cell.Kind != protocol.CellDummy {
+			t.Fatalf("resumed dummy=%#v err=%v", cell, decodeErr)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("resumed transport did not send background cell")
+	}
+}
+
 func TestTransportReceivePassesCarrierMessagesThrough(t *testing.T) {
 	typeMap := transportTypeMap(t)
 	engine, _ := NewEngine(Config{Profile: ProfileQuiet, Seed: [32]byte{1}})

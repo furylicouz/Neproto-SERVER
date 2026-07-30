@@ -208,6 +208,9 @@ func startAuthenticated(
 	if err != nil {
 		return nil, closeAuthentication(encrypted, "create cover transport", err)
 	}
+	if config.EnableForwardSecrecy {
+		covered.PauseDummies()
+	}
 	mux, err := New(Config{
 		Role: role, Carrier: covered, TypeMap: typeMap,
 		InitialWindow: config.InitialWindow, MaxStreams: config.MaxStreams,

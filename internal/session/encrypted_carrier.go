@@ -48,6 +48,16 @@ type encryptedCarrier struct {
 	sendEpoch     uint64
 	receiveEpoch  uint64
 	epochInterval uint64
+	pendingRekey  *recordRekey
+}
+
+type recordRekey struct {
+	sendAEAD      cipher.AEAD
+	receiveAEAD   cipher.AEAD
+	sendKey       [32]byte
+	receiveKey    [32]byte
+	sendPrefix    [4]byte
+	receivePrefix [4]byte
 }
 
 var _ carrier.Carrier = (*encryptedCarrier)(nil)
@@ -92,6 +102,14 @@ func (c *encryptedCarrier) Send(ctx context.Context, plaintext []byte) error {
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	transition := c.pendingRekey
+	if transition != nil {
+		// Keep Receive from authenticating the peer's first new-generation
+		// record until the old-generation confirmation has been sent and the
+		// local record state has switched atomically.
+		c.receiveMu.Lock()
+		defer c.receiveMu.Unlock()
+	}
 	if c.sendCounter == math.MaxUint64 {
 		_ = c.Close()
 		return ErrRecordSequenceExhausted
@@ -108,6 +126,10 @@ func (c *encryptedCarrier) Send(ctx context.Context, plaintext []byte) error {
 		return err
 	}
 	c.sendCounter++
+	if transition != nil {
+		c.applyRekeyLocked(transition)
+		c.pendingRekey = nil
+	}
 	return nil
 }
 
@@ -145,8 +167,40 @@ func (c *encryptedCarrier) Receive(ctx context.Context) ([]byte, error) {
 }
 
 func (c *encryptedCarrier) rekey(keys protocol.SessionKeys) error {
-	if c == nil || keys.ClientToServer == ([32]byte{}) || keys.ServerToClient == ([32]byte{}) {
+	transition, err := c.prepareRekey(keys)
+	if err != nil {
+		return err
+	}
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	c.receiveMu.Lock()
+	defer c.receiveMu.Unlock()
+	c.applyRekeyLocked(transition)
+	c.pendingRekey = nil
+	return nil
+}
+
+// rekeyAfterNextSend arms an atomic record boundary: the next outbound record
+// uses the current generation, while every later outbound record and the
+// peer's response use the prepared generation. The caller must ensure the next
+// send is the authenticated rekey confirmation.
+func (c *encryptedCarrier) rekeyAfterNextSend(keys protocol.SessionKeys) error {
+	transition, err := c.prepareRekey(keys)
+	if err != nil {
+		return err
+	}
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+	if c.pendingRekey != nil {
 		return ErrInvalidConfig
+	}
+	c.pendingRekey = transition
+	return nil
+}
+
+func (c *encryptedCarrier) prepareRekey(keys protocol.SessionKeys) (*recordRekey, error) {
+	if c == nil || keys.ClientToServer == ([32]byte{}) || keys.ServerToClient == ([32]byte{}) {
+		return nil, ErrInvalidConfig
 	}
 	sendKey, receiveKey := keys.ClientToServer, keys.ServerToClient
 	sendPrefix, receivePrefix := keys.ClientToServerNonce, keys.ServerToClientNonce
@@ -156,26 +210,30 @@ func (c *encryptedCarrier) rekey(keys protocol.SessionKeys) error {
 	}
 	sendAEAD, err := chacha20poly1305.New(sendKey[:])
 	if err != nil {
-		return err
+		return nil, err
 	}
 	receiveAEAD, err := chacha20poly1305.New(receiveKey[:])
 	if err != nil {
-		return err
+		return nil, err
 	}
-	c.sendMu.Lock()
-	defer c.sendMu.Unlock()
-	c.receiveMu.Lock()
-	defer c.receiveMu.Unlock()
-	c.sendAEAD, c.receiveAEAD = sendAEAD, receiveAEAD
-	c.sendKey, c.receiveKey = sendKey, receiveKey
-	c.sendPrefix, c.receivePrefix = sendPrefix, receivePrefix
+	return &recordRekey{
+		sendAEAD: sendAEAD, receiveAEAD: receiveAEAD,
+		sendKey: sendKey, receiveKey: receiveKey,
+		sendPrefix: sendPrefix, receivePrefix: receivePrefix,
+	}, nil
+}
+
+// applyRekeyLocked requires both sendMu and receiveMu.
+func (c *encryptedCarrier) applyRekeyLocked(transition *recordRekey) {
+	c.sendAEAD, c.receiveAEAD = transition.sendAEAD, transition.receiveAEAD
+	c.sendKey, c.receiveKey = transition.sendKey, transition.receiveKey
+	c.sendPrefix, c.receivePrefix = transition.sendPrefix, transition.receivePrefix
 	c.sendCounter, c.recvCounter = 0, 0
 	c.sendEpoch, c.receiveEpoch = 0, 0
 	// rekey is entered only after the authenticated forward-secret extension
 	// barrier. Keeping ratcheting disabled before this point preserves the
 	// byte-compatible v2.2 behavior of peers that did not negotiate it.
 	c.epochInterval = recordKeyEpochInterval
-	return nil
 }
 
 func (c *encryptedCarrier) rotateSendEpochIfNeeded() error {

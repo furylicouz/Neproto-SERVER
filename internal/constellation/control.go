@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	firstContinuityMessageID = 3
-	maxContinuityIDAttempts  = 8
+	firstContinuityMessageID              = 3
+	firstForwardSecretContinuityMessageID = 5
+	maxContinuityIDAttempts               = 8
 )
 
 var (
@@ -146,7 +147,7 @@ func (c *ClientControl) Create(ctx context.Context, authenticated *session.Authe
 	if parameters, negotiated := authenticated.Extensions(); negotiated &&
 		parameters.Capabilities&protocol.CapabilityForwardSecrecy != 0 &&
 		c.nextMessageID == firstContinuityMessageID {
-		c.nextMessageID++
+		c.nextMessageID = firstForwardSecretContinuityMessageID
 	}
 	if c.constellationID != (protocol.ContinuityID{}) || c.ticket != (continuity.LeaseTicket{}) {
 		return ErrContinuityState

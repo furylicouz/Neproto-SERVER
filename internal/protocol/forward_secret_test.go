@@ -43,6 +43,11 @@ func TestX25519ForwardSecretKeysMatchAndBindTranscript(t *testing.T) {
 	if serverConfirm != clientConfirm || serverConfirm == ([32]byte{}) {
 		t.Fatal("key confirmation mismatch")
 	}
+	serverAck, _ := ForwardSecretAcknowledgement(serverKeys, server.Public(), client.Public())
+	clientAck, _ := ForwardSecretAcknowledgement(clientKeys, server.Public(), client.Public())
+	if serverAck != clientAck || serverAck == ([32]byte{}) || serverAck == serverConfirm {
+		t.Fatal("key acknowledgement mismatch or reflection label collision")
+	}
 }
 
 func TestX25519RejectsInvalidPeerAndRoleBinding(t *testing.T) {

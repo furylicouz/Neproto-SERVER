@@ -219,6 +219,33 @@ handshake or cell format.
 The normative thresholds, hysteresis, compatibility rules, and security
 boundary are defined in [`NP2-MOSAIC-SPEC.md`](NP2-MOSAIC-SPEC.md).
 
+### Forward-secret rekey barrier
+
+Peers that select `CapabilityForwardSecrecy` bind their ephemeral X25519 key
+shares to the authenticated extension exchange and derive fresh directional
+cell keys. The key transition is a four-step barrier:
+
+1. the client sends the selected extension parameters under the base cell keys;
+2. the server sends message `3`, containing `ExtensionTLVForwardSecretConfirm`,
+   under the base cell keys and then switches its record layer to the derived
+   keys;
+3. the client verifies that confirmation under the base cell keys, switches its
+   record layer, and sends message `4`, containing
+   `ExtensionTLVForwardSecretAck`, under the derived keys;
+4. the server accepts application cells only after verifying message `4` under
+   the derived keys.
+
+Extension and continuity envelopes share one monotonically increasing message
+ID namespace in each direction. A client that completes this barrier therefore
+starts Constellation continuity control at message `5`; message `4` remains
+reserved for the forward-secret acknowledgement.
+
+The confirmation and acknowledgement use distinct keyed transcript labels.
+Either missing proof, an unexpected message ID or TLV, or authentication under
+the wrong key generation terminates extension negotiation. This ordering keeps
+base-key and derived-key records from racing the asynchronous record reader and
+does not permit a plaintext or unauthenticated overlap window.
+
 ## Carrier Contract
 
 ```go
