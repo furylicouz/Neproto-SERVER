@@ -3,8 +3,8 @@
 Run as root on Ubuntu 22.04/24.04/26.04 or Debian 12/13:
 
 ```bash
-tar -xzf neproto-server-bundle-np2-0.5.2.tar.gz
-cd neproto-server-bundle-np2-0.5.2
+tar -xzf neproto-server-bundle-np2-0.5.3.tar.gz
+cd neproto-server-bundle-np2-0.5.3
 ./install.sh
 ```
 
@@ -16,7 +16,9 @@ The installer also creates a separate web administrator secret and enables the
 unified update API. The `Updates` screen checks the pinned GitHub repository;
 one button downloads the release archive and checksum, verifies and safely
 extracts them, backs up the installed topology, and updates NeProto Web plus
-the NP/2 server together. The browser only creates a fixed authenticated job;
+the NP/2 server together. The administrator secret is transactionally
+preserved and exercised by a local login check before success. The browser
+only creates a fixed authenticated job;
 the root update worker accepts no command, URL, version, or path from the UI.
 
 With no arguments, `install.sh` opens the same full-screen Constellation UI as

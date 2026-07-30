@@ -193,9 +193,45 @@ lib_dir=$(path_in_root /usr/local/lib/neproto)
 profile_dir=$(path_in_root /etc/profile.d)
 update_dir=$(path_in_root /var/lib/neproto/update)
 update_inbox=$update_dir/inbox
+web_admin_secret=$etc_neproto/web-admin.secret
+admin_secret_backup=
+web_stage=
+
+restore_admin_secret_if_needed() {
+  local restore_dir=
+  if [[ -n ${admin_secret_backup:-} && -f $admin_secret_backup ]] && \
+     { [[ ! -f $web_admin_secret ]] || ! cmp -s -- "$admin_secret_backup" "$web_admin_secret"; }; then
+    restore_dir=$(mktemp -d "$etc_neproto/.web-admin-restore.XXXXXX") || return 1
+    if ! cp -a -- "$admin_secret_backup" "$restore_dir/web-admin.secret" || \
+       ! mv -f -- "$restore_dir/web-admin.secret" "$web_admin_secret"; then
+      rm -rf -- "$restore_dir"
+      return 1
+    fi
+    rm -rf -- "$restore_dir"
+  fi
+}
+
+cleanup_install() {
+  local status=$?
+  trap - EXIT
+  restore_admin_secret_if_needed || status=1
+  [[ -z ${web_stage:-} || ! -e $web_stage ]] || rm -rf -- "$web_stage"
+  exit "$status"
+}
+trap cleanup_install EXIT
+
 info 'preparing secure directories'
 mkdir -p -- "$etc_neproto/users/active" "$etc_neproto/users/revoked" "$etc_neproto/tls" "$etc_neproto/geodata" "$etc_caddy" "$opt_neproto" "$bin_dir" "$lib_dir" "$site_dir" "$certbot_webroot/.well-known/acme-challenge" "$backup_root" "$systemd_dir" "$modules_load_dir" "$sysctl_dir" "$profile_dir" "$update_inbox"
-chmod 0700 "$etc_neproto" "$etc_neproto/users" "$etc_neproto/users/revoked"
+chmod 0700 "$backup_root"
+if [[ -s $web_admin_secret ]]; then
+  # Keep the running web and NP/2 services able to traverse their existing
+  # configuration while a transactional self-update is staged.
+  chmod 0750 "$etc_neproto"
+  chmod 0710 "$etc_neproto/users"
+else
+  chmod 0700 "$etc_neproto" "$etc_neproto/users"
+fi
+chmod 0700 "$etc_neproto/users/revoked"
 
 installation=$etc_neproto/installation.json
 https_path=
@@ -238,10 +274,12 @@ fi
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 backup=$backup_root/$timestamp
 mkdir -p -- "$backup"
-for current in "$installation" "$etc_neproto/server.json" "$etc_neproto/web.env" "$etc_caddy/Caddyfile" "$opt_neproto/compose.yml"; do
+chmod 0700 "$backup"
+for current in "$installation" "$etc_neproto/server.json" "$etc_neproto/web.env" "$web_admin_secret" "$etc_caddy/Caddyfile" "$opt_neproto/compose.yml"; do
   [[ ! -e $current ]] || cp -a -- "$current" "$backup/$(basename -- "$current")"
 done
 [[ ! -d $web_dir ]] || cp -a -- "$web_dir" "$backup/web"
+[[ ! -f $backup/web-admin.secret ]] || admin_secret_backup=$backup/web-admin.secret
 
 service_uid=
 service_gid=
@@ -261,10 +299,6 @@ else
 fi
 
 web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")
-cleanup_web_stage() {
-  [[ -z ${web_stage:-} || ! -e $web_stage ]] || rm -rf -- "$web_stage"
-}
-trap cleanup_web_stage EXIT
 if ! cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"; then
   die 'cannot stage NeProto Web payload'
 fi
@@ -298,7 +332,6 @@ if ! mv -- "$web_stage" "$web_dir"; then
   die 'cannot activate staged NeProto Web payload'
 fi
 web_stage=
-trap - EXIT
 rm -rf -- "$web_previous"
 if [[ ! -f $etc_neproto/geodata-schedule ]]; then
   printf 'weekly\n' >"$etc_neproto/geodata-schedule"
@@ -349,7 +382,6 @@ web_host=0.0.0.0
 [[ -z $web_domain ]] || web_host=127.0.0.1
 release_version=$(tr -d '[:space:]' <"$script_dir/VERSION")
 [[ $release_version =~ ^np2-[0-9]+\.[0-9]+\.[0-9]+$ ]] || die 'invalid bundled release version'
-web_admin_secret=$etc_neproto/web-admin.secret
 if [[ ! -s $web_admin_secret ]]; then
   temporary_secret=$(mktemp "$etc_neproto/.web-admin.XXXXXX")
   openssl rand -hex 32 >"$temporary_secret"
@@ -615,6 +647,7 @@ fi
 
 if [[ ${NEPROTO_TEST_MODE:-} != 1 ]] && ! $skip_start; then
   info 'running final health checks'
+  restore_admin_secret_if_needed || die 'NeProto Web administrator secret recovery failed'
   curl --fail --silent --show-error --unix-socket /run/neproto/control.sock http://localhost/v1/overview | \
     jq -e '.version != null and .services != null' >/dev/null || die 'NeProto control API health check failed'
   "$bin_dir/neprotoctl" doctor
@@ -622,6 +655,13 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 ]] && ! $skip_start; then
   [[ -z $web_domain ]] || web_health="https://$web_domain/api/health"
   curl --fail --silent --show-error "$web_health" | jq -e '.service == "neproto-web" and .status == "ok"' >/dev/null || \
     die 'NeProto Web health check failed'
+  auth_origin="http://127.0.0.1:$web_port"
+  if ! jq -Rs '{password: (rtrimstr("\n") | rtrimstr("\r")), remember: false}' "$web_admin_secret" | \
+    curl --fail --silent --show-error --output /dev/null --max-time 10 \
+      --header "Origin: $auth_origin" --header 'Content-Type: application/json' \
+      --data-binary @- "$auth_origin/api/auth/session"; then
+    die 'NeProto Web administrator authentication check failed'
+  fi
 fi
 
 info "installation prepared in $mode mode"

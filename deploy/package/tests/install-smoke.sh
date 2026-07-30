@@ -46,6 +46,7 @@ test_mode() {
   grep -qx 'PORT=3100' "$root/etc/neproto/web.env"
   [[ -s $root/etc/neproto/web-admin.secret ]]
   admin_secret_before=$(<"$root/etc/neproto/web-admin.secret")
+  [[ $(stat -c %a "$root/etc/neproto/web-admin.secret") == 640 ]]
   [[ -d $root/var/lib/neproto/update/inbox ]]
   [[ $(stat -c %a "$root/var/lib/neproto/update") == 2750 ]]
   [[ $(stat -c %g "$root/var/lib/neproto/update") == 65532 ]]
@@ -103,6 +104,11 @@ test_mode() {
   grep -q "\"webrtc_path\": \"$first_webrtc\"" "$state"
   grep -q "\"http3_path\": \"$first_http3\"" "$state"
   [[ $(<"$root/etc/neproto/web-admin.secret") == "$admin_secret_before" ]]
+  [[ $(stat -c %a "$root/var/backups/neproto") == 700 ]]
+  find "$root/var/backups/neproto" -mindepth 2 -maxdepth 2 -name web-admin.secret -type f -print -quit | grep -q .
+  for snapshot in "$root"/var/backups/neproto/*; do
+    [[ ! -d $snapshot ]] || [[ $(stat -c %a "$snapshot") == 700 ]]
+  done
 
   if [[ $mode == docker ]]; then
     [[ -s $root/opt/neproto/compose.yml && -s $root/opt/neproto/Dockerfile.neproto && -s $root/opt/neproto/Dockerfile.web ]]
@@ -125,6 +131,8 @@ test_mode() {
     grep -q 'ExecStart=/usr/local/lib/neproto/node server.js' "$root/etc/systemd/system/neproto-web.service"
     grep -q '^Wants=.*neproto-control.service' "$root/etc/systemd/system/neproto-web.service"
     grep -q '^ReadWritePaths=/var/lib/neproto/update/inbox$' "$root/etc/systemd/system/neproto-web.service"
+    grep -Fq '/api/auth/session' "$package_dir/install.sh"
+    grep -Fq -- '--data-binary @-' "$package_dir/install.sh"
     grep -q 'admin.example.com' "$root/etc/caddy/Caddyfile"
     grep -q 'reverse_proxy 127.0.0.1:3100' "$root/etc/caddy/Caddyfile"
     grep -qx 'HOSTNAME=127.0.0.1' "$root/etc/neproto/web.env"

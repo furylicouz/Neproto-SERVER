@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -202,6 +203,99 @@ func TestEngineApplyRejectsChecksumMismatchBeforeInstaller(t *testing.T) {
 	}
 	if called {
 		t.Fatal("installer ran for a bundle with an invalid checksum")
+	}
+}
+
+func TestEngineApplyPreservesAdministratorSecretWhenInstallerReplacesIt(t *testing.T) {
+	const tag = "np2-0.4.1"
+	archive := updateArchive(t, tag)
+	archiveName := ArchiveName(tag)
+	digest := sha256.Sum256(archive)
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case strings.HasSuffix(request.URL.Path, "/latest"):
+			_, _ = response.Write([]byte(`{"tag_name":"np2-0.4.1","draft":false,"prerelease":false}`))
+		case strings.HasSuffix(request.URL.Path, ".sha256"):
+			_, _ = fmt.Fprintf(response, "%s  %s\n", hex.EncodeToString(digest[:]), archiveName)
+		default:
+			_, _ = response.Write(archive)
+		}
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	writeMinimalInstallation(t, root)
+	secretPath := filepath.Join(root, "etc", "neproto", "web-admin.secret")
+	originalSecret := []byte(strings.Repeat("a", 64) + "\n")
+	if err := os.WriteFile(secretPath, originalSecret, 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	engine := NewEngine("np2-0.4.0", root, filepath.Join(root, "state"))
+	engine.source = releaseSource{apiURL: server.URL + "/latest", repositoryURL: server.URL}
+	engine.client = server.Client()
+	engine.runInstaller = func(context.Context, string, []string) error {
+		return os.WriteFile(secretPath, []byte(strings.Repeat("b", 64)+"\n"), 0o640)
+	}
+
+	status, err := engine.Apply(context.Background())
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if status.State != "succeeded" {
+		t.Fatalf("unexpected final status: %+v", status)
+	}
+	preserved, err := os.ReadFile(secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(preserved, originalSecret) {
+		t.Fatal("administrator secret changed during the update")
+	}
+}
+
+func TestAdminSecretSnapshotRestoresDeletedFile(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "etc", "neproto")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	secretPath := filepath.Join(directory, "web-admin.secret")
+	originalSecret := []byte(strings.Repeat("c", 64) + "\n")
+	if err := os.WriteFile(secretPath, originalSecret, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	originalInfo, err := os.Stat(secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := captureAdminSecret(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(secretPath); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := snapshot.restoreIfChanged()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restored {
+		t.Fatal("deleted administrator secret was not restored")
+	}
+	preserved, err := os.ReadFile(secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(preserved, originalSecret) {
+		t.Fatal("restored administrator secret differs from the original")
+	}
+	info, err := os.Stat(secretPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != originalInfo.Mode().Perm() {
+		t.Fatalf("restored mode = %o, want %o", info.Mode().Perm(), originalInfo.Mode().Perm())
 	}
 }
 

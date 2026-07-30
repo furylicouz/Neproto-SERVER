@@ -200,6 +200,10 @@ func (engine *Engine) Apply(ctx context.Context) (Status, error) {
 	if err != nil {
 		return engine.fail(status, "configuration_failed", "Installed configuration is invalid", err)
 	}
+	adminSecret, err := captureAdminSecret(engine.root)
+	if err != nil {
+		return engine.fail(status, "configuration_failed", "Administrator credential is invalid", err)
+	}
 
 	status.State = "installing"
 	status.Progress = mustProgress("installing")
@@ -208,8 +212,13 @@ func (engine *Engine) Apply(ctx context.Context) (Status, error) {
 	if err != nil {
 		return status, err
 	}
-	if err := engine.runInstaller(ctx, filepath.Join(bundleRoot, "install.sh"), arguments); err != nil {
-		return engine.fail(status, "installation_failed", "Update installation failed", err)
+	installerErr := engine.runInstaller(ctx, filepath.Join(bundleRoot, "install.sh"), arguments)
+	_, recoveryErr := adminSecret.restoreIfChanged()
+	if recoveryErr != nil {
+		return engine.fail(status, "credential_recovery_failed", "Administrator credential recovery failed", errors.Join(installerErr, recoveryErr))
+	}
+	if installerErr != nil {
+		return engine.fail(status, "installation_failed", "Update installation failed", installerErr)
 	}
 
 	status.State = "restarting"

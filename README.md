@@ -6,7 +6,7 @@ One release archive contains everything required for either a bare-metal or
 Docker deployment: Go services, Caddy, a pinned Node.js runtime, and the
 standalone web application.
 
-Current release: **NP/2 Constellation `np2-0.5.2`**.
+Current release: **NP/2 Constellation `np2-0.5.3`**.
 
 NeProto Web is built, installed, supervised, and published by the same server
 installer. Its authenticated update screen checks the pinned GitHub repository
@@ -191,7 +191,7 @@ archive permissions, and emits both the archive and its checksum.
 
 ## Releases and updates
 
-Pushing a tag equal to the contents of `VERSION` (for example `np2-0.5.2`)
+Pushing a tag equal to the contents of `VERSION` (for example `np2-0.5.3`)
 triggers the release workflow. It builds the complete bundle, runs isolated
 bare-metal/Docker lifecycle tests, and publishes the archive plus checksum to
 GitHub Releases.
@@ -201,7 +201,10 @@ release, the check time, and the backend progress state. `Update NeProto`
 starts one authenticated API operation. The root updater constructs fixed asset
 URLs for `furylicouz/Neproto-SERVER`, verifies the release SHA-256, rejects
 unsafe archive entries, reconstructs the existing Docker/bare-metal topology,
-creates a backup under `/var/backups/neproto`, and updates server plus web.
+creates a backup under `/var/backups/neproto`, and updates server plus web. The
+administrator secret is included in the transactional backup, restored on any
+unexpected change, and verified by a local authenticated request before the
+installer reports success.
 
 Availability is refreshed at boot, every six hours, and by the web `Check for
 updates` button. Operational status is available with:
