@@ -14,3 +14,5 @@ export interface ClusterSummary {
 
 export function buildClusterGroups(nodes: ClusterNode[], query: string): ClusterNodeGroup[];
 export function clusterSummary(nodes: ClusterNode[]): ClusterSummary;
+export function clusterLocationCode(region: string): string | null;
+export function clusterConnectivity(node: ClusterNode): { link: number; signal: number; access: number };

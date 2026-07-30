@@ -41,7 +41,7 @@ export const APP_MESSAGES = {
     },
     updates: {
       title: "Updates",
-      description: "Update NeProto Web and the NP/2 server from the trusted GitHub release in one operation.",
+      description: "Update NeProto Web, the NP/2 server, and GeoIP / GeoSite routing data from one workspace.",
       currentVersion: "Current version",
       availableVersion: "Available version",
       noNewVersion: "No newer version",
@@ -166,7 +166,7 @@ export const APP_MESSAGES = {
     },
     updates: {
       title: "Обновления",
-      description: "Обновление NeProto Web и NP/2 сервера из доверенного GitHub-релиза одной операцией.",
+      description: "Обновление NeProto Web, NP/2 сервера и баз маршрутизации GeoIP / GeoSite в одном разделе.",
       currentVersion: "Текущая версия",
       availableVersion: "Доступная версия",
       noNewVersion: "Новой версии нет",

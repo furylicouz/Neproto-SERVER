@@ -22,6 +22,7 @@ const ACTIVE_STATES = new Set([
 ]);
 
 const VERSION = /^np2-(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+export const AUTO_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const ALLOWED_KEYS = new Set([
   "schema",
   "state",
@@ -36,6 +37,18 @@ const ALLOWED_KEYS = new Set([
 
 export function isActiveUpdateState(state) {
   return ACTIVE_STATES.has(state);
+}
+
+export function shouldAutomaticallyCheckUpdate({ now, updatedAt, lastRequestedAt, state, checking, polling, visible }) {
+  if (!visible || checking || polling || isActiveUpdateState(state) || !Number.isFinite(now)) {
+    return false;
+  }
+  const parsedUpdatedAt = Date.parse(updatedAt);
+  const latestKnownCheck = Math.max(
+    Number.isFinite(parsedUpdatedAt) ? parsedUpdatedAt : 0,
+    Number.isFinite(lastRequestedAt) ? lastRequestedAt : 0,
+  );
+  return now - latestKnownCheck >= AUTO_UPDATE_CHECK_INTERVAL_MS;
 }
 
 export function parseUpdateStatus(input) {

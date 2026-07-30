@@ -1,4 +1,4 @@
-import { buildClusterGroups, clusterSummary } from "./cluster-view-model.mjs";
+import { buildClusterGroups, clusterConnectivity, clusterLocationCode, clusterSummary } from "./cluster-view-model.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -76,4 +76,16 @@ test("cluster summary reports real enabled, healthy, and client-visible counts",
     healthy: 2,
     clientVisible: 2,
   });
+});
+
+test("cluster location resolves ISO codes, country names, and known cities", () => {
+  assert.equal(clusterLocationCode("RU"), "RU");
+  assert.equal(clusterLocationCode("Россия · Москва"), "RU");
+  assert.equal(clusterLocationCode("Netherlands / Amsterdam"), "NL");
+  assert.equal(clusterLocationCode("Unknown rack"), null);
+});
+
+test("cluster connectivity meters are derived only from live node state", () => {
+  assert.deepEqual(clusterConnectivity(nodes[0]), { link: 100, signal: 85, access: 100 });
+  assert.deepEqual(clusterConnectivity(nodes[2]), { link: 0, signal: 0, access: 0 });
 });

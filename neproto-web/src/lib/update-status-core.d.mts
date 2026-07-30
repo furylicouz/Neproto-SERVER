@@ -24,3 +24,13 @@ export interface UpdateStatus {
 
 export function isActiveUpdateState(state: string): boolean;
 export function parseUpdateStatus(input: string): UpdateStatus;
+export const AUTO_UPDATE_CHECK_INTERVAL_MS: number;
+export function shouldAutomaticallyCheckUpdate(input: {
+  now: number;
+  updatedAt: string;
+  lastRequestedAt: number;
+  state: string;
+  checking: boolean;
+  polling: boolean;
+  visible: boolean;
+}): boolean;

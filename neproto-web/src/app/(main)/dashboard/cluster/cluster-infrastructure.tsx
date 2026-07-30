@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  MapPin,
   MoreHorizontal,
   Network,
   PlusCircle,
@@ -36,7 +37,13 @@ import { Kbd } from "@/components/ui/kbd";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ClusterNode, ClusterState } from "@/lib/admin-api";
-import { buildClusterGroups, clusterSummary } from "@/lib/cluster-view-model.mjs";
+import {
+  buildClusterGroups,
+  clusterConnectivity,
+  clusterLocationCode,
+  clusterSummary,
+} from "@/lib/cluster-view-model.mjs";
+import { cn } from "@/lib/utils";
 
 interface ClusterInfrastructureProps {
   cluster: ClusterState;
@@ -197,6 +204,7 @@ function ClusterRegion({
   onRemoveNode: ClusterInfrastructureProps["onRemoveNode"];
 }) {
   const healthy = clusterSummary(nodes).healthy;
+  const countryCode = clusterLocationCode(region);
   return (
     <Collapsible
       defaultOpen
@@ -209,6 +217,7 @@ function ClusterRegion({
             className="group -ml-2 h-auto min-w-0 flex-1 justify-start gap-2 px-2 py-1 hover:bg-transparent aria-expanded:bg-transparent"
           >
             <ChevronDown className="group-data-[state=open]:rotate-180" />
+            <LocationIcon countryCode={countryCode} />
             <span className="truncate font-medium leading-none">{region}</span>
             <span className="text-muted-foreground text-sm">
               ({nodes.length} {ru ? "узл." : "nodes"})
@@ -252,13 +261,15 @@ function ClusterNodeTable({
 }) {
   return (
     <div className="scrollbar-thin overflow-x-auto [scrollbar-color:var(--border)_transparent] **:data-[slot=table-container]:overflow-visible [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:h-1">
-      <Table className="min-w-[1320px] table-fixed **:data-[slot='table-cell']:px-5 **:data-[slot='table-head']:px-5">
+      <Table className="min-w-[1780px] table-fixed **:data-[slot='table-cell']:px-5 **:data-[slot='table-head']:px-5">
         <colgroup>
           <col className="w-72" />
+          <col className="w-48" />
           <col className="w-64" />
-          <col className="w-52" />
+          <col className="w-44" />
           <col className="w-40" />
           <col className="w-36" />
+          <col className="w-80" />
           <col className="w-52" />
           <col className="w-44" />
           <col className="w-18" />
@@ -270,10 +281,12 @@ function ClusterNodeTable({
                 {ru ? "Узел" : "Node"} <ArrowUpDown className="size-4" />
               </span>
             </TableHead>
+            <TableHead>{ru ? "Локация" : "Location"}</TableHead>
             <TableHead>{ru ? "NP/2 endpoint" : "NP/2 endpoint"}</TableHead>
             <TableHead>{ru ? "Роли" : "Roles"}</TableHead>
             <TableHead>{ru ? "Состояние" : "Health"}</TableHead>
             <TableHead>{ru ? "Задержка" : "Latency"}</TableHead>
+            <TableHead>{ru ? "Качество соединения" : "Connectivity"}</TableHead>
             <TableHead>{ru ? "Последняя проверка" : "Last check"}</TableHead>
             <TableHead>{ru ? "Доступ клиентам" : "Client access"}</TableHead>
             <TableHead />
@@ -282,6 +295,8 @@ function ClusterNodeTable({
         <TableBody className="**:data-[slot='table-row']:hover:bg-transparent">
           {nodes.map((node) => {
             const master = node.roles.includes("master");
+            const countryCode = clusterLocationCode(node.region);
+            const connectivity = clusterConnectivity(node);
             return (
               <TableRow key={node.id}>
                 <TableCell>
@@ -292,6 +307,17 @@ function ClusterNodeTable({
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{node.name}</span>
                       <span className="block truncate text-muted-foreground text-xs">{node.id}</span>
+                    </span>
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <span className="flex items-center gap-2">
+                    <LocationIcon countryCode={countryCode} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">
+                        {node.region || (ru ? "Не указана" : "Unassigned")}
+                      </span>
+                      <span className="block text-muted-foreground text-xs">{countryCode ?? "—"}</span>
                     </span>
                   </span>
                 </TableCell>
@@ -320,6 +346,13 @@ function ClusterNodeTable({
                     <CircleGauge className="size-4" />
                     {node.latency_ms > 0 ? `${node.latency_ms} ms` : "—"}
                   </span>
+                </TableCell>
+                <TableCell>
+                  <div className="grid grid-cols-3 gap-4">
+                    <ConnectivityMeter label="LINK" value={connectivity.link} />
+                    <ConnectivityMeter label="SIGNAL" value={connectivity.signal} />
+                    <ConnectivityMeter label="ACCESS" value={connectivity.access} />
+                  </div>
                 </TableCell>
                 <TableCell>
                   <span className="inline-flex items-center gap-1.5 text-muted-foreground tabular-nums">
@@ -395,6 +428,53 @@ function ClusterNodeTable({
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+function LocationIcon({ countryCode }: { countryCode: string | null }) {
+  if (!countryCode) {
+    return (
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-md border bg-muted/40">
+        <MapPin className="size-4 text-muted-foreground" />
+      </span>
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("shrink-0 rounded-xs text-xl ring-1 ring-foreground/10", `flag:${countryCode}`)}
+    />
+  );
+}
+
+function ConnectivityMeter({ label, value }: { label: string; value: number }) {
+  const critical = value < 40;
+  const warning = value >= 40 && value < 70;
+  return (
+    <span className="min-w-0 space-y-1">
+      <span className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="font-medium text-muted-foreground">{label}</span>
+        <span
+          className={cn(
+            "font-medium text-emerald-600 tabular-nums dark:text-emerald-400",
+            warning && "text-amber-600 dark:text-amber-400",
+            critical && "text-destructive",
+          )}
+        >
+          {value}%
+        </span>
+      </span>
+      <span className="block h-1.5 overflow-hidden rounded-full bg-muted-foreground/20">
+        <span
+          className={cn(
+            "block h-full rounded-full bg-emerald-500",
+            warning && "bg-amber-500",
+            critical && "bg-destructive",
+          )}
+          style={{ width: `${value}%` }}
+        />
+      </span>
+    </span>
   );
 }
 

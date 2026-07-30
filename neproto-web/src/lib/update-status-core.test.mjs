@@ -1,7 +1,11 @@
+import {
+  AUTO_UPDATE_CHECK_INTERVAL_MS,
+  isActiveUpdateState,
+  parseUpdateStatus,
+  shouldAutomaticallyCheckUpdate,
+} from "./update-status-core.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import { isActiveUpdateState, parseUpdateStatus } from "./update-status-core.mjs";
 
 const status = {
   schema: 1,
@@ -24,10 +28,59 @@ test("parseUpdateStatus rejects unknown states and out-of-range progress", () =>
 });
 
 test("active state classification matches the updater state machine", () => {
-  for (const state of ["checking", "downloading", "verifying", "extracting", "backing_up", "installing", "restarting"]) {
+  for (const state of [
+    "checking",
+    "downloading",
+    "verifying",
+    "extracting",
+    "backing_up",
+    "installing",
+    "restarting",
+  ]) {
     assert.equal(isActiveUpdateState(state), true, state);
   }
   for (const state of ["idle", "succeeded", "failed"]) {
     assert.equal(isActiveUpdateState(state), false, state);
   }
+});
+
+test("automatic update checks run for stale visible idle status", () => {
+  const now = Date.parse("2026-07-30T12:30:00Z");
+
+  assert.equal(
+    shouldAutomaticallyCheckUpdate({
+      now,
+      updatedAt: new Date(now - AUTO_UPDATE_CHECK_INTERVAL_MS - 1).toISOString(),
+      lastRequestedAt: 0,
+      state: "idle",
+      checking: false,
+      polling: false,
+      visible: true,
+    }),
+    true,
+  );
+});
+
+test("automatic update checks are throttled and pause while hidden or busy", () => {
+  const now = Date.parse("2026-07-30T12:30:00Z");
+  const stale = new Date(0).toISOString();
+  const base = {
+    now,
+    updatedAt: stale,
+    lastRequestedAt: now - 60_000,
+    state: "idle",
+    checking: false,
+    polling: false,
+    visible: true,
+  };
+
+  assert.equal(shouldAutomaticallyCheckUpdate(base), false, "recent request");
+  assert.equal(shouldAutomaticallyCheckUpdate({ ...base, lastRequestedAt: 0, visible: false }), false, "hidden");
+  assert.equal(shouldAutomaticallyCheckUpdate({ ...base, lastRequestedAt: 0, checking: true }), false, "checking");
+  assert.equal(shouldAutomaticallyCheckUpdate({ ...base, lastRequestedAt: 0, polling: true }), false, "polling");
+  assert.equal(
+    shouldAutomaticallyCheckUpdate({ ...base, lastRequestedAt: 0, state: "downloading" }),
+    false,
+    "active update",
+  );
 });

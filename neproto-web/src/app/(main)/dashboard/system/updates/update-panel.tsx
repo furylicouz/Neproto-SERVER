@@ -21,7 +21,15 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AppLocale } from "@/lib/i18n";
-import { isActiveUpdateState, parseUpdateStatus, type UpdateStatus } from "@/lib/update-status-core.mjs";
+import {
+  AUTO_UPDATE_CHECK_INTERVAL_MS,
+  isActiveUpdateState,
+  parseUpdateStatus,
+  shouldAutomaticallyCheckUpdate,
+  type UpdateStatus,
+} from "@/lib/update-status-core.mjs";
+
+import { GeoDataUpdatePanel } from "./geodata-update-panel";
 
 interface Messages {
   title: string;
@@ -69,6 +77,8 @@ const STAGE_LABELS: Record<AppLocale, Record<string, string>> = {
   },
 };
 
+const AUTO_CHECK_TIMER_MS = Math.min(60_000, AUTO_UPDATE_CHECK_INTERVAL_MS);
+
 export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; readonly messages: Messages }) {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [error, setError] = useState("");
@@ -76,6 +86,8 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
   const [polling, setPolling] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const requestStartedAt = useRef(0);
+  const lastCheckRequestedAt = useRef(0);
+  const bootstrapped = useRef(false);
 
   const loadStatus = useCallback(async () => {
     const response = await fetch("/api/system/update", { cache: "no-store" });
@@ -92,9 +104,76 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
     return nextStatus;
   }, []);
 
+  const requestAction = useCallback(
+    async (action: "check" | "start") => {
+      setError("");
+      requestStartedAt.current = Date.now();
+      if (action === "check") {
+        lastCheckRequestedAt.current = requestStartedAt.current;
+        setChecking(true);
+      } else {
+        setDialogOpen(true);
+      }
+      try {
+        const response = await fetch(`/api/system/update/${action}`, { method: "POST" });
+        if (response.status !== 202 && response.status !== 409) {
+          throw new Error("request rejected");
+        }
+        setPolling(true);
+      } catch {
+        setChecking(false);
+        setPolling(false);
+        setDialogOpen(false);
+        setError(messages.unavailable);
+      }
+    },
+    [messages.unavailable],
+  );
+
   useEffect(() => {
-    void loadStatus().catch(() => setError(messages.unavailable));
-  }, [loadStatus, messages.unavailable]);
+    if (bootstrapped.current) {
+      return;
+    }
+    bootstrapped.current = true;
+    let mounted = true;
+    const bootstrap = async () => {
+      try {
+        const nextStatus = await loadStatus();
+        if (!mounted || !nextStatus) {
+          return;
+        }
+        if (isActiveUpdateState(nextStatus.state)) {
+          requestStartedAt.current = 0;
+          setChecking(nextStatus.state === "checking");
+          setPolling(true);
+          return;
+        }
+        const now = Date.now();
+        if (
+          shouldAutomaticallyCheckUpdate({
+            now,
+            updatedAt: nextStatus.updated_at,
+            lastRequestedAt: lastCheckRequestedAt.current,
+            state: nextStatus.state,
+            checking: false,
+            polling: false,
+            visible: document.visibilityState === "visible",
+          })
+        ) {
+          lastCheckRequestedAt.current = now;
+          await requestAction("check");
+        }
+      } catch {
+        if (mounted) {
+          setError(messages.unavailable);
+        }
+      }
+    };
+    void bootstrap();
+    return () => {
+      mounted = false;
+    };
+  }, [loadStatus, messages.unavailable, requestAction]);
 
   useEffect(() => {
     if (!polling) {
@@ -122,6 +201,37 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
     return () => window.clearInterval(timer);
   }, [loadStatus, polling]);
 
+  useEffect(() => {
+    const checkIfStale = () => {
+      if (!status) {
+        return;
+      }
+      const now = Date.now();
+      if (
+        shouldAutomaticallyCheckUpdate({
+          now,
+          updatedAt: status.updated_at,
+          lastRequestedAt: lastCheckRequestedAt.current,
+          state: status.state,
+          checking,
+          polling,
+          visible: document.visibilityState === "visible",
+        })
+      ) {
+        lastCheckRequestedAt.current = now;
+        void requestAction("check");
+      }
+    };
+    const timer = window.setInterval(checkIfStale, AUTO_CHECK_TIMER_MS);
+    document.addEventListener("visibilitychange", checkIfStale);
+    window.addEventListener("focus", checkIfStale);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", checkIfStale);
+      window.removeEventListener("focus", checkIfStale);
+    };
+  }, [checking, polling, requestAction, status]);
+
   const active = status ? isActiveUpdateState(status.state) : false;
   const stageLabel = status ? STAGE_LABELS[locale][status.state] || status.message : "";
   const checkedAt = useMemo(() => {
@@ -133,28 +243,6 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
       timeStyle: "short",
     }).format(new Date(status.updated_at));
   }, [locale, status]);
-
-  async function requestAction(action: "check" | "start") {
-    setError("");
-    requestStartedAt.current = Date.now();
-    if (action === "check") {
-      setChecking(true);
-    } else {
-      setDialogOpen(true);
-    }
-    try {
-      const response = await fetch(`/api/system/update/${action}`, { method: "POST" });
-      if (response.status !== 202 && response.status !== 409) {
-        throw new Error("request rejected");
-      }
-      setPolling(true);
-    } catch {
-      setChecking(false);
-      setPolling(false);
-      setDialogOpen(false);
-      setError(messages.unavailable);
-    }
-  }
 
   if (!status && !error) {
     return (
@@ -231,6 +319,8 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
           </CardFooter>
         </Card>
       )}
+
+      <GeoDataUpdatePanel locale={locale} />
 
       <AlertDialog
         open={dialogOpen}

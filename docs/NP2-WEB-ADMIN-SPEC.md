@@ -39,12 +39,12 @@ Template-gallery routes remain examples and are not used as management state.
 |---|---|---|
 | `/dashboard` | Default dashboard cards/charts/table | status summary, host telemetry, services, users, cluster nodes, routes, backups, recent events |
 | `/dashboard/users` | Users table | add, export URI/JSON/manual/QR, rotate, revoke, delete, cluster access |
-| `/dashboard/cluster` | Infrastructure | node health, enrolment with verified SSH host key, enable/drain, publish/hide, user assignment, credential sync, removal |
+| `/dashboard/cluster` | Infrastructure | node health, measured connectivity meters, country/city presentation, enrolment with verified SSH host key, enable/drain, publish/hide, user assignment, credential sync, removal |
 | `/dashboard/routes` | Tasks table and dialogs | domain/IP/GeoIP/GeoSite rules, current/direct/block/auto/node/chain actions, user assignment, enable/disable, delete |
 | `/dashboard/services` | Analytics/status cards | start, stop, restart, configuration validation, last 200 sanitized events |
 | `/dashboard/settings` | Roles/forms/cards | domain change, production/compatibility policy, installed addresses and web endpoint |
 | `/dashboard/backups` | Invoice/list cards and dialogs | create, list, verified restore with recovery rollback |
-| `/dashboard/system/updates` | Existing update panel | unified signed server and web update |
+| `/dashboard/system/updates` | Existing update panel | automatic signed server/web release checks plus cluster-wide GeoIP/GeoSite update and schedule |
 
 The storage view from `np` is represented by real read-only dashboard and
 settings metadata; secret file contents and private keys are never exposed.

@@ -128,5 +128,15 @@ AlertDialog, Skeleton, and Alert components. While an update is active, the
 existing AlertDialog overlay blurs the page and a modal displays the current
 stage and progress. The modal cannot be dismissed while installation is active.
 
+The page loads the persisted update status immediately and requests a fresh
+GitHub check when that status is older than 15 minutes. The same bounded check
+runs when the visible tab regains focus and while the page remains open; active
+checks and installations suppress duplicate requests. The manual check remains
+available for an explicit administrator refresh.
+
+The same workspace owns GeoIP/GeoSite lifecycle controls: current verified
+state, automatic schedule, and a cluster-wide update job with bounded progress.
+Route creation consumes these databases but does not manage their lifecycle.
+
 No new visual language, colors, spacing scale, or custom modal primitive is
 introduced.

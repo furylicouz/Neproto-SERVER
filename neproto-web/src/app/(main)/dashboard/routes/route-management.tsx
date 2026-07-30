@@ -2,11 +2,10 @@
 
 import * as React from "react";
 
-import { Database, MoreHorizontal, Plus, RefreshCw, Route, Trash2 } from "lucide-react";
+import { MoreHorizontal, Plus, Route, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { AdminError, AdminLoading, PageHeader, StateBadge } from "@/components/admin/admin-ui";
-import { JobDialog } from "@/components/admin/job-dialog";
+import { AdminError, AdminLoading, PageHeader } from "@/components/admin/admin-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,10 +36,8 @@ import {
   type ClusterNode,
   type ClusterRoute,
   type ClusterState,
-  type ControlJob,
   type NP2User,
   type RouteState,
-  waitForAdminJob,
 } from "@/lib/admin-api";
 import type { AppLocale } from "@/lib/i18n";
 import { normalizeRouteState, routeMatchLabel } from "@/lib/route-state-view-model.mjs";
@@ -76,7 +73,6 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [assignRoute, setAssignRoute] = React.useState<ClusterRoute | null>(null);
   const [selectedUser, setSelectedUser] = React.useState("");
-  const [job, setJob] = React.useState<ControlJob | null>(null);
   const [busy, setBusy] = React.useState(false);
   const routeState = React.useMemo(() => normalizeRouteState(routes.data), [routes.data]);
 
@@ -149,31 +145,6 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
       await adminFetch(`routes/${encodeURIComponent(route.id)}`, { method: "DELETE", json: { confirm: "DELETE" } });
       await routes.refresh();
       toast.success(ru ? "Маршрут удалён" : "Route deleted");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Request failed");
-    }
-  }
-
-  async function updateGeoData() {
-    setBusy(true);
-    try {
-      const started = await adminFetch<ControlJob>("geodata/update", { method: "POST", json: { cluster: true } });
-      setJob(started);
-      await waitForAdminJob(started.id, setJob);
-      await routes.refresh();
-      toast.success(ru ? "GeoData обновлена на узлах" : "GeoData updated across nodes");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Request failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function setSchedule(value: string) {
-    try {
-      await adminFetch("geodata/schedule", { method: "POST", json: { preset: value } });
-      await routes.refresh();
-      toast.success(ru ? "Расписание обновлено" : "Schedule updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Request failed");
     }
@@ -279,49 +250,6 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="size-5" />
-            GeoData
-          </CardTitle>
-          <CardDescription>
-            {ru ? "Одна проверенная база на всех узлах кластера" : "One verified dataset across every cluster node"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-[1fr_220px_auto] md:items-end">
-          <div>
-            <div className="text-muted-foreground text-sm">{ru ? "Состояние" : "State"}</div>
-            <div className="mt-2">
-              <StateBadge state={routeState.geodata.state} />
-            </div>
-            {routeState.geodata.updated_at && (
-              <div className="mt-2 text-muted-foreground text-xs">
-                {new Date(routeState.geodata.updated_at).toLocaleString(locale)}
-              </div>
-            )}
-          </div>
-          <Field>
-            <FieldLabel>{ru ? "Автообновление" : "Automatic update"}</FieldLabel>
-            <Select value={routeState.schedule} onValueChange={(value) => void setSchedule(value)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="off">{ru ? "Выключено" : "Off"}</SelectItem>
-                <SelectItem value="daily">{ru ? "Ежедневно" : "Daily"}</SelectItem>
-                <SelectItem value="weekly">{ru ? "Еженедельно" : "Weekly"}</SelectItem>
-                <SelectItem value="monthly">{ru ? "Ежемесячно" : "Monthly"}</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Button variant="outline" disabled={busy} onClick={() => void updateGeoData()}>
-            <RefreshCw className={busy ? "animate-spin" : ""} />
-            {ru ? "Обновить кластер" : "Update cluster"}
-          </Button>
         </CardContent>
       </Card>
 
@@ -473,11 +401,6 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <JobDialog
-        job={job}
-        title={ru ? "Обновление GeoData" : "GeoData update"}
-        onOpenChange={(open) => !open && setJob(null)}
-      />
     </div>
   );
 }
