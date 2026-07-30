@@ -1,0 +1,6 @@
+*.sh text eol=lf
+*.service text eol=lf
+Caddyfile* text eol=lf
+*.yml text eol=lf
+*.patch text eol=lf
+*.entitlements text eol=lf

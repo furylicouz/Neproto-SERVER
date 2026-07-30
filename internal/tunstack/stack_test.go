@@ -1,0 +1,52 @@
+package tunstack
+
+import (
+	"net/netip"
+	"testing"
+	"time"
+
+	"github.com/xjasonlyu/tun2socks/v2/tunnel/statistic"
+)
+
+func TestTrafficStatsReportsOneSecondRateAndTotals(t *testing.T) {
+	statistic.DefaultManager.ResetStatistic()
+	t.Cleanup(statistic.DefaultManager.ResetStatistic)
+	statistic.DefaultManager.PushUploaded(12_345)
+	statistic.DefaultManager.PushDownloaded(67_890)
+
+	stack := &Stack{}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		uploadRate, downloadRate, uploadTotal, downloadTotal := stack.TrafficStats()
+		if uploadTotal != 12_345 || downloadTotal != 67_890 {
+			t.Fatalf(
+				"totals=(%d,%d), want (12345,67890)",
+				uploadTotal,
+				downloadTotal,
+			)
+		}
+		if uploadRate == 12_345 && downloadRate == 67_890 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	uploadRate, downloadRate, _, _ := stack.TrafficStats()
+	t.Fatalf("rate=(%d,%d), want (12345,67890)", uploadRate, downloadRate)
+}
+
+func TestStackReportsDestinationFreeDNSAttributionStats(t *testing.T) {
+	dns := newDNSAttribution(time.Now)
+	dns.misses = 2
+	dns.hits = 3
+	dns.queries = 4
+	dns.responses = 4
+	dns.addresses[netip.MustParseAddr("203.0.113.4")] = dnsAddress{
+		domain: "example.org", expires: time.Now().Add(time.Minute),
+	}
+	stack := &Stack{dialer: &Dialer{dns: dns}}
+	if got := stack.DNSAttributionStats(); got.Queries != 4 || got.Responses != 4 ||
+		got.Hits != 3 || got.Misses != 2 || got.Cached != 1 {
+		t.Fatalf("stats=%+v", got)
+	}
+}

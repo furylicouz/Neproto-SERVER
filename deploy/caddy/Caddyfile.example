@@ -1,0 +1,31 @@
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
+# Replace the site address and both routes before installation. The two private
+# routes must be distinct, random, and at least 16 characters long.
+vpn.example.com {
+	handle /replace-with-random-https-route {
+		reverse_proxy 127.0.0.1:9080
+	}
+
+	handle /replace-with-random-webrtc-route {
+		reverse_proxy 127.0.0.1:9080
+	}
+
+	handle {
+		root * /var/www/neproto
+		encode zstd gzip
+		header {
+			Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+			Permissions-Policy "camera=(), microphone=(), geolocation=()"
+			Referrer-Policy no-referrer
+			X-Content-Type-Options nosniff
+			X-Frame-Options DENY
+		}
+		try_files {path} /index.html
+		file_server
+	}
+}

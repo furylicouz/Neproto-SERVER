@@ -1,0 +1,18 @@
+{
+  "server_identity": "vpn.example.com",
+  "secret_file": "/etc/neproto/client.secret",
+  "socks_listen": "127.0.0.1:1080",
+  "https_url": "wss://vpn.example.com/replace-with-random-https-route",
+  "webrtc_signaling_url": "https://vpn.example.com/replace-with-random-webrtc-route",
+  "profile": "interactive",
+  "carrier_policy": "performance",
+  "max_cover_overhead_percent": 30,
+  "initial_window_bytes": 2097152,
+  "max_streams": 128,
+  "max_socks_connections": 128,
+  "enable_constellation": true,
+  "enable_forward_secrecy": true,
+  "webrtc_timeout": "5s",
+  "https_timeout": "10s",
+  "carrier_cache_ttl": "10m"
+}

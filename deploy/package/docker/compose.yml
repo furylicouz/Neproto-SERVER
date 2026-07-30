@@ -1,0 +1,65 @@
+name: neproto
+services:
+  neproto:
+    build:
+      context: .
+      dockerfile: Dockerfile.neproto
+    image: neproto/server:local
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    group_add: ["__SERVICE_GID__"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - /etc/neproto:/etc/neproto:ro
+      - /etc/neproto/geodata:/etc/neproto/geodata:rw
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    image: neproto/caddy:local
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    user: "65533:65533"
+    group_add: ["__SERVICE_GID__"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: [no-new-privileges:true]
+    environment:
+      XDG_DATA_HOME: /data
+      XDG_CONFIG_HOME: /data/config
+    volumes:
+      - /etc/caddy:/etc/caddy:ro
+      - /etc/neproto/tls:/etc/neproto/tls:ro
+      - /var/lib/caddy:/data
+      - /var/www/neproto:/var/www/neproto:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: neproto/web:local
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    user: "65532:65532"
+    group_add: ["__SERVICE_GID__"]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      HOSTNAME: "__WEB_HOST__"
+      PORT: "__WEB_PORT__"
+      NEPROTO_VERSION: "__NEPROTO_VERSION__"
+    volumes:
+      - /etc/neproto:/etc/neproto:ro
+      - /var/lib/neproto/update:/var/lib/neproto/update:rw
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m

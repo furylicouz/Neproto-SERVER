@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'np2-*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: neproto-web/package-lock.json
+
+      - name: Validate tag and source version
+        run: test "${GITHUB_REF_NAME}" = "$(tr -d '[:space:]' < VERSION)"
+
+      - name: Build reproducible server bundle
+        run: |
+          epoch=$(git log -1 --format=%ct)
+          SOURCE_DATE_EPOCH="$epoch" deploy/build-server-bundle.sh "$GITHUB_REF_NAME" dist
+
+      - name: Run isolated installation lifecycle
+        run: |
+          mkdir -p /tmp/neproto-release
+          tar -xzf "dist/neproto-server-bundle-$GITHUB_REF_NAME.tar.gz" -C /tmp/neproto-release
+          sudo "/tmp/neproto-release/neproto-server-bundle-$GITHUB_REF_NAME/tests/install-smoke.sh" amd64 "$GITHUB_REF_NAME"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/neproto-server-bundle-${{ github.ref_name }}.tar.gz
+            dist/neproto-server-bundle-${{ github.ref_name }}.tar.gz.sha256

@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: neproto-web/package-lock.json
+
+      - name: Verify shell entrypoints
+        run: |
+          bash -n install.sh deploy/build-server-bundle.sh
+          find deploy/package -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          deploy/tests/root-bootstrap-smoke.sh
+
+      - name: Verify Go server and control plane
+        run: |
+          find cmd internal tests mobile -type f -name '*.go' -print0 | xargs -0 gofmt -d | tee /tmp/gofmt.diff
+          test ! -s /tmp/gofmt.diff
+          go test -race -coverprofile=coverage.out ./...
+          go vet ./...
+          go build ./cmd/...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          govulncheck ./...
+
+      - name: Verify NeProto Web
+        working-directory: neproto-web
+        run: |
+          npm ci --ignore-scripts
+          npm test
+          npm run lint -- --max-diagnostics=100
+          NEPROTO_VERSION="$(cat ../VERSION)" npm run build
+
+      - name: Verify standalone web payload
+        run: |
+          stage=$(mktemp -d)
+          mkdir -p "$stage/web/.next/static"
+          cp -a neproto-web/.next/standalone/. "$stage/web/"
+          cp -a neproto-web/.next/static/. "$stage/web/.next/static/"
+          deploy/package/tests/web-bundle-smoke.sh "$stage"

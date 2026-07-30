@@ -1,0 +1,12 @@
+[Unit]
+Description=Schedule NeProto NP/2 cluster geodata updates
+
+[Timer]
+OnCalendar=Mon *-*-* 04:15:00
+RandomizedDelaySec=6h
+Persistent=true
+AccuracySec=15m
+Unit=neproto-geodata-update.service
+
+[Install]
+WantedBy=timers.target

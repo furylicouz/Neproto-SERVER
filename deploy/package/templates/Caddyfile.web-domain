@@ -1,0 +1,13 @@
+
+__WEB_DOMAIN__ {
+	tls /etc/neproto/tls/fullchain.pem /etc/neproto/tls/privkey.pem
+	encode zstd gzip
+	header {
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+	}
+	reverse_proxy 127.0.0.1:__WEB_PORT__
+}

@@ -1,0 +1,15 @@
+[Unit]
+Description=NeProto NP/2 cluster GeoIP and GeoSite update
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/neprotoctl geodata update --cluster=true
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectHome=true

@@ -1,0 +1,38 @@
+[Unit]
+Description=NeProto Web administration
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=neproto
+Group=neproto
+EnvironmentFile=/etc/neproto/web.env
+WorkingDirectory=/opt/neproto/web
+ExecStart=/usr/local/lib/neproto/node server.js
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=10s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RemoveIPC=true
+CapabilityBoundingSet=
+ReadWritePaths=/var/lib/neproto/update/inbox
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

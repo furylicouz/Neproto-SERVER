@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for an authenticated NeProto update request
+
+[Path]
+PathExists=/var/lib/neproto/update/inbox/apply
+Unit=neproto-update.service
+
+[Install]
+WantedBy=multi-user.target
