@@ -25,7 +25,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/furylicouz/Neproto-SERVER/ma
 
 The standalone bootstrap downloads the immutable release matching the embedded
 stable version, verifies its SHA-256 checksum, and opens the full-screen setup
-wizard. Cloning the repository is optional:
+wizard. It selects the writable temporary filesystem with the most free space
+and requires at least 2 GiB there. Override it when needed with, for example,
+`NEPROTO_TMPDIR=/mnt/large`. Cloning the repository is optional:
 
 ```bash
 git clone https://github.com/furylicouz/Neproto-SERVER.git

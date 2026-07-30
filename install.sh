@@ -17,6 +17,7 @@ fi
 asset="neproto-server-bundle-$version.tar.gz"
 release_url="$repository_url/releases/download/$version/$asset"
 bundle=
+downloaded_bundle=false
 forwarded=()
 
 usage() {
@@ -62,14 +63,52 @@ while (($#)); do
   esac
 done
 
-for command in tar sha256sum mktemp; do
+for command in awk df tar sha256sum mktemp; do
   command -v "$command" >/dev/null 2>&1 || {
     printf 'ERROR: required command is unavailable: %s\n' "$command" >&2
     exit 1
   }
 done
 
-temporary=$(mktemp -d)
+select_work_base() {
+  local candidate available best= best_available=0
+  if [[ -n ${NEPROTO_TMPDIR:-} ]]; then
+    [[ $NEPROTO_TMPDIR == /* && -d $NEPROTO_TMPDIR && -w $NEPROTO_TMPDIR ]] || {
+      printf 'ERROR: NEPROTO_TMPDIR must be an absolute writable directory\n' >&2
+      exit 1
+    }
+    printf '%s\n' "$NEPROTO_TMPDIR"
+    return
+  fi
+  for candidate in /var/tmp /tmp /root; do
+    [[ -d $candidate && -w $candidate ]] || continue
+    available=$(df -Pk "$candidate" | awk 'END {print $4}')
+    [[ $available =~ ^[0-9]+$ ]] || continue
+    if (( available > best_available )); then
+      best=$candidate
+      best_available=$available
+    fi
+  done
+  [[ -n $best ]] || {
+    printf 'ERROR: no writable bootstrap directory is available\n' >&2
+    exit 1
+  }
+  printf '%s\n' "$best"
+}
+
+work_base=$(select_work_base)
+available_kb=$(df -Pk "$work_base" | awk 'END {print $4}')
+minimum_kb=2097152
+[[ ${NEPROTO_BOOTSTRAP_TEST_MODE:-0} != 1 ]] || minimum_kb=1
+if [[ ! $available_kb =~ ^[0-9]+$ || $available_kb -lt $minimum_kb ]]; then
+  available_mb=$(( ${available_kb:-0} / 1024 ))
+  printf 'ERROR: insufficient free space in %s: %s MiB available, at least 2048 MiB required.\n' \
+    "$work_base" "$available_mb" >&2
+  printf 'Free disk space or retry with NEPROTO_TMPDIR=/path/on/a/larger/filesystem.\n' >&2
+  exit 1
+fi
+
+temporary=$(mktemp -d "$work_base/neproto-bootstrap.XXXXXX")
 cleanup() { rm -rf -- "$temporary"; }
 trap cleanup EXIT
 
@@ -79,6 +118,7 @@ if [[ -z $bundle ]]; then
     exit 1
   }
   bundle=$temporary/$asset
+  downloaded_bundle=true
   printf '[NeProto] Downloading %s\n' "$release_url"
   curl --fail --location --proto '=https' --tlsv1.2 \
     --output "$bundle" "$release_url"
@@ -104,4 +144,8 @@ installer=$temporary/neproto-server-bundle-$version/install.sh
   exit 1
 }
 
-exec "$installer" "${forwarded[@]}"
+if $downloaded_bundle; then
+  rm -f -- "$bundle" "$bundle.sha256"
+fi
+
+"$installer" "${forwarded[@]}"

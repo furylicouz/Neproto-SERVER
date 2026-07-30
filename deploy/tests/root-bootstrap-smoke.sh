@@ -24,4 +24,29 @@ standalone=$(
   printf 'standalone bootstrap depends on repository files\nexpected: %s\nactual:   %s\n' "$expected" "$standalone" >&2
   exit 1
 }
+
+fixture=$standalone_dir/neproto-server-bundle-$version.tar.gz
+fixture_root=$standalone_dir/neproto-server-bundle-$version
+work_base=$standalone_dir/work
+mkdir -p "$fixture_root" "$work_base"
+cat >"$fixture_root/install.sh" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+printf 'fixture installer executed\n'
+printf 'fixture root: %s\n' "$(dirname -- "$0")"
+EOF
+chmod 0755 "$fixture_root/install.sh"
+tar -czf "$fixture" -C "$standalone_dir" "neproto-server-bundle-$version"
+(
+  cd "$standalone_dir"
+  sha256sum "$(basename "$fixture")" >"$(basename "$fixture").sha256"
+)
+output=$(NEPROTO_BOOTSTRAP_TEST_MODE=1 NEPROTO_TMPDIR="$work_base" "$repository/install.sh" --bootstrap-bundle "$fixture")
+grep -q '^fixture installer executed$' <<<"$output"
+grep -Fq "fixture root: $work_base/" <<<"$output"
+[[ -s $fixture && -s $fixture.sha256 ]]
+if find "$work_base" -mindepth 1 -print -quit | grep -q .; then
+  printf 'standalone bootstrap leaked its temporary extraction directory\n' >&2
+  exit 1
+fi
 printf 'PASS: root bootstrap contract\n'
