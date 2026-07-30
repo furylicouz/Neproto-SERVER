@@ -86,8 +86,16 @@ protocol error under the existing extension replay rules.
   physical stream.
 - `receive_offset` cumulatively acknowledges all bytes below that value.
 - Offsets never regress and never exceed bytes produced by that direction.
+- An authenticated acknowledgement may race the local return from the physical
+  `Write`. An implementation may stage such an acknowledgement only within the
+  bounded active write range, but it must not retire replay bytes until the
+  local write result confirms that offset.
 - Only unacknowledged bytes may exist in a replay journal.
 - A flow may have only one accepted lease epoch per direction at a time.
+- After a higher authenticated lease epoch is accepted, the receiver detaches
+  the superseded physical stream before publishing the replacement; losing the
+  old carrier and receiving the replacement may race without aborting the
+  logical flow or redialling its target.
 - Resume conflicts abort the flow instead of guessing.
 - Budget exhaustion disables continuity for the affected flow; it must not
   allocate unbounded memory or silently drop bytes.

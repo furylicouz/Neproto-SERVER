@@ -282,6 +282,17 @@ func (f *serverContinuityFlow) replace(
 	f.control = lease.Control
 	f.leaseKey = lease.LeaseKey
 	f.mu.Unlock()
+	if err := f.stream.DetachPhysical(); err != nil {
+		f.mu.Lock()
+		f.control = oldControl
+		f.leaseKey = oldLeaseKey
+		f.mu.Unlock()
+		if oldControl != lease.Control {
+			lease.Control.Unregister(f.id)
+		}
+		_ = physical.Close()
+		return err
+	}
 	if err := f.stream.Replace(transport, continuity.ResumeState{
 		PeerReceiveOffset: metadata.ReceiveOffset,
 		ReceiveOffset:     metadata.SendOffset,

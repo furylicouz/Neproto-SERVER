@@ -73,6 +73,7 @@ func TestContinuityRuntimeMigratesTCPFlowWithoutSecondTargetDial(t *testing.T) {
 		t.Fatal(err)
 	}
 	controlReference := &testControlReference{control: firstClientControl}
+	clientUnavailable := make(chan error, 1)
 	clientStream, err := continuity.NewResumableStream(continuity.ResumableStreamConfig{
 		Context: ctx, Initial: firstTransport, JournalBytes: MinContinuityJournalBytes,
 		AckEveryBytes: 1,
@@ -81,6 +82,12 @@ func TestContinuityRuntimeMigratesTCPFlowWithoutSecondTargetDial(t *testing.T) {
 		},
 		RecoverableReadError:  recoverableTransportError,
 		RecoverableWriteError: recoverableTransportError,
+		OnUnavailable: func(err error) {
+			select {
+			case clientUnavailable <- err:
+			default:
+			}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +118,14 @@ func TestContinuityRuntimeMigratesTCPFlowWithoutSecondTargetDial(t *testing.T) {
 		_, writeErr := clientStream.Write([]byte("two"))
 		pendingWrite <- writeErr
 	}()
+	select {
+	case err := <-clientUnavailable:
+		if !errors.Is(err, session.ErrCarrierLost) {
+			t.Fatalf("client unavailable reason=%v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
 
 	secondClientMux, secondServerMux := newProxyMuxPair(t)
 	secondClientControl := newProxyControlChannel(t, ctx, secondClientMux, constellationID, 3)

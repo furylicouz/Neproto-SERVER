@@ -50,19 +50,22 @@ type ResumableStream struct {
 	writeMu   sync.Mutex
 	readMu    sync.Mutex
 	replaceMu sync.Mutex
+	ackMu     sync.Mutex
 	mu        sync.Mutex
 
-	physical       io.ReadWriteCloser
-	transmitted    uint64
-	receiveOffset  uint64
-	lastNotified   uint64
-	localFIN       bool
-	finTransmitted bool
-	discard        uint64
-	notify         chan struct{}
-	closed         bool
-	closeOnce      sync.Once
-	closeErr       error
+	physical        io.ReadWriteCloser
+	transmitted     uint64
+	receiveOffset   uint64
+	lastNotified    uint64
+	localFIN        bool
+	finTransmitted  bool
+	discard         uint64
+	writeAttemptEnd uint64
+	pendingAck      uint64
+	notify          chan struct{}
+	closed          bool
+	closeOnce       sync.Once
+	closeErr        error
 }
 
 func NewResumableStream(config ResumableStreamConfig) (*ResumableStream, error) {
@@ -130,11 +133,24 @@ func (s *ResumableStream) Write(payload []byte) (int, error) {
 			return writtenForRange(start, end, transmitted), ErrResumableState
 		}
 		position := int(transmitted - start)
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			return writtenForRange(start, end, transmitted), ErrResumableClosed
+		}
+		if s.physical != physical || s.transmitted != transmitted {
+			s.mu.Unlock()
+			continue
+		}
+		s.writeAttemptEnd = end
+		s.mu.Unlock()
 		n, writeErr := physical.Write(payload[position:])
 		if n < 0 || n > len(payload)-position {
 			n = 0
 			writeErr = ErrResumableState
 		}
+		var deferredAck uint64
+		invalidDeferredAck := false
 		s.mu.Lock()
 		if s.physical == physical && s.transmitted == transmitted {
 			if uint64(n) > protocol.MaxSequence-s.transmitted {
@@ -144,9 +160,28 @@ func (s *ResumableStream) Write(payload []byte) (int, error) {
 				s.transmitted += uint64(n)
 			}
 		}
+		if s.writeAttemptEnd != 0 {
+			s.writeAttemptEnd = 0
+			if s.pendingAck != 0 {
+				if s.pendingAck <= s.transmitted {
+					deferredAck = s.pendingAck
+				} else if writeErr != nil || n != len(payload)-position {
+					invalidDeferredAck = true
+				}
+				s.pendingAck = 0
+			}
+		}
 		currentTransmitted := s.transmitted
 		closed := s.closed
 		s.mu.Unlock()
+		if deferredAck != 0 {
+			if err := s.ackJournal(deferredAck, true); err != nil {
+				return writtenForRange(start, end, currentTransmitted), err
+			}
+		}
+		if invalidDeferredAck {
+			return writtenForRange(start, end, currentTransmitted), ErrResumableState
+		}
 		if closed {
 			return writtenForRange(start, end, currentTransmitted), ErrResumableClosed
 		}
@@ -319,7 +354,7 @@ func (s *ResumableStream) Replace(next io.ReadWriteCloser, state ResumeState) er
 	}
 	s.mu.Unlock()
 
-	if err := s.journal.Ack(state.PeerReceiveOffset); err != nil {
+	if err := s.ackJournal(state.PeerReceiveOffset, false); err != nil {
 		_ = next.Close()
 		return errors.Join(ErrResumableState, err)
 	}
@@ -365,6 +400,32 @@ func (s *ResumableStream) Replace(next io.ReadWriteCloser, state ResumeState) er
 	return nil
 }
 
+// DetachPhysical makes the current physical stream unavailable without closing
+// the logical stream. It is used only after a higher authenticated lease epoch
+// supersedes the old carrier and is idempotent when the carrier already failed.
+func (s *ResumableStream) DetachPhysical() error {
+	if s == nil {
+		return ErrResumableConfig
+	}
+	s.replaceMu.Lock()
+	defer s.replaceMu.Unlock()
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return ErrResumableClosed
+	}
+	physical := s.physical
+	s.physical = nil
+	if physical != nil {
+		s.signalLocked()
+	}
+	s.mu.Unlock()
+	if physical != nil {
+		_ = physical.Close()
+	}
+	return nil
+}
+
 func (s *ResumableStream) Ack(offset uint64) error {
 	if s == nil {
 		return ErrResumableConfig
@@ -375,10 +436,26 @@ func (s *ResumableStream) Ack(offset uint64) error {
 		return ErrResumableClosed
 	}
 	if offset > s.transmitted {
+		if s.writeAttemptEnd != 0 && offset <= s.writeAttemptEnd {
+			if offset > s.pendingAck {
+				s.pendingAck = offset
+			}
+			s.mu.Unlock()
+			return nil
+		}
 		s.mu.Unlock()
 		return ErrResumableState
 	}
 	s.mu.Unlock()
+	return s.ackJournal(offset, false)
+}
+
+func (s *ResumableStream) ackJournal(offset uint64, deferred bool) error {
+	s.ackMu.Lock()
+	defer s.ackMu.Unlock()
+	if deferred && offset <= s.journal.State().BaseOffset {
+		return nil
+	}
 	return s.journal.Ack(offset)
 }
 
