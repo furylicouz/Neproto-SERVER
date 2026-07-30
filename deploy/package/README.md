@@ -3,8 +3,8 @@
 Run as root on Ubuntu 22.04/24.04/26.04 or Debian 12/13:
 
 ```bash
-tar -xzf neproto-server-bundle-np2-0.5.4.tar.gz
-cd neproto-server-bundle-np2-0.5.4
+tar -xzf neproto-server-bundle-np2-0.5.5.tar.gz
+cd neproto-server-bundle-np2-0.5.5
 ./install.sh
 ```
 
@@ -20,6 +20,8 @@ the NP/2 server together. The administrator secret is transactionally
 preserved and exercised by a local login check before success. The browser
 only creates a fixed authenticated job;
 the root update worker accepts no command, URL, version, or path from the UI.
+The screen also owns cluster-wide GeoIP/GeoSite updates and their automatic
+schedule; software checks run automatically when the visible status is stale.
 
 With no arguments, `install.sh` opens the same full-screen Constellation UI as
 the server panel. The transaction stays inside that interface from Docker/Bare

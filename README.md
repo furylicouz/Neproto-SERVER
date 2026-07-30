@@ -6,7 +6,7 @@ One release archive contains everything required for either a bare-metal or
 Docker deployment: Go services, Caddy, a pinned Node.js runtime, and the
 standalone web application.
 
-Current release: **NP/2 Constellation `np2-0.5.4`**.
+Current release: **NP/2 Constellation `np2-0.5.5`**.
 
 NeProto Web is built, installed, supervised, and published by the same server
 installer. Its authenticated update screen checks the pinned GitHub repository
@@ -191,13 +191,15 @@ archive permissions, and emits both the archive and its checksum.
 
 ## Releases and updates
 
-Pushing a tag equal to the contents of `VERSION` (for example `np2-0.5.4`)
+Pushing a tag equal to the contents of `VERSION` (for example `np2-0.5.5`)
 triggers the release workflow. It builds the complete bundle, runs isolated
 bare-metal/Docker lifecycle tests, and publishes the archive plus checksum to
 GitHub Releases.
 
 The web `Updates` screen shows the installed version, the latest stable GitHub
-release, the check time, and the backend progress state. `Update NeProto`
+release, the check time, and the backend progress state. It checks automatically
+when opened or focused if the persisted result is older than 15 minutes.
+`Update NeProto`
 starts one authenticated API operation. The root updater constructs fixed asset
 URLs for `furylicouz/Neproto-SERVER`, verifies the release SHA-256, rejects
 unsafe archive entries, reconstructs the existing Docker/bare-metal topology,
@@ -206,8 +208,10 @@ administrator secret is included in the transactional backup, restored on any
 unexpected change, and verified by a local authenticated request before the
 installer reports success.
 
-Availability is refreshed at boot, every six hours, and by the web `Check for
-updates` button. Operational status is available with:
+The same screen manages verified GeoIP/GeoSite data and its cluster-wide update
+schedule. Release availability is also refreshed by the backend at boot, every
+six hours, and by the web `Check for updates` button. Operational status is
+available with:
 
 ```bash
 systemctl status neproto-update.path neproto-update-check.timer
