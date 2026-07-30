@@ -37,8 +37,8 @@ creates all three private routes, configures renewal hooks, initializes an
 administrator credential, and validates services before start:
 
 ```sh
-tar -xzf neproto-server-bundle-np2-0.4.0.tar.gz
-cd neproto-server-bundle-np2-0.4.0
+tar -xzf neproto-server-bundle-np2-0.4.1.tar.gz
+cd neproto-server-bundle-np2-0.4.1
 sudo ./install.sh
 sudo np
 sudo neprotoctl doctor

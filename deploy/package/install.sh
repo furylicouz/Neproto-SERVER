@@ -61,18 +61,20 @@ root=${root%/}
 [[ -n $root ]] || root=/
 path_in_root() { if [[ $root == / ]]; then printf '/%s' "${1#/}"; else printf '%s/%s' "$root" "${1#/}"; fi; }
 
+platform_script=$script_dir/scripts/platform.sh
+[[ -r $platform_script ]] || die 'missing platform compatibility definitions'
+# shellcheck source=scripts/platform.sh
+source "$platform_script"
+
 if [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
   [[ $EUID -eq 0 ]] || die 'run the installer as root'
   [[ $(uname -s) == Linux ]] || die 'only Linux is supported'
   machine=$(uname -m)
-  # shellcheck disable=SC1091
-  source /etc/os-release
-  case "${ID:-}:${VERSION_ID:-}" in
-    ubuntu:22.04|ubuntu:24.04|ubuntu:26.04|debian:12) ;;
-    *) die "supported systems: Ubuntu 22.04/24.04/26.04 and Debian 12" ;;
-  esac
+  platform=$(neproto_detect_platform /etc/os-release) || \
+    die "supported systems: $NEPROTO_SUPPORTED_PLATFORMS"
 else
   machine=${NEPROTO_TEST_MACHINE:-x86_64}
+  platform=${NEPROTO_TEST_PLATFORM:-debian:13}
 fi
 
 case "$machine" in
@@ -148,11 +150,22 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 && ${NEPROTO_SELF_UPDATE:-0} != 1 ]]; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
   apt-get install -y --no-install-recommends ca-certificates openssl qrencode curl certbot kmod procps jq
-  if [[ $mode == docker ]] && ! command -v docker >/dev/null 2>&1; then
-    apt-get install -y --no-install-recommends docker.io
-    apt-get install -y --no-install-recommends docker-compose-plugin || apt-get install -y --no-install-recommends docker-compose-v2
-  fi
   if [[ $mode == docker ]]; then
+    command -v docker >/dev/null 2>&1 || apt-get install -y --no-install-recommends docker.io
+    if ! docker compose version >/dev/null 2>&1; then
+      compose_package=$(neproto_compose_package "$platform")
+      if ! apt-get install -y --no-install-recommends "$compose_package"; then
+        compose_installed=false
+        for compose_fallback in docker-compose-plugin docker-compose-v2 docker-compose; do
+          [[ $compose_fallback != "$compose_package" ]] || continue
+          if apt-get install -y --no-install-recommends "$compose_fallback"; then
+            compose_installed=true
+            break
+          fi
+        done
+        $compose_installed || die 'Docker Compose v2 package is unavailable'
+      fi
+    fi
     docker compose version >/dev/null || die 'Docker Compose v2 is unavailable'
   fi
 elif [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then

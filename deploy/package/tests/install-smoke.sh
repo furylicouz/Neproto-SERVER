@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 package_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+"$package_dir/tests/platform-smoke.sh"
 architecture=${1:-amd64}
 expected_version=${2:-}
 [[ -x $package_dir/bin/$architecture/neproto-server ]]

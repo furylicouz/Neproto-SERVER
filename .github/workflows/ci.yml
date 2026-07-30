@@ -34,6 +34,7 @@ jobs:
         run: |
           bash -n install.sh deploy/build-server-bundle.sh
           find deploy/package -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          bash deploy/package/tests/platform-smoke.sh
           deploy/tests/root-bootstrap-smoke.sh
 
       - name: Verify Go server and control plane

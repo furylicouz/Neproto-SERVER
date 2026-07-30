@@ -6,7 +6,7 @@ One release archive contains everything required for either a bare-metal or
 Docker deployment: Go services, Caddy, a pinned Node.js runtime, and the
 standalone web application.
 
-Current release: **NP/2 Constellation `np2-0.4.0`**.
+Current release: **NP/2 Constellation `np2-0.4.1`**.
 
 NeProto Web is built, installed, supervised, and published by the same server
 installer. Its authenticated update screen checks the pinned GitHub repository
@@ -16,7 +16,7 @@ console.
 
 ## Quick setup
 
-Supported hosts: Ubuntu 22.04/24.04/26.04 and Debian 12 on AMD64 or ARM64.
+Supported hosts: Ubuntu 22.04/24.04/26.04 and Debian 12/13 on AMD64 or ARM64.
 Run as `root`; Git is not required:
 
 ```bash
@@ -191,7 +191,7 @@ archive permissions, and emits both the archive and its checksum.
 
 ## Releases and updates
 
-Pushing a tag equal to the contents of `VERSION` (for example `np2-0.4.0`)
+Pushing a tag equal to the contents of `VERSION` (for example `np2-0.4.1`)
 triggers the release workflow. It builds the complete bundle, runs isolated
 bare-metal/Docker lifecycle tests, and publishes the archive plus checksum to
 GitHub Releases.

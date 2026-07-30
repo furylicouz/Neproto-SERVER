@@ -16,7 +16,7 @@ The product must support independently revocable users. Every user receives a un
 
 ## Supported Systems
 
-- Ubuntu 22.04/24.04/26.04 LTS and Debian 12.
+- Ubuntu 22.04/24.04/26.04 LTS and Debian 12/13.
 - `amd64` and `arm64`.
 - Root execution for installation and node administration.
 - Docker mode uses Docker Engine with the Compose v2 plugin.
