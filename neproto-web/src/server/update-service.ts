@@ -22,7 +22,7 @@ export async function readUpdateStatus(): Promise<UpdateStatus> {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;
     }
-    const currentVersion = process.env.NEPROTO_VERSION || "np2-0.5.3";
+    const currentVersion = process.env.NEPROTO_VERSION || "np2-0.5.4";
     if (!VERSION.test(currentVersion)) {
       throw new Error("invalid running NeProto version");
     }

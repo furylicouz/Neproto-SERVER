@@ -189,6 +189,28 @@ func TestWebAPIClusterAndRoutesUseSanitizedStructuredModels(t *testing.T) {
 	}
 }
 
+func TestWebAPIRoutesUsesArraysForEmptyClusterCollections(t *testing.T) {
+	root := t.TempDir()
+	writeFeatureTestInstallation(t, root)
+	handler := mustWebAPIHandler(t, root, &fakeController{})
+
+	routes := httptest.NewRecorder()
+	handler.ServeHTTP(routes, httptest.NewRequest(http.MethodGet, "/v1/routes", nil))
+	if routes.Code != http.StatusOK {
+		t.Fatalf("routes status=%d body=%s", routes.Code, routes.Body.String())
+	}
+	var body struct {
+		Routes json.RawMessage `json:"routes"`
+		Access json.RawMessage `json:"access"`
+	}
+	if err := json.Unmarshal(routes.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if string(body.Routes) != "[]" || string(body.Access) != "[]" {
+		t.Fatalf("empty collections must be arrays: %s", routes.Body.String())
+	}
+}
+
 func TestWebAPIServicesSettingsLogsAndBackups(t *testing.T) {
 	root := t.TempDir()
 	writeFeatureTestInstallation(t, root)

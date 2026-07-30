@@ -82,8 +82,16 @@ func (api *webAPI) writeRoutes(writer http.ResponseWriter) {
 		status.State = geodata.UpdateStateError
 		status.Error = "GeoData is unavailable"
 	}
+	routes := state.Routes
+	if routes == nil {
+		routes = []cluster.Route{}
+	}
+	access := state.Access
+	if access == nil {
+		access = []cluster.UserAccess{}
+	}
 	api.writeJSON(writer, http.StatusOK, map[string]any{
-		"revision": state.Revision, "routes": state.Routes, "access": state.Access,
+		"revision": state.Revision, "routes": routes, "access": access,
 		"geodata": status, "schedule": geoDataSchedule(api.manager.RootDirectory()),
 	})
 }

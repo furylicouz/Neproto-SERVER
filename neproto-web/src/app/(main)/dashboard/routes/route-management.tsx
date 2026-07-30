@@ -43,6 +43,7 @@ import {
   waitForAdminJob,
 } from "@/lib/admin-api";
 import type { AppLocale } from "@/lib/i18n";
+import { normalizeRouteState, routeMatchLabel } from "@/lib/route-state-view-model.mjs";
 
 interface RouteDraft {
   id: string;
@@ -66,18 +67,6 @@ const emptyDraft: RouteDraft = {
   userIDs: [],
 };
 
-function routeMatch(route: ClusterRoute) {
-  const choices = [
-    ["domain", route.match.domain_suffixes],
-    ["cidr", route.match.cidrs],
-    ["geoip", route.match.geoip_countries],
-    ["geosite", route.match.geosite_categories],
-    ["protocol", route.match.protocols],
-  ] as const;
-  const selected = choices.find(([, values]) => values && values.length > 0);
-  return selected ? `${selected[0]}: ${selected[1]?.join(", ")}` : "—";
-}
-
 export function RouteManagement({ locale }: { locale: AppLocale }) {
   const ru = locale === "ru";
   const routes = useAdminResource<RouteState>("routes", 12_000);
@@ -89,6 +78,7 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
   const [selectedUser, setSelectedUser] = React.useState("");
   const [job, setJob] = React.useState<ControlJob | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const routeState = React.useMemo(() => normalizeRouteState(routes.data), [routes.data]);
 
   const setField = <K extends keyof RouteDraft>(key: K, value: RouteDraft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -138,7 +128,7 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
 
   async function toggleAssignment() {
     if (!assignRoute || !selectedUser) return;
-    const access = routes.data?.access.find((entry) => entry.user_id === selectedUser);
+    const access = routeState.access.find((entry) => entry.user_id === selectedUser);
     const enabled = !access?.allowed_route_ids.includes(assignRoute.id);
     try {
       await adminFetch(`routes/${encodeURIComponent(assignRoute.id)}/assign-user`, {
@@ -216,10 +206,10 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
           <div>
             <CardTitle>{ru ? "Правила" : "Rules"}</CardTitle>
             <CardDescription>
-              {routes.data.routes.length} {ru ? "маршрутов" : "routes"}
+              {routeState.routes.length} {ru ? "маршрутов" : "routes"}
             </CardDescription>
           </div>
-          <Badge variant="outline">revision {routes.data.revision}</Badge>
+          <Badge variant="outline">revision {routeState.revision}</Badge>
         </CardHeader>
         <CardContent className="px-0">
           <Table>
@@ -234,14 +224,14 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {routes.data.routes.map((route) => (
+              {routeState.routes.map((route) => (
                 <TableRow key={route.id}>
                   <TableCell>
                     <div className="font-medium">{route.name}</div>
                     <div className="font-mono text-muted-foreground text-xs">{route.id}</div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{routeMatch(route)}</Badge>
+                    <Badge variant="secondary">{routeMatchLabel(route)}</Badge>
                   </TableCell>
                   <TableCell>
                     <span className="font-mono text-xs">
@@ -280,7 +270,7 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
                   </TableCell>
                 </TableRow>
               ))}
-              {routes.data.routes.length === 0 && (
+              {routeState.routes.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                     {ru ? "Маршрутов пока нет" : "No routes yet"}
@@ -306,17 +296,17 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
           <div>
             <div className="text-muted-foreground text-sm">{ru ? "Состояние" : "State"}</div>
             <div className="mt-2">
-              <StateBadge state={routes.data.geodata.state} />
+              <StateBadge state={routeState.geodata.state} />
             </div>
-            {routes.data.geodata.updated_at && (
+            {routeState.geodata.updated_at && (
               <div className="mt-2 text-muted-foreground text-xs">
-                {new Date(routes.data.geodata.updated_at).toLocaleString(locale)}
+                {new Date(routeState.geodata.updated_at).toLocaleString(locale)}
               </div>
             )}
           </div>
           <Field>
             <FieldLabel>{ru ? "Автообновление" : "Automatic update"}</FieldLabel>
-            <Select value={routes.data.schedule} onValueChange={(value) => void setSchedule(value)}>
+            <Select value={routeState.schedule} onValueChange={(value) => void setSchedule(value)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -324,6 +314,7 @@ export function RouteManagement({ locale }: { locale: AppLocale }) {
                 <SelectItem value="off">{ru ? "Выключено" : "Off"}</SelectItem>
                 <SelectItem value="daily">{ru ? "Ежедневно" : "Daily"}</SelectItem>
                 <SelectItem value="weekly">{ru ? "Еженедельно" : "Weekly"}</SelectItem>
+                <SelectItem value="monthly">{ru ? "Ежемесячно" : "Monthly"}</SelectItem>
               </SelectContent>
             </Select>
           </Field>
