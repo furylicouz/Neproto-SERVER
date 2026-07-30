@@ -12,6 +12,9 @@ actual=$("$repository/install.sh" --print-release-url)
 }
 
 "$repository/install.sh" --help | grep -q -- '--bootstrap-bundle'
+grep -Fq 'cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"' \
+  "$repository/deploy/package/install.sh"
+! grep -Fq 'cp -a -- "$script_dir/web/."' "$repository/deploy/package/install.sh"
 
 standalone_dir=$(mktemp -d)
 trap 'rm -rf -- "$standalone_dir"' EXIT

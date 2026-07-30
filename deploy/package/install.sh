@@ -260,6 +260,18 @@ else
   service_gid=65532
 fi
 
+web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")
+cleanup_web_stage() {
+  [[ -z ${web_stage:-} || ! -e $web_stage ]] || rm -rf -- "$web_stage"
+}
+trap cleanup_web_stage EXIT
+if ! cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"; then
+  die 'cannot stage NeProto Web payload'
+fi
+find "$web_stage" -type d -exec chmod 0755 {} +
+find "$web_stage" -type f -exec chmod 0644 {} +
+chown -R root:root "$web_stage"
+
 install -m 0755 "$bundle_bin/neproto-server" "$bin_dir/neproto-server"
 info 'installing runtime components'
 install -m 0755 "$bundle_bin/neprotoctl" "$bin_dir/neprotoctl"
@@ -278,13 +290,16 @@ install -m 0644 "$script_dir/systemd/neproto-update.path" "$systemd_dir/neproto-
 install -m 0644 "$script_dir/systemd/neproto-update-check.service" "$systemd_dir/neproto-update-check.service"
 install -m 0644 "$script_dir/systemd/neproto-update-check.path" "$systemd_dir/neproto-update-check.path"
 install -m 0644 "$script_dir/systemd/neproto-update-check.timer" "$systemd_dir/neproto-update-check.timer"
-web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")
-cp -a -- "$script_dir/web/." "$web_stage/"
-find "$web_stage" -type d -exec chmod 0755 {} +
-find "$web_stage" -type f -exec chmod 0644 {} +
-rm -rf -- "$web_dir"
-mv -- "$web_stage" "$web_dir"
-chown -R root:root "$web_dir"
+web_previous=$opt_neproto/.web.previous
+rm -rf -- "$web_previous"
+[[ ! -d $web_dir ]] || mv -- "$web_dir" "$web_previous"
+if ! mv -- "$web_stage" "$web_dir"; then
+  [[ ! -d $web_previous ]] || mv -- "$web_previous" "$web_dir"
+  die 'cannot activate staged NeProto Web payload'
+fi
+web_stage=
+trap - EXIT
+rm -rf -- "$web_previous"
 if [[ ! -f $etc_neproto/geodata-schedule ]]; then
   printf 'weekly\n' >"$etc_neproto/geodata-schedule"
 fi

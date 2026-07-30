@@ -36,6 +36,8 @@ export const APP_MESSAGES = {
       submit: "Login",
       submitting: "Signing in…",
       failed: "Authentication failed. Check the administrator secret.",
+      blocked: "Too many failed attempts. Wait a minute and try again.",
+      invalidOrigin: "Open the login page from the configured NeProto Web address and try again.",
     },
     updates: {
       title: "Updates",
@@ -159,6 +161,8 @@ export const APP_MESSAGES = {
       submit: "Войти",
       submitting: "Вход…",
       failed: "Не удалось войти. Проверьте секрет администратора.",
+      blocked: "Слишком много неудачных попыток. Подождите минуту и повторите вход.",
+      invalidOrigin: "Откройте страницу входа по настроенному адресу NeProto Web и повторите попытку.",
     },
     updates: {
       title: "Обновления",

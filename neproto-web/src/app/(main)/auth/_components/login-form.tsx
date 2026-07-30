@@ -22,6 +22,8 @@ interface LoginMessages {
   submit: string;
   submitting: string;
   failed: string;
+  blocked: string;
+  invalidOrigin: string;
 }
 
 export function LoginForm({ messages }: { readonly messages: LoginMessages }) {
@@ -39,10 +41,17 @@ export function LoginForm({ messages }: { readonly messages: LoginMessages }) {
       const response = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: data.password, remember: Boolean(data.remember) }),
+        body: JSON.stringify({ password: data.password.trim(), remember: Boolean(data.remember) }),
       });
       if (!response.ok) {
-        throw new Error("authentication failed");
+        let message = messages.failed;
+        if (response.status === 429) {
+          message = messages.blocked;
+        } else if (response.status === 403) {
+          message = messages.invalidOrigin;
+        }
+        form.setError("password", { message });
+        return;
       }
       router.replace("/dashboard");
       router.refresh();

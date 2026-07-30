@@ -22,7 +22,7 @@ fi
 
 test_mode() {
   local mode=$1
-  local root
+  local root admin_secret_before
   root=$(mktemp -d)
   chmod 0755 "$root"
   trap 'rm -rf -- "$root"' RETURN
@@ -45,6 +45,7 @@ test_mode() {
   grep -q '"web_port": 3100' "$state"
   grep -qx 'PORT=3100' "$root/etc/neproto/web.env"
   [[ -s $root/etc/neproto/web-admin.secret ]]
+  admin_secret_before=$(<"$root/etc/neproto/web-admin.secret")
   [[ -d $root/var/lib/neproto/update/inbox ]]
   [[ $(stat -c %a "$root/var/lib/neproto/update") == 2750 ]]
   [[ $(stat -c %g "$root/var/lib/neproto/update") == 65532 ]]
@@ -101,6 +102,7 @@ test_mode() {
   grep -q "\"https_path\": \"$first_https\"" "$state"
   grep -q "\"webrtc_path\": \"$first_webrtc\"" "$state"
   grep -q "\"http3_path\": \"$first_http3\"" "$state"
+  [[ $(<"$root/etc/neproto/web-admin.secret") == "$admin_secret_before" ]]
 
   if [[ $mode == docker ]]; then
     [[ -s $root/opt/neproto/compose.yml && -s $root/opt/neproto/Dockerfile.neproto && -s $root/opt/neproto/Dockerfile.web ]]

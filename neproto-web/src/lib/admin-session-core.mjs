@@ -8,6 +8,10 @@ export function secureEqual(left, right) {
   return timingSafeEqual(leftDigest, rightDigest);
 }
 
+export function normalizeAdminSecret(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export function createAdminSession(secret, nowSeconds, ttlSeconds, nonce) {
   if (typeof secret !== "string" || secret.length < 32 || !Number.isSafeInteger(nowSeconds)) {
     throw new Error("invalid session input");
@@ -29,7 +33,12 @@ export function verifyAdminSession(token, secret, nowSeconds) {
     return false;
   }
   const parts = token.split(".");
-  if (parts.length !== 4 || parts[0] !== "v1" || !/^\d{1,12}$/.test(parts[1]) || !/^[A-Za-z0-9_-]{22,43}$/.test(parts[2])) {
+  if (
+    parts.length !== 4 ||
+    parts[0] !== "v1" ||
+    !/^\d{1,12}$/.test(parts[1]) ||
+    !/^[A-Za-z0-9_-]{22,43}$/.test(parts[2])
+  ) {
     return false;
   }
   const expires = Number(parts[1]);

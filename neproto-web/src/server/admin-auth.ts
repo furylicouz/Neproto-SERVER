@@ -3,7 +3,12 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 
-import { createAdminSession, secureEqual, verifyAdminSession } from "@/lib/admin-session-core.mjs";
+import {
+  createAdminSession,
+  normalizeAdminSecret,
+  secureEqual,
+  verifyAdminSession,
+} from "@/lib/admin-session-core.mjs";
 
 import { randomBytes } from "node:crypto";
 import { open } from "node:fs/promises";
@@ -49,7 +54,7 @@ export async function createSessionToken(remember: boolean): Promise<{ token: st
 
 export async function credentialsMatch(candidate: string): Promise<boolean> {
   const secret = await readAdminSecret();
-  return secureEqual(candidate, secret);
+  return secureEqual(normalizeAdminSecret(candidate), secret);
 }
 
 export async function hasAdminSession(): Promise<boolean> {
