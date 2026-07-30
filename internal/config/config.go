@@ -18,6 +18,7 @@ import (
 
 	"neproto.local/chameleon/internal/cover"
 	"neproto.local/chameleon/internal/credentials"
+	"neproto.local/chameleon/internal/protocol"
 	"neproto.local/chameleon/internal/session"
 )
 
@@ -65,28 +66,29 @@ const (
 )
 
 type Client struct {
-	ServerIdentity          string        `json:"server_identity"`
-	ServerAddresses         []netip.Addr  `json:"server_addresses,omitempty"`
-	SecretFile              string        `json:"secret_file"`
-	SOCKSListen             string        `json:"socks_listen"`
-	HTTPSURL                string        `json:"https_url"`
-	WebRTCSignalingURL      string        `json:"webrtc_signaling_url"`
-	HTTP3URL                string        `json:"http3_url,omitempty"`
-	Profile                 string        `json:"profile"`
-	CarrierPolicy           CarrierPolicy `json:"carrier_policy,omitempty"`
-	MaxCoverOverheadPercent uint8         `json:"max_cover_overhead_percent"`
-	InitialWindowBytes      uint64        `json:"initial_window_bytes"`
-	MaxStreams              int           `json:"max_streams"`
-	MaxParallelCarriers     int           `json:"max_parallel_carriers,omitempty"`
-	MaxSOCKSConnections     int           `json:"max_socks_connections"`
-	WebRTCTimeout           Duration      `json:"webrtc_timeout"`
-	HTTPSTimeout            Duration      `json:"https_timeout"`
-	HTTP3Timeout            Duration      `json:"http3_timeout,omitempty"`
-	CarrierCacheTTL         Duration      `json:"carrier_cache_ttl"`
-	RequireDatagrams        bool          `json:"require_datagrams,omitempty"`
-	EnableConstellation     bool          `json:"enable_constellation,omitempty"`
-	EnableForwardSecrecy    bool          `json:"enable_forward_secrecy,omitempty"`
-	Secret                  RootSecret    `json:"-"`
+	ServerIdentity          string            `json:"server_identity"`
+	DeviceID                protocol.DeviceID `json:"device_id,omitempty"`
+	ServerAddresses         []netip.Addr      `json:"server_addresses,omitempty"`
+	SecretFile              string            `json:"secret_file"`
+	SOCKSListen             string            `json:"socks_listen"`
+	HTTPSURL                string            `json:"https_url"`
+	WebRTCSignalingURL      string            `json:"webrtc_signaling_url"`
+	HTTP3URL                string            `json:"http3_url,omitempty"`
+	Profile                 string            `json:"profile"`
+	CarrierPolicy           CarrierPolicy     `json:"carrier_policy,omitempty"`
+	MaxCoverOverheadPercent uint8             `json:"max_cover_overhead_percent"`
+	InitialWindowBytes      uint64            `json:"initial_window_bytes"`
+	MaxStreams              int               `json:"max_streams"`
+	MaxParallelCarriers     int               `json:"max_parallel_carriers,omitempty"`
+	MaxSOCKSConnections     int               `json:"max_socks_connections"`
+	WebRTCTimeout           Duration          `json:"webrtc_timeout"`
+	HTTPSTimeout            Duration          `json:"https_timeout"`
+	HTTP3Timeout            Duration          `json:"http3_timeout,omitempty"`
+	CarrierCacheTTL         Duration          `json:"carrier_cache_ttl"`
+	RequireDatagrams        bool              `json:"require_datagrams,omitempty"`
+	EnableConstellation     bool              `json:"enable_constellation,omitempty"`
+	EnableForwardSecrecy    bool              `json:"enable_forward_secrecy,omitempty"`
+	Secret                  RootSecret        `json:"-"`
 }
 
 func (c Client) ProfileID() cover.ProfileID {
@@ -123,6 +125,8 @@ type Server struct {
 	ServerIdentity          string                   `json:"server_identity"`
 	SecretFile              string                   `json:"secret_file,omitempty"`
 	CredentialDirectory     string                   `json:"credential_directory,omitempty"`
+	UserPolicyFile          string                   `json:"user_policy_file,omitempty"`
+	UsageStateFile          string                   `json:"usage_state_file,omitempty"`
 	Listen                  string                   `json:"listen"`
 	MetricsListen           string                   `json:"metrics_listen,omitempty"`
 	ClusterDirectory        string                   `json:"cluster_directory,omitempty"`
@@ -275,6 +279,12 @@ func LoadServer(configPath string) (Server, error) {
 			return Server{}, err
 		}
 		config.Credentials = loaded
+	}
+	if config.UserPolicyFile != "" {
+		config.UserPolicyFile = resolveRelative(configPath, config.UserPolicyFile)
+	}
+	if config.UsageStateFile != "" {
+		config.UsageStateFile = resolveRelative(configPath, config.UsageStateFile)
 	}
 	if config.ClusterDirectory != "" {
 		config.ClusterDirectory = resolveRelative(configPath, config.ClusterDirectory)
@@ -498,6 +508,7 @@ func validServerAddresses(addresses []netip.Addr) bool {
 
 func validateServer(config Server) error {
 	if (config.Secret == (RootSecret{}) && len(config.Credentials) == 0) ||
+		(config.UserPolicyFile == "") != (config.UsageStateFile == "") ||
 		!validIdentity(config.ServerIdentity) || config.HTTPSPath == config.WebRTCPath ||
 		!validPrivatePath(config.HTTPSPath) || !validPrivatePath(config.WebRTCPath) ||
 		config.UDPPortMin < 1024 || config.UDPPortMax < config.UDPPortMin ||

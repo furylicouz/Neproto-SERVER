@@ -131,17 +131,27 @@ All carrier messages are opaque binary messages. Decoders reject non-canonical v
 After the carrier is established:
 
 1. Server sends `Challenge` containing a 32-byte CSPRNG nonce and supported protocol/profile bitsets.
-2. Client sends `Response` containing a fresh 32-byte nonce, requested features, and `HMAC-SHA-256(auth_key, transcript)`.
+2. Client sends `Response` containing a fresh 32-byte nonce, requested features,
+   an optional 16-byte installation identifier when `FeatureDeviceIdentity` is
+   selected, and `HMAC-SHA-256(auth_key, transcript)`.
 3. Server verifies the response in constant time, derives a session seed, and sends `Confirm` with a server HMAC over the complete transcript.
 4. Both sides derive independent header-map, padding, control, and directional cell-encryption keys using HKDF-SHA-256.
 
 ```text
 auth_key    = HKDF(root_secret, "NP2 auth" || server_identity)
-transcript  = protocol_version || carrier || server_nonce || client_nonce || features
+transcript  = protocol_version || carrier || server_nonce || client_nonce || features || optional_device_id
 session_seed = HKDF(auth_key, "NP2 session" || transcript)
 ```
 
 Authentication messages are capped at 512 bytes. A challenge expires after 15 seconds and is single-use. The server caps outstanding unauthenticated sessions globally and per source address.
+
+`FeatureDeviceIdentity` is additive and server-first compatible. A client sends
+the identifier only when the server advertises the feature. The identifier is
+authenticated as part of the response transcript, contains no hardware value,
+and is generated once per application installation. It groups parallel carrier
+sessions into one logical device; it is not a fingerprint and is not treated as
+a cryptographic secret. The administrative and accounting contract is defined
+in [`NP2-USER-SESSIONS-SPEC.md`](NP2-USER-SESSIONS-SPEC.md).
 
 ### Session-specific type mapping
 

@@ -75,6 +75,9 @@ test_mode() {
   grep -Fq 'SSH_ORIGINAL_COMMAND' "$root/etc/profile.d/neproto-console.sh"
   grep -Fq '/usr/local/bin/np' "$root/etc/profile.d/neproto-console.sh"
   grep -q '"credential_directory": "/etc/neproto/users/active"' "$root/etc/neproto/server.json"
+  grep -q '"user_policy_file": "/etc/neproto/users/index.json"' "$root/etc/neproto/server.json"
+  grep -q '"usage_state_file": "/var/lib/neproto/usage/state.json"' "$root/etc/neproto/server.json"
+  [[ -d $root/var/lib/neproto/usage ]]
   grep -q '"geodata_directory": "/etc/neproto/geodata"' "$root/etc/neproto/server.json"
   [[ -f $root/etc/neproto/geodata/geoip.dat && -f $root/etc/neproto/geodata/geosite.dat ]]
   [[ -x $root/usr/local/lib/neproto/update-geodata ]]
@@ -122,6 +125,7 @@ test_mode() {
     grep -qx 'HOSTNAME=0.0.0.0' "$root/etc/neproto/web.env"
     grep -q 'cap_drop: \[ALL\]' "$root/opt/neproto/compose.yml"
     grep -q '/etc/neproto/geodata:/etc/neproto/geodata:rw' "$root/opt/neproto/compose.yml"
+    grep -q '/var/lib/neproto/usage:/var/lib/neproto/usage:rw' "$root/opt/neproto/compose.yml"
     [[ $(grep -c 'cap_add: \[NET_BIND_SERVICE\]' "$root/opt/neproto/compose.yml") -eq 2 ]]
     if grep -q '__SERVICE_GID__' "$root/opt/neproto/compose.yml"; then
       return 1
@@ -139,7 +143,7 @@ test_mode() {
     grep -q 'NoNewPrivileges=true' "$root/etc/systemd/system/neproto-server.service"
     grep -q '^AmbientCapabilities=CAP_NET_BIND_SERVICE$' "$root/etc/systemd/system/neproto-server.service"
     grep -q '^CapabilityBoundingSet=CAP_NET_BIND_SERVICE$' "$root/etc/systemd/system/neproto-server.service"
-    grep -q '^ReadWritePaths=/etc/neproto/users/active /etc/neproto/geodata$' "$root/etc/systemd/system/neproto-server.service"
+    grep -q '^ReadWritePaths=/etc/neproto/users/active /etc/neproto/geodata /var/lib/neproto/usage$' "$root/etc/systemd/system/neproto-server.service"
   fi
 
   NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user add --name "Smoke iPhone" --profile web --no-restart >"$root/add.out"

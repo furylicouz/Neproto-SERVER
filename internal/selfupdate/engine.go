@@ -90,15 +90,29 @@ func (engine *Engine) Check(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	release, err := engine.latest(ctx)
+	status, err := engine.CheckAvailability(ctx)
 	if err != nil {
 		return engine.fail(checking, "check_failed", "Update check failed", err)
+	}
+	return engine.persist(status)
+}
+
+// CheckAvailability performs a bounded, read-only release lookup. It is used
+// by the local control API so an authenticated web request receives a final
+// result instead of polling a filesystem marker indefinitely.
+func (engine *Engine) CheckAvailability(ctx context.Context) (Status, error) {
+	if _, err := ParseVersion(engine.currentVersion); err != nil {
+		return Status{}, err
+	}
+	release, err := engine.latest(ctx)
+	if err != nil {
+		return Status{}, err
 	}
 	message := "NeProto is up to date"
 	if release.Available {
 		message = "Update available"
 	}
-	return engine.persist(Status{
+	return engine.store.normalize(Status{
 		State: "idle", CurrentVersion: engine.currentVersion, AvailableVersion: release.Tag,
 		UpdateAvailable: release.Available, Progress: mustProgress("idle"), Message: message,
 	})

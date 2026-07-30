@@ -111,6 +111,92 @@ func TestAuthenticatedSessionCarriesStream(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedSessionCarriesDeviceIdentity(t *testing.T) {
+	left, right := newMemoryCarrierPair()
+	secret := [protocol.RootSecretSize]byte{0x83, 0x19, 0x47}
+	deviceID := protocol.DeviceID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf0, 0x01}
+	features := protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureDeviceIdentity
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	serverResult := make(chan struct {
+		session *Authenticated
+		err     error
+	}, 1)
+	go func() {
+		authenticated, err := AcceptServer(ctx, right, AuthenticatedConfig{
+			RootSecret: secret, ServerIdentity: "edge.example.test", Features: features,
+			InitialWindow: 64 * 1024, MaxStreams: 8,
+		})
+		serverResult <- struct {
+			session *Authenticated
+			err     error
+		}{authenticated, err}
+	}()
+	client, err := ConnectClient(ctx, left, AuthenticatedConfig{
+		RootSecret: secret, ServerIdentity: "edge.example.test", Features: features,
+		DeviceID: deviceID, InitialWindow: 64 * 1024, MaxStreams: 8,
+	})
+	if err != nil {
+		t.Fatalf("authenticate client: %v", err)
+	}
+	server := <-serverResult
+	if server.err != nil {
+		t.Fatalf("authenticate server: %v", server.err)
+	}
+	t.Cleanup(func() {
+		_ = client.Mux.Close()
+		_ = server.session.Mux.Close()
+	})
+	if client.DeviceID != deviceID || server.session.DeviceID != deviceID {
+		t.Fatalf("device identities differ: client=%x server=%x", client.DeviceID, server.session.DeviceID)
+	}
+}
+
+func TestAuthenticatedSessionDeviceIdentityDowngradesForLegacyServer(t *testing.T) {
+	left, right := newMemoryCarrierPair()
+	secret := [protocol.RootSecretSize]byte{0x83, 0x19, 0x47}
+	deviceID := protocol.DeviceID{0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30}
+	legacyFeatures := protocol.FeatureMultiplex | protocol.FeatureCellAEAD
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	serverResult := make(chan struct {
+		session *Authenticated
+		err     error
+	}, 1)
+	go func() {
+		authenticated, err := AcceptServer(ctx, right, AuthenticatedConfig{
+			RootSecret: secret, ServerIdentity: "edge.example.test", Features: legacyFeatures,
+			InitialWindow: 64 * 1024, MaxStreams: 8,
+		})
+		serverResult <- struct {
+			session *Authenticated
+			err     error
+		}{authenticated, err}
+	}()
+	client, err := ConnectClient(ctx, left, AuthenticatedConfig{
+		RootSecret: secret, ServerIdentity: "edge.example.test",
+		Features: legacyFeatures | protocol.FeatureDeviceIdentity, DeviceID: deviceID,
+		InitialWindow: 64 * 1024, MaxStreams: 8,
+	})
+	if err != nil {
+		t.Fatalf("authenticate device-aware client against legacy server: %v", err)
+	}
+	server := <-serverResult
+	if server.err != nil {
+		t.Fatalf("authenticate legacy server: %v", server.err)
+	}
+	t.Cleanup(func() {
+		_ = client.Mux.Close()
+		_ = server.session.Mux.Close()
+	})
+	if client.Features != legacyFeatures || server.session.Features != legacyFeatures {
+		t.Fatalf("features were not downgraded: client=%v server=%v", client.Features, server.session.Features)
+	}
+	if !client.DeviceID.IsZero() || !server.session.DeviceID.IsZero() {
+		t.Fatalf("legacy session carried device identity: client=%x server=%x", client.DeviceID, server.session.DeviceID)
+	}
+}
+
 func TestAuthenticatedSessionRejectsWrongSecret(t *testing.T) {
 	left, right := newMemoryCarrierPair()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

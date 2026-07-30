@@ -22,6 +22,7 @@ import (
 	"neproto.local/chameleon/internal/protocol"
 	"neproto.local/chameleon/internal/proxy"
 	"neproto.local/chameleon/internal/session"
+	"neproto.local/chameleon/internal/usage"
 )
 
 type carrierAcceptor interface {
@@ -35,6 +36,15 @@ func RunServer(ctx context.Context, config config.Server) error {
 	resourceLimiter, err := newProductionResourceLimiter(config)
 	if err != nil {
 		return fmt.Errorf("create resource limiter: %w", err)
+	}
+	var usageTracker *usage.Tracker
+	if shouldTrackUserSessions(config) {
+		usageTracker, err = usage.New(usage.Config{
+			PolicyPath: config.UserPolicyFile, StatePath: config.UsageStateFile, Now: time.Now,
+		})
+		if err != nil {
+			return fmt.Errorf("create user usage tracker: %w", err)
+		}
 	}
 	catalogHandler, err := newClusterCatalogHandler(
 		config.ClusterDirectory, config.ClusterCatalogTTL.Duration, time.Now,
@@ -134,6 +144,9 @@ func RunServer(ctx context.Context, config config.Server) error {
 	}
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if usageTracker != nil {
+		go usageTracker.Run(runContext.Done(), 5*time.Second)
+	}
 	constellationRuntime, err := newConstellationServices(runContext, config)
 	if err != nil {
 		return fmt.Errorf("create constellation runtime: %w", err)
@@ -163,7 +176,8 @@ func RunServer(ctx context.Context, config config.Server) error {
 						defer sessionWait.Done()
 						defer func() { <-sessions }()
 						serveAuthenticatedCarrier(
-							runContext, config, connection, runtimeMetrics, resourceLimiter, constellationRuntime, catalogHandler, clusterRelay,
+							runContext, config, connection, runtimeMetrics, resourceLimiter, usageTracker,
+							constellationRuntime, catalogHandler, clusterRelay,
 						)
 					}()
 				default:
@@ -231,6 +245,7 @@ func serveAuthenticatedCarrier(
 	connection carrier.Carrier,
 	metrics *observability.ServerMetrics,
 	resourceLimiter *proxy.ResourceLimiter,
+	usageTracker *usage.Tracker,
 	constellationRuntime *constellationServices,
 	catalogHandler proxy.CatalogHandler,
 	clusterRelay *clusterRelayServices,
@@ -262,7 +277,7 @@ func serveAuthenticatedCarrier(
 		RootSecret: config.Secret.Bytes(), ServerIdentity: config.ServerIdentity,
 		Credentials: serverCredentials,
 		Features: protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileQuiet |
-			protocol.FeatureProfileWeb | protocol.FeatureProfileInteractive,
+			protocol.FeatureProfileWeb | protocol.FeatureProfileInteractive | protocol.FeatureDeviceIdentity,
 		InitialWindow: config.InitialWindowBytes, MaxStreams: config.MaxStreams,
 		MaxCoverOverheadPercent: config.MaxCoverOverheadPercent,
 		ExtensionOffer:          &extensionOffer,
@@ -290,6 +305,27 @@ func serveAuthenticatedCarrier(
 		return
 	}
 	defer resourceLimiter.ReleaseSession(authenticated.CredentialID)
+	var usageSession *usage.Session
+	if usageTracker != nil {
+		usageSession, err = usageTracker.Admit(
+			authenticated.CredentialID,
+			authenticated.DeviceID,
+			func() usage.Counters {
+				stats := authenticated.Mux.Stats()
+				return usage.Counters{
+					UploadBytes: stats.ReceivedPayloadBytes, DownloadBytes: stats.SentCellPayloadBytes,
+				}
+			},
+		)
+		if err != nil && rejectUsageAdmission(err, authenticated.CredentialID, clusterRelay) {
+			metrics.SessionRejected()
+			_ = authenticated.Mux.Close()
+			slog.Warn("NP/2 session rejected by device policy",
+				"event", "session_device_rejected", "carrier", carrierName,
+				"reason", usageRejectionReason(err))
+			return
+		}
+	}
 	var continuityRuntime *proxy.ContinuityRuntime
 	var continuityLease proxy.ContinuityLease
 	if constellationRuntime != nil {
@@ -342,6 +378,9 @@ func serveAuthenticatedCarrier(
 			reason = observability.TerminalShutdown
 		}
 		metrics.SessionEnded(connection.Kind(), stats, authenticated.Cover.Stats(), reason)
+		if usageSession != nil {
+			_ = usageSession.Close()
+		}
 		_ = authenticated.Mux.Close()
 		slog.Info("NP/2 session stopped", "event", "session_stopped", "carrier", carrierName,
 			"reason", string(reason))
@@ -374,4 +413,28 @@ func serveAuthenticatedCarrier(
 		proxyServer.GeoDataControl = clusterRelay.geodataControl
 	}
 	terminalError = proxyServer.Serve(ctx)
+}
+
+func shouldTrackUserSessions(server config.Server) bool {
+	if server.UserPolicyFile == "" || server.UsageStateFile == "" {
+		return false
+	}
+	return server.ClusterNodeID == "" || server.ClusterNodeID == server.ClusterMasterNodeID
+}
+
+func rejectUsageAdmission(err error, credentialID string, clusterRelay *clusterRelayServices) bool {
+	return err != nil && !(errors.Is(err, usage.ErrUserInactive) && clusterRelay.acceptsPeerCredential(credentialID))
+}
+
+func usageRejectionReason(err error) string {
+	switch {
+	case errors.Is(err, usage.ErrDeviceIdentityRequired):
+		return "device_identity_required"
+	case errors.Is(err, usage.ErrDeviceLimit):
+		return "device_limit"
+	case errors.Is(err, usage.ErrUserInactive):
+		return "user_inactive"
+	default:
+		return "usage_state_unavailable"
+	}
 }

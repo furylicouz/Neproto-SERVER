@@ -264,10 +264,14 @@ func connectClientSingle(ctx context.Context, config config.Client, mode ProbeMo
 		_ = selected.Carrier.Close()
 		return nil, hybrid.Result{}, err
 	}
+	if !config.DeviceID.IsZero() {
+		features |= protocol.FeatureDeviceIdentity
+	}
 	extensionRequest := productionClientExtensionRequest(config, selected.Carrier)
 	requiredExtensions := requiredClientExtensions(config)
 	authenticated, err := session.ConnectClient(ctx, selected.Carrier, session.AuthenticatedConfig{
 		RootSecret: config.Secret.Bytes(), ServerIdentity: config.ServerIdentity,
+		DeviceID: config.DeviceID,
 		Features: features, InitialWindow: config.InitialWindowBytes, MaxStreams: config.MaxStreams,
 		MaxCoverOverheadPercent: config.MaxCoverOverheadPercent,
 		ExtensionRequest:        &extensionRequest, RequiredExtensions: requiredExtensions,

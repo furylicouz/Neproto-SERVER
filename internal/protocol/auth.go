@@ -56,13 +56,15 @@ const (
 	FeatureProfileWeb
 	FeatureProfileInteractive
 	FeatureCellAEAD
+	FeatureDeviceIdentity
 )
 
 const knownFeatures = FeatureMultiplex |
 	FeatureProfileQuiet |
 	FeatureProfileWeb |
 	FeatureProfileInteractive |
-	FeatureCellAEAD
+	FeatureCellAEAD |
+	FeatureDeviceIdentity
 
 func (f FeatureSet) valid() bool {
 	return f&^knownFeatures == 0
@@ -72,6 +74,7 @@ type HandshakeConfig struct {
 	RootSecret     [RootSecretSize]byte
 	ServerIdentity string
 	Carrier        CarrierKind
+	DeviceID       DeviceID
 }
 
 // Credential is server-local authentication metadata. Its ID is never placed
@@ -130,28 +133,53 @@ func ParseChallenge(raw []byte) (Challenge, error) {
 type Response struct {
 	ClientNonce       [NonceSize]byte
 	RequestedFeatures FeatureSet
+	DeviceID          DeviceID
 	Tag               [AuthTagSize]byte
 }
 
 func (r Response) MarshalBinary() []byte {
-	raw := make([]byte, responseMessageSize)
+	size := responseMessageSize
+	if r.RequestedFeatures&FeatureDeviceIdentity != 0 {
+		size += DeviceIDSize
+	}
+	raw := make([]byte, size)
 	copy(raw[:NonceSize], r.ClientNonce[:])
 	binary.BigEndian.PutUint32(raw[NonceSize:], uint32(r.RequestedFeatures))
-	copy(raw[NonceSize+4:], r.Tag[:])
+	offset := NonceSize + 4
+	if r.RequestedFeatures&FeatureDeviceIdentity != 0 {
+		copy(raw[offset:offset+DeviceIDSize], r.DeviceID[:])
+		offset += DeviceIDSize
+	}
+	copy(raw[offset:], r.Tag[:])
 	return raw
 }
 
 func ParseResponse(raw []byte) (Response, error) {
-	if len(raw) > MaxAuthenticationMessageSize || len(raw) != responseMessageSize {
+	if len(raw) > MaxAuthenticationMessageSize || len(raw) < NonceSize+4 {
 		return Response{}, ErrMalformedMessage
 	}
 	var response Response
 	copy(response.ClientNonce[:], raw[:NonceSize])
 	response.RequestedFeatures = FeatureSet(binary.BigEndian.Uint32(raw[NonceSize:]))
-	copy(response.Tag[:], raw[NonceSize+4:])
 	if !response.RequestedFeatures.valid() {
 		return Response{}, ErrMalformedMessage
 	}
+	expectedSize := responseMessageSize
+	if response.RequestedFeatures&FeatureDeviceIdentity != 0 {
+		expectedSize += DeviceIDSize
+	}
+	if len(raw) != expectedSize {
+		return Response{}, ErrMalformedMessage
+	}
+	offset := NonceSize + 4
+	if response.RequestedFeatures&FeatureDeviceIdentity != 0 {
+		copy(response.DeviceID[:], raw[offset:offset+DeviceIDSize])
+		if response.DeviceID.IsZero() {
+			return Response{}, ErrMalformedMessage
+		}
+		offset += DeviceIDSize
+	}
+	copy(response.Tag[:], raw[offset:])
 	return response, nil
 }
 
@@ -243,6 +271,12 @@ func RespondToChallenge(
 	}
 	var response Response
 	response.RequestedFeatures = requestedFeatures
+	if requestedFeatures&FeatureDeviceIdentity != 0 {
+		if config.DeviceID.IsZero() {
+			return Response{}, nil, fmt.Errorf("%w: zero device identity", ErrInvalidConfig)
+		}
+		response.DeviceID = config.DeviceID
+	}
 	if _, err := io.ReadFull(random, response.ClientNonce[:]); err != nil {
 		return Response{}, nil, fmt.Errorf("read client nonce: %w", err)
 	}
@@ -250,7 +284,7 @@ func RespondToChallenge(
 	if err != nil {
 		return Response{}, nil, err
 	}
-	transcript := buildTranscript(config, challenge, response.ClientNonce, requestedFeatures)
+	transcript := buildTranscript(config, challenge, response.ClientNonce, requestedFeatures, response.DeviceID)
 	response.Tag = calculateTag(authKey[:], "NP2 response", transcript)
 	keys, err := deriveSessionKeys(authKey, transcript)
 	if err != nil {
@@ -300,7 +334,10 @@ func (s *ServerHandshake) VerifyResponseWithCredentials(
 	if !response.RequestedFeatures.valid() || response.RequestedFeatures&^s.supportedFeatures != 0 {
 		return Confirm{}, SessionKeys{}, "", ErrUnsupportedFeatures
 	}
-	transcript := buildTranscript(s.config, s.challenge, response.ClientNonce, response.RequestedFeatures)
+	if response.RequestedFeatures&FeatureDeviceIdentity != 0 && response.DeviceID.IsZero() {
+		return Confirm{}, SessionKeys{}, "", ErrMalformedMessage
+	}
+	transcript := buildTranscript(s.config, s.challenge, response.ClientNonce, response.RequestedFeatures, response.DeviceID)
 	var matchedAuthKey [32]byte
 	matchedID := ""
 	matches := 0
@@ -410,9 +447,14 @@ func buildTranscript(
 	challenge Challenge,
 	clientNonce [NonceSize]byte,
 	requestedFeatures FeatureSet,
+	deviceID DeviceID,
 ) []byte {
 	identity := []byte(config.ServerIdentity)
-	transcript := make([]byte, 0, 2+2+len(identity)+NonceSize*2+8)
+	capacity := 2 + 2 + len(identity) + NonceSize*2 + 8
+	if requestedFeatures&FeatureDeviceIdentity != 0 {
+		capacity += DeviceIDSize
+	}
+	transcript := make([]byte, 0, capacity)
 	transcript = append(transcript, Version, byte(config.Carrier))
 	transcript = binary.BigEndian.AppendUint16(transcript, uint16(len(identity)))
 	transcript = append(transcript, identity...)
@@ -420,6 +462,9 @@ func buildTranscript(
 	transcript = append(transcript, clientNonce[:]...)
 	transcript = binary.BigEndian.AppendUint32(transcript, uint32(challenge.SupportedFeatures))
 	transcript = binary.BigEndian.AppendUint32(transcript, uint32(requestedFeatures))
+	if requestedFeatures&FeatureDeviceIdentity != 0 {
+		transcript = append(transcript, deviceID[:]...)
+	}
 	return transcript
 }
 

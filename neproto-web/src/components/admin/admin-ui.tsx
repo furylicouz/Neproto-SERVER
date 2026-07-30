@@ -29,9 +29,9 @@ export function AdminError({ message }: { message: string }) {
   );
 }
 
-export function StateBadge({ state }: { state: string }) {
+export function StateBadge({ state, label }: { state: string; label?: string }) {
   const normalized = state.toLowerCase();
-  const healthy = ["active", "up", "ready", "ok", "current", "succeeded"].includes(normalized);
+  const healthy = ["active", "online", "up", "ready", "ok", "current", "succeeded"].includes(normalized);
   const pending = ["queued", "running", "starting", "updating"].includes(normalized);
   let variant: "default" | "secondary" | "outline" = "outline";
   if (healthy) variant = "default";
@@ -39,7 +39,7 @@ export function StateBadge({ state }: { state: string }) {
   return (
     <Badge variant={variant}>
       {pending && <LoaderCircle className="animate-spin" />}
-      {state}
+      {label ?? state}
     </Badge>
   );
 }

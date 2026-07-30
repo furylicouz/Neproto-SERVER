@@ -2,22 +2,32 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"neproto.local/chameleon/internal/admin"
 	"neproto.local/chameleon/internal/buildinfo"
 	"neproto.local/chameleon/internal/cluster"
 	"neproto.local/chameleon/internal/geodata"
+	"neproto.local/chameleon/internal/protocol"
+	"neproto.local/chameleon/internal/selfupdate"
+	usagestore "neproto.local/chameleon/internal/usage"
 )
 
 const webAPIMaximumBodyBytes = 64 * 1024
+
+const webAPIUpdateCheckTimeout = 12 * time.Second
+
+type webAPIUpdateChecker func(context.Context) (selfupdate.Status, error)
 
 type webAPI struct {
 	manager         *admin.Manager
@@ -26,6 +36,7 @@ type webAPI struct {
 	discoverHostKey func(clusterEnrollmentDraft) (string, error)
 	enrolNode       func(*admin.Manager, serviceController, clusterEnrollmentDraft, io.Writer, io.Writer, func(int, string)) error
 	jobs            *webAPIJobStore
+	checkUpdate     webAPIUpdateChecker
 	mutation        sync.Mutex
 }
 
@@ -76,6 +87,19 @@ type webAPIOverview struct {
 	Host                 webAPIHostSnapshot    `json:"host"`
 }
 
+type webAPIUser struct {
+	admin.User
+	Online          bool                        `json:"online"`
+	LastSeen        *time.Time                  `json:"last_seen,omitempty"`
+	ActiveSessions  uint64                      `json:"active_sessions"`
+	OnlineDevices   int                         `json:"online_devices"`
+	EnrolledDevices int                         `json:"enrolled_devices"`
+	UploadBytes     uint64                      `json:"upload_bytes"`
+	DownloadBytes   uint64                      `json:"download_bytes"`
+	TotalBytes      uint64                      `json:"total_bytes"`
+	Devices         []usagestore.DeviceSnapshot `json:"devices"`
+}
+
 func newWebAPIHandler(root string, controller serviceController) (http.Handler, error) {
 	manager, err := admin.Open(root, nil, nil)
 	if err != nil {
@@ -84,9 +108,15 @@ func newWebAPIHandler(root string, controller serviceController) (http.Handler, 
 	if controller == nil {
 		controller = commandController{mode: manager.Installation().Mode}
 	}
+	updateEngine := selfupdate.NewEngine(
+		buildinfo.Version,
+		root,
+		filepath.Join(root, "var", "lib", "neproto", "update"),
+	)
 	api := &webAPI{
 		manager: manager, controller: controller, syncCredentials: syncClusterUserCredentialToNodes,
 		discoverHostKey: discoverClusterEnrollmentHostKeyForDraft, enrolNode: enrolClusterNodeDraft,
+		checkUpdate: updateEngine.CheckAvailability,
 	}
 	api.jobs = newWebAPIJobStore(&api.mutation)
 	return api, nil
@@ -97,6 +127,14 @@ func (api *webAPI) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if request.URL.Path == "/v1/overview" && request.Method == http.MethodGet {
 		api.writeOverview(writer)
+		return
+	}
+	if request.URL.Path == "/v1/system/update/check" {
+		if request.Method != http.MethodPost {
+			api.writeMethodNotAllowed(writer)
+			return
+		}
+		api.checkUpdateAvailability(writer, request)
 		return
 	}
 	if request.URL.Path == "/v1/users" {
@@ -211,6 +249,21 @@ func (api *webAPI) ServeHTTP(writer http.ResponseWriter, request *http.Request) 
 	api.writeError(writer, http.StatusNotFound, "not_found", "resource not found")
 }
 
+func (api *webAPI) checkUpdateAvailability(writer http.ResponseWriter, request *http.Request) {
+	ctx, cancel := context.WithTimeout(request.Context(), webAPIUpdateCheckTimeout)
+	defer cancel()
+	status, err := api.checkUpdate(ctx)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			api.writeError(writer, http.StatusGatewayTimeout, "update_check_timeout", "release check timed out")
+			return
+		}
+		api.writeError(writer, http.StatusBadGateway, "update_check_failed", "release metadata is unavailable")
+		return
+	}
+	api.writeJSON(writer, http.StatusOK, status)
+}
+
 func (api *webAPI) writeOverview(writer http.ResponseWriter) {
 	users, err := api.manager.ListUsers()
 	if err != nil {
@@ -276,7 +329,30 @@ func (api *webAPI) writeUsers(writer http.ResponseWriter) {
 		api.writeInternalError(writer, err)
 		return
 	}
-	api.writeJSON(writer, http.StatusOK, map[string]any{"users": users})
+	usageSnapshot, err := usagestore.ReadSnapshot(api.manager.UsageStatePath())
+	if err != nil {
+		api.writeInternalError(writer, err)
+		return
+	}
+	usageByUser := make(map[string]usagestore.UserSnapshot, len(usageSnapshot.Users))
+	for _, snapshot := range usageSnapshot.Users {
+		usageByUser[snapshot.UserID] = snapshot
+	}
+	result := make([]webAPIUser, 0, len(users))
+	for _, user := range users {
+		usage := usageByUser[user.ID]
+		devices := append([]usagestore.DeviceSnapshot(nil), usage.Devices...)
+		if devices == nil {
+			devices = []usagestore.DeviceSnapshot{}
+		}
+		result = append(result, webAPIUser{
+			User: user, Online: usage.Online, LastSeen: usage.LastSeen,
+			ActiveSessions: usage.ActiveSessions, OnlineDevices: usage.OnlineDevices,
+			EnrolledDevices: usage.EnrolledDevices, UploadBytes: usage.UploadBytes,
+			DownloadBytes: usage.DownloadBytes, TotalBytes: usage.TotalBytes, Devices: devices,
+		})
+	}
+	api.writeJSON(writer, http.StatusOK, map[string]any{"users": result})
 }
 
 func (api *webAPI) createUser(writer http.ResponseWriter, request *http.Request) {
@@ -309,11 +385,23 @@ func (api *webAPI) createUser(writer http.ResponseWriter, request *http.Request)
 
 func (api *webAPI) handleUser(writer http.ResponseWriter, request *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(request.URL.Path, "/v1/users/"), "/")
-	if len(parts) == 0 || len(parts) > 2 || parts[0] == "" {
+	if len(parts) == 0 || len(parts) > 3 || parts[0] == "" {
 		api.writeError(writer, http.StatusNotFound, "not_found", "resource not found")
 		return
 	}
 	identifier := parts[0]
+	if len(parts) == 2 && request.Method == http.MethodPatch && parts[1] == "policy" {
+		api.setUserPolicy(writer, request, identifier)
+		return
+	}
+	if len(parts) == 2 && request.Method == http.MethodPost && parts[1] == "traffic-reset" {
+		api.resetUserTraffic(writer, request, identifier)
+		return
+	}
+	if len(parts) == 3 && request.Method == http.MethodDelete && parts[1] == "devices" {
+		api.removeUserDevice(writer, identifier, parts[2])
+		return
+	}
 	if len(parts) == 2 && request.Method == http.MethodGet && parts[1] == "export" {
 		api.exportUser(writer, request, identifier)
 		return
@@ -331,6 +419,66 @@ func (api *webAPI) handleUser(writer http.ResponseWriter, request *http.Request)
 		return
 	}
 	api.writeError(writer, http.StatusNotFound, "not_found", "resource not found")
+}
+
+func (api *webAPI) setUserPolicy(writer http.ResponseWriter, request *http.Request, identifier string) {
+	var input struct {
+		MaxDevices int `json:"max_devices"`
+	}
+	if !api.decodeJSON(writer, request, &input) {
+		return
+	}
+	api.mutation.Lock()
+	defer api.mutation.Unlock()
+	user, err := api.manager.SetUserDeviceLimit(identifier, input.MaxDevices)
+	if err != nil {
+		api.writeOperationError(writer, err)
+		return
+	}
+	api.writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "user": user})
+}
+
+func (api *webAPI) resetUserTraffic(writer http.ResponseWriter, request *http.Request, identifier string) {
+	var input struct{}
+	if !api.decodeJSON(writer, request, &input) {
+		return
+	}
+	api.mutation.Lock()
+	defer api.mutation.Unlock()
+	user, err := api.manager.ResetUserTraffic(identifier)
+	if err != nil {
+		api.writeOperationError(writer, err)
+		return
+	}
+	if err := usagestore.ResetTraffic(api.manager.UsageStatePath(), identifier); err != nil {
+		api.writeInternalError(writer, err)
+		return
+	}
+	api.writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "user": user})
+}
+
+func (api *webAPI) removeUserDevice(writer http.ResponseWriter, identifier, rawDeviceID string) {
+	var deviceID protocol.DeviceID
+	if err := deviceID.UnmarshalText([]byte(rawDeviceID)); err != nil {
+		api.writeError(writer, http.StatusBadRequest, "invalid_request", "device identity is invalid")
+		return
+	}
+	api.mutation.Lock()
+	defer api.mutation.Unlock()
+	if err := usagestore.RemoveOfflineDevice(api.manager.UsageStatePath(), identifier, deviceID); err != nil {
+		switch {
+		case errors.Is(err, usagestore.ErrDeviceOnline):
+			api.writeError(writer, http.StatusConflict, "device_online", "disconnect the device before removing it")
+		case errors.Is(err, usagestore.ErrDeviceNotFound):
+			api.writeError(writer, http.StatusNotFound, "device_not_found", "device not found")
+		case errors.Is(err, usagestore.ErrInvalidConfig), errors.Is(err, usagestore.ErrInvalidState):
+			api.writeError(writer, http.StatusBadRequest, "invalid_request", "request contains invalid data")
+		default:
+			api.writeInternalError(writer, err)
+		}
+		return
+	}
+	api.writeJSON(writer, http.StatusOK, map[string]any{"ok": true, "id": identifier, "device_id": rawDeviceID})
 }
 
 func (api *webAPI) exportUser(writer http.ResponseWriter, request *http.Request, identifier string) {

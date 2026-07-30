@@ -65,4 +65,5 @@ async function proxyAdminRequest(request: NextRequest, context: RouteContext) {
 
 export const GET = proxyAdminRequest;
 export const POST = proxyAdminRequest;
+export const PATCH = proxyAdminRequest;
 export const DELETE = proxyAdminRequest;

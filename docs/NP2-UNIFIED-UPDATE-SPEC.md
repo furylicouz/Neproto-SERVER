@@ -77,8 +77,12 @@ Returns the bounded status document. It never starts an update.
 
 ### `POST /api/system/update/check`
 
-Creates the fixed check request and returns `202 Accepted`, including when the
-same request is already pending.
+Performs one bounded server-side request to the pinned GitHub Releases API and
+returns the final update-status document with `200 OK`. The request MUST have a
+hard deadline of at most 15 seconds. It MUST NOT leave the browser polling a
+marker file, and a timeout or upstream failure MUST terminate with a stable
+error response. The privileged periodic checker remains responsible for
+persisting background availability state.
 
 ### `POST /api/system/update/start`
 
@@ -133,6 +137,12 @@ GitHub check when that status is older than 15 minutes. The same bounded check
 runs when the visible tab regains focus and while the page remains open; active
 checks and installations suppress duplicate requests. The manual check remains
 available for an explicit administrator refresh.
+
+The UI MUST stop its checking indicator after the bounded request succeeds or
+fails. A persisted `checking` state older than 90 seconds is treated as failed;
+any other active update state older than 35 minutes is treated as failed. A
+temporary web outage during installation may be polled, but the browser polling
+loop MUST also have a finite deadline.
 
 The same workspace owns GeoIP/GeoSite lifecycle controls: current verified
 state, automatic schedule, and a cluster-wide update job with bounded progress.

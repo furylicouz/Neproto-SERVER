@@ -28,6 +28,7 @@ type AuthenticatedConfig struct {
 	RequiredExtensions      protocol.ExtensionCapability
 	ExtensionTimeout        time.Duration
 	EnableForwardSecrecy    bool
+	DeviceID                protocol.DeviceID
 	forwardSecret           *protocol.X25519KeyPair
 }
 
@@ -45,6 +46,7 @@ type Authenticated struct {
 	Datagrams              *DatagramMux
 	CarrierRemoteAddresses []netip.Addr
 	CredentialID           string
+	DeviceID               protocol.DeviceID
 	extensions             *extensionNegotiationState
 	encrypted              *encryptedCarrier
 }
@@ -58,6 +60,7 @@ func ConnectClient(ctx context.Context, connection carrier.Carrier, config Authe
 	}
 	handshakeConfig := protocol.HandshakeConfig{
 		RootSecret: config.RootSecret, ServerIdentity: config.ServerIdentity, Carrier: connection.Kind(),
+		DeviceID: config.DeviceID,
 	}
 
 	rawChallenge, err := connection.Receive(ctx)
@@ -68,8 +71,16 @@ func ConnectClient(ctx context.Context, connection carrier.Carrier, config Authe
 	if err != nil {
 		return nil, closeAuthentication(connection, "parse challenge", err)
 	}
+	requestedFeatures := config.Features
+	negotiatedDeviceID := config.DeviceID
+	if requestedFeatures&protocol.FeatureDeviceIdentity != 0 &&
+		challenge.SupportedFeatures&protocol.FeatureDeviceIdentity == 0 {
+		requestedFeatures &^= protocol.FeatureDeviceIdentity
+		negotiatedDeviceID = protocol.DeviceID{}
+	}
+	handshakeConfig.DeviceID = negotiatedDeviceID
 	response, clientHandshake, err := protocol.RespondToChallenge(
-		handshakeConfig, challenge, config.Features, rand.Reader,
+		handshakeConfig, challenge, requestedFeatures, rand.Reader,
 	)
 	if err != nil {
 		return nil, closeAuthentication(connection, "build response", err)
@@ -89,7 +100,7 @@ func ConnectClient(ctx context.Context, connection carrier.Carrier, config Authe
 	if err != nil {
 		return nil, closeAuthentication(connection, "verify confirm", err)
 	}
-	authenticated, err := startAuthenticated(connection, config, RoleClient, keys, config.Features, "")
+	authenticated, err := startAuthenticated(connection, config, RoleClient, keys, requestedFeatures, "", negotiatedDeviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +155,9 @@ func AcceptServer(ctx context.Context, connection carrier.Carrier, config Authen
 	if err := connection.Send(ctx, confirm.MarshalBinary()); err != nil {
 		return nil, closeAuthentication(connection, "send confirm", err)
 	}
-	authenticated, err := startAuthenticated(connection, config, RoleServer, keys, response.RequestedFeatures, credentialID)
+	authenticated, err := startAuthenticated(
+		connection, config, RoleServer, keys, response.RequestedFeatures, credentialID, response.DeviceID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +172,7 @@ func startAuthenticated(
 	keys protocol.SessionKeys,
 	features protocol.FeatureSet,
 	credentialID string,
+	deviceID protocol.DeviceID,
 ) (*Authenticated, error) {
 	var remoteAddresses []netip.Addr
 	if endpoint, ok := connection.(interface{ RemoteAddresses() []netip.Addr }); ok {
@@ -213,7 +227,7 @@ func startAuthenticated(
 	return &Authenticated{
 		Mux: mux, Keys: keys, Features: features, Carrier: connection.Kind(), Cover: covered,
 		Datagrams:              datagrams,
-		CarrierRemoteAddresses: remoteAddresses, CredentialID: credentialID,
+		CarrierRemoteAddresses: remoteAddresses, CredentialID: credentialID, DeviceID: deviceID,
 		extensions: newExtensionNegotiationState(), encrypted: encrypted,
 	}, nil
 }

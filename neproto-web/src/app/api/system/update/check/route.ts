@@ -2,8 +2,11 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { isSameOrigin, requestHasAdminSession } from "@/server/admin-auth";
+import { requestAdminControl } from "@/server/admin-control-client";
 import { hasNonEmptyBody } from "@/server/bounded-body";
-import { requestUpdateAction } from "@/server/update-service";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   if (!(await requestHasAdminSession(request))) {
@@ -13,8 +16,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_request" }, { status: 400 });
   }
   try {
-    const created = await requestUpdateAction("check");
-    return NextResponse.json({ accepted: created, pending: !created }, { status: 202 });
+    const response = await requestAdminControl("POST", "/v1/system/update/check");
+    return new NextResponse(Uint8Array.from(response.body).buffer, {
+      status: response.status,
+      headers: { "Content-Type": response.contentType, "Cache-Control": "no-store" },
+    });
   } catch {
     return NextResponse.json({ error: "update_service_unavailable" }, { status: 503 });
   }

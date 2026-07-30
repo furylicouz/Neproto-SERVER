@@ -25,6 +25,9 @@ export interface UpdateStatus {
 export function isActiveUpdateState(state: string): boolean;
 export function parseUpdateStatus(input: string): UpdateStatus;
 export const AUTO_UPDATE_CHECK_INTERVAL_MS: number;
+export const UPDATE_CHECK_STALE_MS: number;
+export const UPDATE_OPERATION_STALE_MS: number;
+export function expireStaleUpdateStatus(status: UpdateStatus, now: number): UpdateStatus;
 export function shouldAutomaticallyCheckUpdate(input: {
   now: number;
   updatedAt: string;

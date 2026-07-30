@@ -78,6 +78,8 @@ const STAGE_LABELS: Record<AppLocale, Record<string, string>> = {
 };
 
 const AUTO_CHECK_TIMER_MS = Math.min(60_000, AUTO_UPDATE_CHECK_INTERVAL_MS);
+const UPDATE_CHECK_HTTP_TIMEOUT_MS = 15_000;
+const UPDATE_POLL_TIMEOUT_MS = 35 * 60_000;
 
 export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; readonly messages: Messages }) {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
@@ -111,17 +113,36 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
       if (action === "check") {
         lastCheckRequestedAt.current = requestStartedAt.current;
         setChecking(true);
-      } else {
-        setDialogOpen(true);
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), UPDATE_CHECK_HTTP_TIMEOUT_MS);
+        try {
+          const response = await fetch("/api/system/update/check", { method: "POST", signal: controller.signal });
+          if (response.status === 401) {
+            window.location.assign("/auth/v1/login");
+            return;
+          }
+          if (!response.ok) {
+            throw new Error("check failed");
+          }
+          setStatus(parseUpdateStatus(await response.text()));
+        } catch {
+          setError(messages.unavailable);
+        } finally {
+          window.clearTimeout(timeout);
+          setChecking(false);
+          setPolling(false);
+        }
+        return;
       }
+
+      setDialogOpen(true);
       try {
-        const response = await fetch(`/api/system/update/${action}`, { method: "POST" });
+        const response = await fetch("/api/system/update/start", { method: "POST" });
         if (response.status !== 202 && response.status !== 409) {
           throw new Error("request rejected");
         }
         setPolling(true);
       } catch {
-        setChecking(false);
         setPolling(false);
         setDialogOpen(false);
         setError(messages.unavailable);
@@ -143,7 +164,7 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
           return;
         }
         if (isActiveUpdateState(nextStatus.state)) {
-          requestStartedAt.current = 0;
+          requestStartedAt.current = Date.now();
           setChecking(nextStatus.state === "checking");
           setPolling(true);
           return;
@@ -180,6 +201,13 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
       return;
     }
     const poll = async () => {
+      if (requestStartedAt.current > 0 && Date.now() - requestStartedAt.current > UPDATE_POLL_TIMEOUT_MS) {
+        setPolling(false);
+        setChecking(false);
+        setDialogOpen(false);
+        setError(messages.unavailable);
+        return;
+      }
       try {
         const nextStatus = await loadStatus();
         if (!nextStatus) {
@@ -199,7 +227,7 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
     const timer = window.setInterval(() => void poll(), 1000);
     void poll();
     return () => window.clearInterval(timer);
-  }, [loadStatus, polling]);
+  }, [loadStatus, messages.unavailable, polling]);
 
   useEffect(() => {
     const checkIfStale = () => {

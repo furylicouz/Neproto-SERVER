@@ -112,6 +112,45 @@ func TestManagerRotatesAndRevokesCredentialAtomically(t *testing.T) {
 	}
 }
 
+func TestManagerUpdatesDevicePolicyAndTrafficResetGeneration(t *testing.T) {
+	root := t.TempDir()
+	writeInstallation(t, root)
+	now := time.Date(2026, time.July, 30, 12, 0, 0, 0, time.UTC)
+	manager, err := Open(root, bytes.NewReader(bytes.Repeat([]byte{0x73}, 256)), func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := manager.AddUser("Limited phone", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := manager.SetUserDeviceLimit(user.ID, 2)
+	if err != nil {
+		t.Fatalf("set device limit: %v", err)
+	}
+	if updated.MaxDevices != 2 {
+		t.Fatalf("max devices=%d", updated.MaxDevices)
+	}
+	if _, err := manager.SetUserDeviceLimit(user.ID, 17); !errors.Is(err, ErrInvalidUser) {
+		t.Fatalf("oversized device limit error=%v", err)
+	}
+	reset, err := manager.ResetUserTraffic(user.ID)
+	if err != nil {
+		t.Fatalf("reset traffic: %v", err)
+	}
+	if reset.TrafficResetGeneration != 1 || reset.TrafficResetAt == nil || !reset.TrafficResetAt.Equal(now) {
+		t.Fatalf("traffic reset state=%#v", reset)
+	}
+	reloaded, err := Open(root, nil, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	users, err := reloaded.ListUsers()
+	if err != nil || len(users) != 1 || users[0].MaxDevices != 2 || users[0].TrafficResetGeneration != 1 {
+		t.Fatalf("persisted users=%#v err=%v", users, err)
+	}
+}
+
 func TestManagerPermanentlyDeletesOnlyRevokedUserAndClusterAccess(t *testing.T) {
 	root := t.TempDir()
 	writeInstallation(t, root)

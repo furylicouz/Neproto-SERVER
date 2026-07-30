@@ -29,8 +29,9 @@ const (
 	StatusActive  = "active"
 	StatusRevoked = "revoked"
 
-	stateVersion  = 1
-	maxStateBytes = 1 << 20
+	stateVersion   = 1
+	maxStateBytes  = 1 << 20
+	MaxUserDevices = 16
 )
 
 var (
@@ -61,13 +62,16 @@ type Installation struct {
 }
 
 type User struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Profile   string     `json:"profile"`
-	Status    string     `json:"status"`
-	CreatedAt time.Time  `json:"created_at"`
-	RotatedAt *time.Time `json:"rotated_at,omitempty"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+	ID                     string     `json:"id"`
+	Name                   string     `json:"name"`
+	Profile                string     `json:"profile"`
+	Status                 string     `json:"status"`
+	CreatedAt              time.Time  `json:"created_at"`
+	RotatedAt              *time.Time `json:"rotated_at,omitempty"`
+	RevokedAt              *time.Time `json:"revoked_at,omitempty"`
+	MaxDevices             int        `json:"max_devices"`
+	TrafficResetGeneration uint64     `json:"traffic_reset_generation,omitempty"`
+	TrafficResetAt         *time.Time `json:"traffic_reset_at,omitempty"`
 }
 
 type userIndex struct {
@@ -139,6 +143,10 @@ func (m *Manager) ServerConfigPath() string {
 
 func (m *Manager) GeodataDirectory() string {
 	return filepath.Join(m.root, "etc", "neproto", "geodata")
+}
+
+func (m *Manager) UsageStatePath() string {
+	return filepath.Join(m.root, "var", "lib", "neproto", "usage", "state.json")
 }
 
 func (m *Manager) RootDirectory() string {
@@ -400,6 +408,49 @@ func (m *Manager) ListUsers() ([]User, error) {
 	return users, nil
 }
 
+func (m *Manager) SetUserDeviceLimit(identifier string, maximum int) (User, error) {
+	if !validIdentifier(identifier) || maximum < 0 || maximum > MaxUserDevices {
+		return User{}, ErrInvalidUser
+	}
+	index, err := m.loadIndex()
+	if err != nil {
+		return User{}, err
+	}
+	position := findUserPosition(index.Users, identifier)
+	if position < 0 {
+		return User{}, ErrUserNotFound
+	}
+	index.Users[position].MaxDevices = maximum
+	if err := m.saveIndex(index); err != nil {
+		return User{}, err
+	}
+	return index.Users[position], nil
+}
+
+func (m *Manager) ResetUserTraffic(identifier string) (User, error) {
+	if !validIdentifier(identifier) {
+		return User{}, ErrInvalidUser
+	}
+	index, err := m.loadIndex()
+	if err != nil {
+		return User{}, err
+	}
+	position := findUserPosition(index.Users, identifier)
+	if position < 0 {
+		return User{}, ErrUserNotFound
+	}
+	if index.Users[position].TrafficResetGeneration == ^uint64(0) {
+		return User{}, ErrInvalidState
+	}
+	resetAt := m.now().UTC()
+	index.Users[position].TrafficResetGeneration++
+	index.Users[position].TrafficResetAt = &resetAt
+	if err := m.saveIndex(index); err != nil {
+		return User{}, err
+	}
+	return index.Users[position], nil
+}
+
 func (m *Manager) ExportUserProfile(identifier string) (onboarding.Profile, error) {
 	if !validIdentifier(identifier) {
 		return onboarding.Profile{}, ErrInvalidUser
@@ -636,6 +687,7 @@ func (m *Manager) loadIndex() (userIndex, error) {
 	names := make(map[string]struct{}, len(index.Users))
 	for _, user := range index.Users {
 		if !validIdentifier(user.ID) || !validUserName(user.Name) || !validProfile(user.Profile) ||
+			user.MaxDevices < 0 || user.MaxDevices > MaxUserDevices ||
 			(user.Status != StatusActive && user.Status != StatusRevoked) || user.CreatedAt.IsZero() ||
 			(user.Status == StatusActive && user.RevokedAt != nil) ||
 			(user.Status == StatusRevoked && user.RevokedAt == nil) {
@@ -665,6 +717,9 @@ func (m *Manager) saveIndex(index userIndex) error {
 		return fmt.Errorf("save user index: %w", err)
 	}
 	if err := m.secureServiceParents(); err != nil {
+		return err
+	}
+	if err := m.secureIndexFile(); err != nil {
 		return err
 	}
 	return nil
@@ -852,6 +907,24 @@ func (m *Manager) secureCredential(path string) error {
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
 		return fmt.Errorf("set credential permissions: %w", err)
+	}
+	return nil
+}
+
+func (m *Manager) secureIndexFile() error {
+	if m.installation.ServiceUID == nil {
+		return nil
+	}
+	path := m.indexPath()
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: user index is not a regular file", ErrInvalidState)
+	}
+	if err := os.Chown(path, 0, *m.installation.ServiceGID); err != nil {
+		return fmt.Errorf("set user index ownership: %w", err)
+	}
+	if err := os.Chmod(path, 0o640); err != nil {
+		return fmt.Errorf("set user index permissions: %w", err)
 	}
 	return nil
 }

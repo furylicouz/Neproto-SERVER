@@ -1,5 +1,6 @@
 import {
   AUTO_UPDATE_CHECK_INTERVAL_MS,
+  expireStaleUpdateStatus,
   isActiveUpdateState,
   parseUpdateStatus,
   shouldAutomaticallyCheckUpdate,
@@ -83,4 +84,33 @@ test("automatic update checks are throttled and pause while hidden or busy", () 
     false,
     "active update",
   );
+});
+
+test("stale active update states terminate instead of polling forever", () => {
+  const now = Date.parse("2026-07-30T12:30:00Z");
+  const stuckCheck = {
+    ...status,
+    state: "checking",
+    progress: 5,
+    updated_at: new Date(now - 90_001).toISOString(),
+  };
+  const expiredCheck = expireStaleUpdateStatus(stuckCheck, now);
+  assert.equal(expiredCheck.state, "failed");
+  assert.equal(expiredCheck.error_code, "update_check_timeout");
+
+  const freshInstall = {
+    ...status,
+    state: "installing",
+    progress: 75,
+    updated_at: new Date(now - 60_000).toISOString(),
+  };
+  assert.equal(expireStaleUpdateStatus(freshInstall, now), freshInstall);
+
+  const stuckInstall = {
+    ...freshInstall,
+    updated_at: new Date(now - 35 * 60_000 - 1).toISOString(),
+  };
+  const expiredInstall = expireStaleUpdateStatus(stuckInstall, now);
+  assert.equal(expiredInstall.state, "failed");
+  assert.equal(expiredInstall.error_code, "update_operation_timeout");
 });

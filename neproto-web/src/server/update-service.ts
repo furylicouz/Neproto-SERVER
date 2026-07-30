@@ -1,6 +1,6 @@
 import "server-only";
 
-import { parseUpdateStatus, type UpdateStatus } from "@/lib/update-status-core.mjs";
+import { expireStaleUpdateStatus, parseUpdateStatus, type UpdateStatus } from "@/lib/update-status-core.mjs";
 
 import { constants } from "node:fs";
 import { mkdir, open, readFile, stat } from "node:fs/promises";
@@ -17,7 +17,7 @@ export async function readUpdateStatus(): Promise<UpdateStatus> {
     if (!info.isFile() || info.size <= 0 || info.size > MAX_STATUS_BYTES) {
       throw new Error("invalid update status file");
     }
-    return parseUpdateStatus(await readFile(statusPath, "utf8"));
+    return expireStaleUpdateStatus(parseUpdateStatus(await readFile(statusPath, "utf8")), Date.now());
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       throw error;

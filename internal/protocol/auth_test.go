@@ -58,6 +58,85 @@ func TestHandshakeDerivesMatchingSessionKeys(t *testing.T) {
 	}
 }
 
+func TestHandshakeAuthenticatesNegotiatedDeviceIdentity(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	serverConfig := testHandshakeConfig(CarrierHTTPS)
+	clientConfig := serverConfig
+	clientConfig.DeviceID = DeviceID{0x10, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf0, 0x01}
+	features := FeatureMultiplex | FeatureCellAEAD | FeatureDeviceIdentity
+
+	newServer := func() (*ServerHandshake, Challenge) {
+		server, challenge, err := NewServerHandshake(
+			serverConfig,
+			features,
+			now,
+			bytes.NewReader(bytes.Repeat([]byte{0x41}, NonceSize)),
+		)
+		if err != nil {
+			t.Fatalf("create server handshake: %v", err)
+		}
+		return server, challenge
+	}
+
+	server, challenge := newServer()
+	response, client, err := RespondToChallenge(
+		clientConfig,
+		challenge,
+		features,
+		bytes.NewReader(bytes.Repeat([]byte{0x72}, NonceSize)),
+	)
+	if err != nil {
+		t.Fatalf("create response: %v", err)
+	}
+	if response.DeviceID != clientConfig.DeviceID {
+		t.Fatalf("device id=%x, want %x", response.DeviceID, clientConfig.DeviceID)
+	}
+	raw := response.MarshalBinary()
+	if len(raw) != responseMessageSize+DeviceIDSize {
+		t.Fatalf("device response length=%d", len(raw))
+	}
+	parsed, err := ParseResponse(raw)
+	if err != nil || parsed != response {
+		t.Fatalf("parse device response: err=%v parsed=%#v", err, parsed)
+	}
+	confirm, serverKeys, err := server.VerifyResponse(response, now.Add(time.Second))
+	if err != nil {
+		t.Fatalf("verify device response: %v", err)
+	}
+	clientKeys, err := client.VerifyConfirm(confirm)
+	if err != nil || clientKeys != serverKeys {
+		t.Fatalf("device session keys mismatch: err=%v", err)
+	}
+
+	tamperedServer, _ := newServer()
+	response.DeviceID[0] ^= 0xff
+	if _, _, err := tamperedServer.VerifyResponse(response, now.Add(time.Second)); !errors.Is(err, ErrAuthentication) {
+		t.Fatalf("expected authenticated device binding failure, got %v", err)
+	}
+}
+
+func TestHandshakeRejectsZeroNegotiatedDeviceIdentity(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	config := testHandshakeConfig(CarrierHTTPS)
+	_, challenge, err := NewServerHandshake(
+		config,
+		FeatureDeviceIdentity,
+		now,
+		bytes.NewReader(bytes.Repeat([]byte{0x41}, NonceSize)),
+	)
+	if err != nil {
+		t.Fatalf("create server handshake: %v", err)
+	}
+	if _, _, err := RespondToChallenge(
+		config,
+		challenge,
+		FeatureDeviceIdentity,
+		bytes.NewReader(bytes.Repeat([]byte{0x72}, NonceSize)),
+	); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("expected zero device identity error, got %v", err)
+	}
+}
+
 func TestHandshakeRejectsWrongSecret(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	serverConfig := testHandshakeConfig(CarrierHTTPS)

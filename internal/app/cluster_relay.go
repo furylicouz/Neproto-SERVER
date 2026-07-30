@@ -18,6 +18,7 @@ import (
 type clusterRelayServices struct {
 	runtime        *clusterrelay.Runtime
 	pool           *clusterrelay.PeerPool
+	peerPrincipals map[string]string
 	catalog        proxy.CatalogHandler
 	catalogRelay   proxy.CatalogRelayHandler
 	credentialSync proxy.CredentialSyncHandler
@@ -83,7 +84,7 @@ func newClusterRelayServices(server config.Server, localCatalog proxy.CatalogHan
 		_ = pool.Close()
 		return nil, err
 	}
-	services := &clusterRelayServices{runtime: runtime, pool: pool}
+	services := &clusterRelayServices{runtime: runtime, pool: pool, peerPrincipals: principals}
 	if server.ClusterNodeID == server.ClusterMasterNodeID {
 		if localCatalog == nil {
 			_ = pool.Close()
@@ -130,6 +131,14 @@ func newClusterRelayServices(server config.Server, localCatalog proxy.CatalogHan
 		}
 	}
 	return services, nil
+}
+
+func (services *clusterRelayServices) acceptsPeerCredential(credentialID string) bool {
+	if services == nil || credentialID == "" {
+		return false
+	}
+	_, accepted := services.peerPrincipals[credentialID]
+	return accepted
 }
 
 type geoDataUpdateFunc func(context.Context, string) (geodata.UpdateStatus, error)

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"neproto.local/chameleon/internal/cover"
+	"neproto.local/chameleon/internal/protocol"
 )
 
 func TestLoadStrictClientAndServerConfigs(t *testing.T) {
@@ -403,6 +404,7 @@ func TestParseMobileClientBytesRequiresNoSOCKSAdapterFields(t *testing.T) {
 	secret := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x2a}, 32))
 	raw := []byte(`{
   "server_identity":"vpn.example.com","secret_file":"keychain",
+	"device_id":"10223344-5566-7788-99aa-bbccddeef001",
 	"server_addresses":["104.171.136.10"],
   "https_url":"wss://vpn.example.com/private/https/session",
   "webrtc_signaling_url":"https://vpn.example.com/private/webrtc/offer","profile":"interactive",
@@ -418,6 +420,9 @@ func TestParseMobileClientBytesRequiresNoSOCKSAdapterFields(t *testing.T) {
 	}
 	if client.MaxParallelCarriers != 3 {
 		t.Fatalf("mobile performance carrier pool=%d, want 3", client.MaxParallelCarriers)
+	}
+	if client.DeviceID != (protocol.DeviceID{0x10, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf0, 0x01}) {
+		t.Fatalf("mobile device id=%x", client.DeviceID)
 	}
 
 	explicitPool := bytes.Replace(raw, []byte(`"max_streams":128,`),
@@ -450,6 +455,14 @@ func TestParseMobileClientBytesRequiresNoSOCKSAdapterFields(t *testing.T) {
 	fakeAddress := bytes.Replace(raw, []byte("104.171.136.10"), []byte("198.18.1.233"), 1)
 	if _, err := ParseMobileClientBytes(fakeAddress, secret); err == nil {
 		t.Fatal("mobile profile accepted a benchmark-range Fake-IP")
+	}
+	malformedDevice := bytes.Replace(raw, []byte("10223344-5566-7788-99aa-bbccddeef001"), []byte("not-a-device-id"), 1)
+	if _, err := ParseMobileClientBytes(malformedDevice, secret); err == nil {
+		t.Fatal("mobile profile accepted a malformed device identity")
+	}
+	zeroDevice := bytes.Replace(raw, []byte("10223344-5566-7788-99aa-bbccddeef001"), []byte("00000000-0000-0000-0000-000000000000"), 1)
+	if _, err := ParseMobileClientBytes(zeroDevice, secret); err == nil {
+		t.Fatal("mobile profile accepted a zero device identity")
 	}
 }
 

@@ -23,6 +23,8 @@ const ACTIVE_STATES = new Set([
 
 const VERSION = /^np2-(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 export const AUTO_UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+export const UPDATE_CHECK_STALE_MS = 90 * 1000;
+export const UPDATE_OPERATION_STALE_MS = 35 * 60 * 1000;
 const ALLOWED_KEYS = new Set([
   "schema",
   "state",
@@ -49,6 +51,29 @@ export function shouldAutomaticallyCheckUpdate({ now, updatedAt, lastRequestedAt
     Number.isFinite(lastRequestedAt) ? lastRequestedAt : 0,
   );
   return now - latestKnownCheck >= AUTO_UPDATE_CHECK_INTERVAL_MS;
+}
+
+export function expireStaleUpdateStatus(status, now) {
+  if (!isActiveUpdateState(status.state) || !Number.isFinite(now)) {
+    return status;
+  }
+  const updatedAt = Date.parse(status.updated_at);
+  if (!Number.isFinite(updatedAt)) {
+    return status;
+  }
+  const maximumAge = status.state === "checking" ? UPDATE_CHECK_STALE_MS : UPDATE_OPERATION_STALE_MS;
+  if (now - updatedAt <= maximumAge) {
+    return status;
+  }
+  const checkTimedOut = status.state === "checking";
+  return {
+    ...status,
+    state: "failed",
+    progress: 100,
+    message: checkTimedOut ? "Update check timed out" : "Update operation timed out",
+    error_code: checkTimedOut ? "update_check_timeout" : "update_operation_timeout",
+    updated_at: new Date(now).toISOString(),
+  };
 }
 
 export function parseUpdateStatus(input) {

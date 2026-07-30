@@ -2,18 +2,59 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"neproto.local/chameleon/internal/admin"
 	"neproto.local/chameleon/internal/cluster"
+	"neproto.local/chameleon/internal/protocol"
+	"neproto.local/chameleon/internal/selfupdate"
+	usagestore "neproto.local/chameleon/internal/usage"
 )
+
+func TestWebAPIUpdateCheckReturnsFreshTerminalStatus(t *testing.T) {
+	root := t.TempDir()
+	writeFeatureTestInstallation(t, root)
+	handler := mustWebAPIHandler(t, root, &fakeController{})
+	api := handler.(*webAPI)
+	api.checkUpdate = func(context.Context) (selfupdate.Status, error) {
+		return selfupdate.Status{
+			Schema: 1, State: "idle", CurrentVersion: "np2-0.5.5", AvailableVersion: "np2-0.5.6",
+			UpdateAvailable: true, Progress: 0, Message: "Update available", UpdatedAt: "2026-07-30T12:00:00Z",
+		}, nil
+	}
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/system/update/check", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"state":"idle"`) ||
+		!strings.Contains(response.Body.String(), `"available_version":"np2-0.5.6"`) {
+		t.Fatalf("update check status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestWebAPIUpdateCheckReturnsBoundedFailure(t *testing.T) {
+	root := t.TempDir()
+	writeFeatureTestInstallation(t, root)
+	handler := mustWebAPIHandler(t, root, &fakeController{})
+	api := handler.(*webAPI)
+	api.checkUpdate = func(context.Context) (selfupdate.Status, error) {
+		return selfupdate.Status{}, context.DeadlineExceeded
+	}
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/v1/system/update/check", nil))
+	if response.Code != http.StatusGatewayTimeout || !strings.Contains(response.Body.String(), "update_check_timeout") {
+		t.Fatalf("update check failure status=%d body=%s", response.Code, response.Body.String())
+	}
+}
 
 func TestWebAPIOverviewUsesInstalledState(t *testing.T) {
 	root := t.TempDir()
@@ -104,6 +145,85 @@ func TestWebAPIUserLifecycleReturnsExplicitCredentialExport(t *testing.T) {
 	handler.ServeHTTP(deleted, jsonRequest(t, http.MethodDelete, "/v1/users/"+creation.User.ID, map[string]any{"confirm": "DELETE"}))
 	if deleted.Code != http.StatusOK {
 		t.Fatalf("delete status=%d body=%s", deleted.Code, deleted.Body.String())
+	}
+}
+
+func TestWebAPIUserUsageDevicePolicyAndReset(t *testing.T) {
+	root := t.TempDir()
+	writeFeatureTestInstallation(t, root)
+	handler := mustWebAPIHandler(t, root, &fakeController{})
+	created := httptest.NewRecorder()
+	handler.ServeHTTP(created, jsonRequest(t, http.MethodPost, "/v1/users", map[string]any{
+		"name": "Measured phone", "profile": "web",
+	}))
+	var creation struct {
+		User admin.User `json:"user"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &creation); err != nil {
+		t.Fatal(err)
+	}
+
+	policy := httptest.NewRecorder()
+	handler.ServeHTTP(policy, jsonRequest(t, http.MethodPatch, "/v1/users/"+creation.User.ID+"/policy", map[string]any{"max_devices": 1}))
+	if policy.Code != http.StatusOK || !strings.Contains(policy.Body.String(), `"max_devices":1`) {
+		t.Fatalf("policy status=%d body=%s", policy.Code, policy.Body.String())
+	}
+
+	api := handler.(*webAPI)
+	tracker, err := usagestore.New(usagestore.Config{
+		PolicyPath: filepath.Join(root, "etc", "neproto", "users", "index.json"),
+		StatePath:  api.manager.UsageStatePath(),
+		Now:        time.Now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	device := protocol.DeviceID{0x10, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf0, 0x01}
+	counters := usagestore.Counters{}
+	session, err := tracker.Admit(creation.User.ID, device, func() usagestore.Counters { return counters })
+	if err != nil {
+		t.Fatal(err)
+	}
+	counters = usagestore.Counters{UploadBytes: 1024, DownloadBytes: 4096}
+	if err := tracker.Sample(); err != nil {
+		t.Fatal(err)
+	}
+
+	listed := httptest.NewRecorder()
+	handler.ServeHTTP(listed, httptest.NewRequest(http.MethodGet, "/v1/users", nil))
+	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), `"online":true`) ||
+		!strings.Contains(listed.Body.String(), `"upload_bytes":1024`) || !strings.Contains(listed.Body.String(), `"download_bytes":4096`) {
+		t.Fatalf("usage list status=%d body=%s", listed.Code, listed.Body.String())
+	}
+
+	deviceText, _ := device.MarshalText()
+	activeDelete := httptest.NewRecorder()
+	handler.ServeHTTP(activeDelete, httptest.NewRequest(http.MethodDelete,
+		"/v1/users/"+creation.User.ID+"/devices/"+string(deviceText), nil))
+	if activeDelete.Code != http.StatusConflict {
+		t.Fatalf("active device delete status=%d body=%s", activeDelete.Code, activeDelete.Body.String())
+	}
+	if err := session.Close(); err != nil {
+		t.Fatal(err)
+	}
+	offlineDelete := httptest.NewRecorder()
+	handler.ServeHTTP(offlineDelete, httptest.NewRequest(http.MethodDelete,
+		"/v1/users/"+creation.User.ID+"/devices/"+string(deviceText), nil))
+	if offlineDelete.Code != http.StatusOK {
+		t.Fatalf("offline device delete status=%d body=%s", offlineDelete.Code, offlineDelete.Body.String())
+	}
+
+	reset := httptest.NewRecorder()
+	handler.ServeHTTP(reset, jsonRequest(t, http.MethodPost, "/v1/users/"+creation.User.ID+"/traffic-reset", map[string]any{}))
+	if reset.Code != http.StatusOK || !strings.Contains(reset.Body.String(), `"traffic_reset_generation":1`) {
+		t.Fatalf("reset status=%d body=%s", reset.Code, reset.Body.String())
+	}
+	usageSnapshot, err := usagestore.ReadSnapshot(api.manager.UsageStatePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(usageSnapshot.Users) != 1 || usageSnapshot.Users[0].UploadBytes != 0 || usageSnapshot.Users[0].DownloadBytes != 0 {
+		t.Fatalf("traffic reset was not visible immediately: %#v", usageSnapshot)
 	}
 }
 

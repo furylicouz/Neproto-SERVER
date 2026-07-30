@@ -22,11 +22,13 @@ struct ServerProfileTests {
         let secret = Data(repeating: 0x5A, count: 32).base64URLEncodedString()
 
         try profile.validate(secret: secret)
-        let raw = try profile.clientConfigurationJSON()
+        let deviceID = UUID(uuidString: "10223344-5566-7788-99AA-BBCCDDEEF001")!
+        let raw = try profile.clientConfigurationJSON(deviceID: deviceID)
         let object = try #require(JSONSerialization.jsonObject(with: raw) as? [String: Any])
         let rawString = String(decoding: raw, as: UTF8.self)
 
         #expect(object["server_identity"] as? String == "vpn.example.com")
+		#expect(object["device_id"] as? String == "10223344-5566-7788-99aa-bbccddeef001")
         #expect(object["server_addresses"] as? [String] == ["8.8.8.8"])
         #expect(object["https_url"] as? String == "wss://vpn.example.com/private/https/session")
         #expect(object["carrier_policy"] as? String == "performance")

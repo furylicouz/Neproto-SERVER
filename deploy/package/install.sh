@@ -193,6 +193,7 @@ lib_dir=$(path_in_root /usr/local/lib/neproto)
 profile_dir=$(path_in_root /etc/profile.d)
 update_dir=$(path_in_root /var/lib/neproto/update)
 update_inbox=$update_dir/inbox
+usage_dir=$(path_in_root /var/lib/neproto/usage)
 web_admin_secret=$etc_neproto/web-admin.secret
 admin_secret_backup=
 web_stage=
@@ -221,7 +222,7 @@ cleanup_install() {
 trap cleanup_install EXIT
 
 info 'preparing secure directories'
-mkdir -p -- "$etc_neproto/users/active" "$etc_neproto/users/revoked" "$etc_neproto/tls" "$etc_neproto/geodata" "$etc_caddy" "$opt_neproto" "$bin_dir" "$lib_dir" "$site_dir" "$certbot_webroot/.well-known/acme-challenge" "$backup_root" "$systemd_dir" "$modules_load_dir" "$sysctl_dir" "$profile_dir" "$update_inbox"
+mkdir -p -- "$etc_neproto/users/active" "$etc_neproto/users/revoked" "$etc_neproto/tls" "$etc_neproto/geodata" "$etc_caddy" "$opt_neproto" "$bin_dir" "$lib_dir" "$site_dir" "$certbot_webroot/.well-known/acme-challenge" "$backup_root" "$systemd_dir" "$modules_load_dir" "$sysctl_dir" "$profile_dir" "$update_inbox" "$usage_dir"
 chmod 0700 "$backup_root"
 if [[ -s $web_admin_secret ]]; then
   # Keep the running web and NP/2 services able to traverse their existing
@@ -422,6 +423,8 @@ cat >"$etc_neproto/server.json" <<EOF
 {
   "server_identity": "$domain",
   "credential_directory": "/etc/neproto/users/active",
+  "user_policy_file": "/etc/neproto/users/index.json",
+  "usage_state_file": "/var/lib/neproto/usage/state.json",
   "listen": "127.0.0.1:9080",
   "metrics_listen": "127.0.0.1:9464",
   "geodata_directory": "/etc/neproto/geodata",
@@ -507,9 +510,15 @@ chown root:"$service_gid" "$etc_neproto/web.env"
 chown root:"$service_gid" "$web_admin_secret"
 chown -R root:"$service_gid" "$etc_neproto/geodata"
 chown "$service_uid":"$service_gid" "$etc_neproto/users/active"
+chown "$service_uid":"$service_gid" "$usage_dir"
 chmod 0750 "$etc_neproto"
 chmod 0710 "$etc_neproto/users"
 chmod 0700 "$etc_neproto/users/active"
+chmod 0700 "$usage_dir"
+if [[ -f $etc_neproto/users/index.json ]]; then
+  chown root:"$service_gid" "$etc_neproto/users/index.json"
+  chmod 0640 "$etc_neproto/users/index.json"
+fi
 chmod 0640 "$etc_neproto/server.json"
 chmod 0640 "$etc_neproto/web.env"
 chmod 0640 "$web_admin_secret"

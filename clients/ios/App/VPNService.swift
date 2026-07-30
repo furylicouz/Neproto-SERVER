@@ -23,6 +23,7 @@ final class VPNService: ObservableObject {
     private var clusterCatalogSessionIDs: [UUID: UInt64] = [:]
     private var nextClusterCatalogSessionID: UInt64 = 0
     private let secretStore = KeychainSecretStore()
+    private let installationDeviceID = InstallationIdentityStore().identifier()
     private let logger = Logger(subsystem: "NeProto", category: "VPNService")
 
     func reload(completion: (@MainActor () -> Void)? = nil) {
@@ -330,6 +331,7 @@ final class VPNService: ObservableObject {
         tunnelProtocol.passwordReference = persistentReference
         tunnelProtocol.providerConfiguration = [
             "profile_id": profile.id.uuidString.lowercased(),
+            "device_id": installationDeviceID.uuidString.lowercased(),
             "profile_payload": payload,
             "client_routes": routePayload,
         ]

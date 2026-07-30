@@ -38,7 +38,7 @@ Template-gallery routes remain examples and are not used as management state.
 | Web page | Reused template | Console parity |
 |---|---|---|
 | `/dashboard` | Default dashboard cards/charts/table | status summary, host telemetry, services, users, cluster nodes, routes, backups, recent events |
-| `/dashboard/users` | Users table | add, export URI/JSON/manual/QR, rotate, revoke, delete, cluster access |
+| `/dashboard/users` | Users table and dialogs | add, export URI/JSON/manual/QR, rotate, revoke, delete, online/last-seen state, traffic totals/reset, enrolled devices, device ceiling, cluster access |
 | `/dashboard/cluster` | Infrastructure | node health, measured connectivity meters, country/city presentation, enrolment with verified SSH host key, enable/drain, publish/hide, user assignment, credential sync, removal |
 | `/dashboard/routes` | Tasks table and dialogs | domain/IP/GeoIP/GeoSite rules, current/direct/block/auto/node/chain actions, user assignment, enable/disable, delete |
 | `/dashboard/services` | Analytics/status cards | start, stop, restart, configuration validation, last 200 sanitized events |
@@ -75,6 +75,9 @@ use `{ "error": "stable_category", "message": "bounded operator message" }`.
 - `POST /v1/users/{id}/rotate`
 - `POST /v1/users/{id}/revoke`
 - `POST /v1/users/{id}/cluster-access`
+- `PATCH /v1/users/{id}/policy`
+- `POST /v1/users/{id}/traffic-reset`
+- `DELETE /v1/users/{id}/devices/{device_id}`
 - `DELETE /v1/users/{id}`
 - `POST /v1/cluster/host-key`
 - `POST /v1/cluster/enrol`

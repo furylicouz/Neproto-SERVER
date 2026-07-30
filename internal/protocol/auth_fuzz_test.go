@@ -6,6 +6,10 @@ func FuzzParseAuthenticationMessages(f *testing.F) {
 	challenge := Challenge{Version: Version, SupportedFeatures: FeatureMultiplex}
 	f.Add(byte(0), challenge.MarshalBinary())
 	f.Add(byte(1), (&Response{RequestedFeatures: FeatureMultiplex}).MarshalBinary())
+	f.Add(byte(1), (&Response{
+		RequestedFeatures: FeatureMultiplex | FeatureDeviceIdentity,
+		DeviceID:          DeviceID{0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf0, 0x01},
+	}).MarshalBinary())
 	f.Add(byte(2), (&Confirm{}).MarshalBinary())
 	f.Add(byte(3), []byte{})
 

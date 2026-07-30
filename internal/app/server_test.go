@@ -35,7 +35,40 @@ import (
 	"neproto.local/chameleon/internal/protocol"
 	proxycore "neproto.local/chameleon/internal/proxy"
 	"neproto.local/chameleon/internal/session"
+	"neproto.local/chameleon/internal/usage"
 )
+
+func TestUserUsageTrackingIsEnabledOnlyForStandaloneAndClusterMaster(t *testing.T) {
+	standalone := config.Server{UserPolicyFile: "policy", UsageStateFile: "usage"}
+	if !shouldTrackUserSessions(standalone) {
+		t.Fatal("standalone server must track users")
+	}
+	master := standalone
+	master.ClusterNodeID = "master"
+	master.ClusterMasterNodeID = "master"
+	if !shouldTrackUserSessions(master) {
+		t.Fatal("cluster master must track direct user sessions")
+	}
+	edge := standalone
+	edge.ClusterNodeID = "edge-nl"
+	edge.ClusterMasterNodeID = "master"
+	if shouldTrackUserSessions(edge) {
+		t.Fatal("edge must not enforce a master-only policy file")
+	}
+}
+
+func TestClusterPeerCredentialDoesNotFailUserPolicyAdmission(t *testing.T) {
+	services := &clusterRelayServices{peerPrincipals: map[string]string{"peer-credential": "edge-nl"}}
+	if rejectUsageAdmission(usage.ErrUserInactive, "peer-credential", services) {
+		t.Fatal("authenticated cluster peer was treated as an end user")
+	}
+	if !rejectUsageAdmission(usage.ErrUserInactive, "unknown-user", services) {
+		t.Fatal("unknown end user bypassed the policy")
+	}
+	if !rejectUsageAdmission(usage.ErrDeviceLimit, "peer-credential", services) {
+		t.Fatal("cluster peer bypassed a non-policy-miss error")
+	}
+}
 
 func TestRunServerBehindLoopbackTLSProxyAuthenticatesAndBlocksPrivateTarget(t *testing.T) {
 	directory := t.TempDir()

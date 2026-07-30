@@ -58,6 +58,24 @@ export interface NP2User {
   created_at: string;
   rotated_at?: string;
   revoked_at?: string;
+  online: boolean;
+  last_seen?: string;
+  active_sessions: number;
+  online_devices: number;
+  enrolled_devices: number;
+  max_devices: number;
+  upload_bytes: number;
+  download_bytes: number;
+  total_bytes: number;
+  devices: NP2Device[];
+}
+
+export interface NP2Device {
+  device_id: string;
+  online: boolean;
+  active_sessions: number;
+  first_seen: string;
+  last_seen?: string;
 }
 
 export interface ClusterNode {

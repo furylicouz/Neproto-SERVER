@@ -33,7 +33,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             let secret = try KeychainSecretStore().read(persistentReference: persistentReference)
             try profile.validate(secret: secret)
             logger.notice("Profile and Keychain secret validated")
-            let clientJSON = String(decoding: try profile.clientConfigurationJSON(), as: UTF8.self)
+            guard let rawDeviceID = tunnelProtocol.providerConfiguration?["device_id"] as? String,
+                  let deviceID = UUID(uuidString: rawDeviceID),
+                  deviceID != UUID(uuidString: "00000000-0000-0000-0000-000000000000") else {
+                throw TunnelProviderError.invalidConfiguration
+            }
+            let clientJSON = String(
+                decoding: try profile.clientConfigurationJSON(deviceID: deviceID),
+                as: UTF8.self
+            )
 
             let routeData = tunnelProtocol.providerConfiguration?["client_routes"] as? Data ?? Data("[]".utf8)
             guard let routeJSON = String(data: routeData, encoding: .utf8) else {

@@ -104,6 +104,31 @@ func TestEngineCheckUsesPinnedRepositoryAndPersistsAvailability(t *testing.T) {
 	}
 }
 
+func TestEngineCheckAvailabilityReturnsFinalStatusWithoutWritingState(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		_, _ = response.Write([]byte(`{"tag_name":"np2-0.4.2","draft":false,"prerelease":false}`))
+	}))
+	defer server.Close()
+
+	stateDirectory := t.TempDir()
+	engine := NewEngine("np2-0.4.0", t.TempDir(), stateDirectory)
+	engine.source = releaseSource{apiURL: server.URL + "/latest", repositoryURL: server.URL}
+	engine.client = server.Client()
+	engine.store.Now = func() time.Time { return time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC) }
+
+	status, err := engine.CheckAvailability(context.Background())
+	if err != nil {
+		t.Fatalf("CheckAvailability: %v", err)
+	}
+	if status.State != "idle" || !status.UpdateAvailable || status.AvailableVersion != "np2-0.4.2" || status.UpdatedAt != "2026-07-30T12:00:00Z" {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+	if _, err := os.Stat(engine.store.Path()); !os.IsNotExist(err) {
+		t.Fatalf("read-only availability check wrote status file: %v", err)
+	}
+}
+
 func TestEngineApplyVerifiesBundleAndRunsInstallerWithInstalledTopology(t *testing.T) {
 	const tag = "np2-0.4.1"
 	archive := updateArchive(t, tag)

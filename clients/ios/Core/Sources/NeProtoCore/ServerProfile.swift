@@ -146,10 +146,11 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
-    public func clientConfigurationJSON() throws -> Data {
+    public func clientConfigurationJSON(deviceID: UUID? = nil) throws -> Data {
         let normalizedHTTP3Path = effectiveHTTP3Path
         let configuration = ClientConfiguration(
             serverIdentity: serverIdentity,
+            deviceID: deviceID?.uuidString.lowercased(),
             serverAddresses: effectiveServerAddresses,
             secretFile: "keychain",
             httpsURL: "wss://\(serverIdentity)\(httpsPath)",
@@ -337,6 +338,7 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
 
 private struct ClientConfiguration: Codable {
     let serverIdentity: String
+    let deviceID: String?
     let serverAddresses: [String]
     let secretFile: String
     let httpsURL: String
@@ -358,6 +360,7 @@ private struct ClientConfiguration: Codable {
 
     enum CodingKeys: String, CodingKey {
         case serverIdentity = "server_identity"
+        case deviceID = "device_id"
         case serverAddresses = "server_addresses"
         case secretFile = "secret_file"
         case httpsURL = "https_url"
