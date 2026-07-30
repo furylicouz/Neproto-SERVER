@@ -449,6 +449,10 @@ else
   install -m 0755 "$bundle_bin/node" "$opt_neproto/node"
 fi
 
+sed -e "s/__SERVICE_GID__/$service_gid/g" \
+  "$script_dir/systemd/neproto-control.service" >"$systemd_dir/neproto-control.service"
+chmod 0644 "$systemd_dir/neproto-control.service"
+
 # The service owns credential files but not the configuration tree. Every
 # parent directory must nevertheless be traversable by the service group.
 chown root:"$service_gid" "$etc_neproto" "$etc_neproto/users" "$etc_neproto/server.json"
@@ -572,10 +576,13 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
     "$lib_dir/node" --check "$web_dir/server.js"
     "$bin_dir/caddy" validate --config "$etc_caddy/Caddyfile" --adapter caddyfile
     systemctl daemon-reload
-    systemctl enable neproto-server.service neproto-web.service caddy.service
+    systemctl enable neproto-control.service neproto-server.service neproto-web.service caddy.service
     info 'starting services'
-    $skip_start || systemctl restart neproto-server.service neproto-web.service caddy.service
+    $skip_start || systemctl restart neproto-control.service neproto-server.service neproto-web.service caddy.service
   else
+    systemctl daemon-reload
+    systemctl enable neproto-control.service
+    $skip_start || systemctl restart neproto-control.service
     (cd "$opt_neproto" && docker compose config >/dev/null && docker compose build)
     info 'starting services'
     $skip_start || (cd "$opt_neproto" && docker compose up -d)
@@ -593,6 +600,8 @@ fi
 
 if [[ ${NEPROTO_TEST_MODE:-} != 1 ]] && ! $skip_start; then
   info 'running final health checks'
+  curl --fail --silent --show-error --unix-socket /run/neproto/control.sock http://localhost/v1/overview | \
+    jq -e '.version != null and .services != null' >/dev/null || die 'NeProto control API health check failed'
   "$bin_dir/neprotoctl" doctor
   web_health="http://127.0.0.1:$web_port/api/health"
   [[ -z $web_domain ]] || web_health="https://$web_domain/api/health"

@@ -77,6 +77,9 @@ func executeWithInput(
 		fmt.Fprintf(stdout, "neprotoctl %s\n", buildinfo.Version)
 		return 0
 	}
+	if len(arguments) > 0 && arguments[0] == "web-api-server" {
+		return runWebAPIServer(arguments[1:], root, stdout, stderr, controller)
+	}
 	manager, err := admin.Open(root, nil, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "cannot open NP/2 installation: %v\n", err)
@@ -471,5 +474,6 @@ func usage(writer io.Writer) int {
 	fmt.Fprintln(writer, "       neprotoctl feature set --mode production|compatibility")
 	fmt.Fprintln(writer, "       neprotoctl geodata status|update [--cluster=true|false] | geodata schedule --preset daily|weekly|monthly|off")
 	fmt.Fprintln(writer, "       neprotoctl backup create|list | backup restore --path PATH --confirm RESTORE")
+	fmt.Fprintln(writer, "       neprotoctl web-api-server [--socket /run/neproto/control.sock]")
 	return 2
 }

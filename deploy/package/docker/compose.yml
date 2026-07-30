@@ -61,5 +61,6 @@ services:
     volumes:
       - /etc/neproto:/etc/neproto:ro
       - /var/lib/neproto/update:/var/lib/neproto/update:rw
+      - /run/neproto:/run/neproto:ro
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=32m

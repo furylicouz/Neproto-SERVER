@@ -1,0 +1,34 @@
+[Unit]
+Description=NeProto privileged local control API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=__SERVICE_GID__
+UMask=0007
+RuntimeDirectory=neproto
+RuntimeDirectoryMode=0770
+ExecStart=/usr/local/bin/neprotoctl web-api-server
+Restart=on-failure
+RestartSec=2s
+TimeoutStopSec=8s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

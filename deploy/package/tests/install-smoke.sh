@@ -53,6 +53,10 @@ test_mode() {
   [[ -s $root/etc/systemd/system/neproto-update-check.service ]]
   [[ -s $root/etc/systemd/system/neproto-update-check.path ]]
   [[ -s $root/etc/systemd/system/neproto-update-check.timer ]]
+  [[ -s $root/etc/systemd/system/neproto-control.service ]]
+  grep -q 'ExecStart=/usr/local/bin/neprotoctl web-api-server' "$root/etc/systemd/system/neproto-control.service"
+  grep -q '^RuntimeDirectory=neproto$' "$root/etc/systemd/system/neproto-control.service"
+  ! grep -q '__SERVICE_GID__' "$root/etc/systemd/system/neproto-control.service"
   ! grep -q '^Conflicts=' "$root/etc/systemd/system/neproto-update.service"
   ! grep -q '^Conflicts=' "$root/etc/systemd/system/neproto-update-check.service"
   [[ -s $root/opt/neproto/neproto-server-bundle.tar.gz ]]
@@ -106,6 +110,7 @@ test_mode() {
     grep -q 'HOSTNAME: "0.0.0.0"' "$root/opt/neproto/compose.yml"
     grep -q 'PORT: "3100"' "$root/opt/neproto/compose.yml"
     grep -q '/var/lib/neproto/update:/var/lib/neproto/update:rw' "$root/opt/neproto/compose.yml"
+    grep -q '/run/neproto:/run/neproto:ro' "$root/opt/neproto/compose.yml"
     grep -qx 'HOSTNAME=0.0.0.0' "$root/etc/neproto/web.env"
     grep -q 'cap_drop: \[ALL\]' "$root/opt/neproto/compose.yml"
     grep -q '/etc/neproto/geodata:/etc/neproto/geodata:rw' "$root/opt/neproto/compose.yml"
@@ -116,6 +121,7 @@ test_mode() {
   else
     [[ -s $root/etc/systemd/system/neproto-server.service && -s $root/etc/systemd/system/caddy.service && -s $root/etc/systemd/system/neproto-web.service ]]
     grep -q 'ExecStart=/usr/local/lib/neproto/node server.js' "$root/etc/systemd/system/neproto-web.service"
+    grep -q '^Wants=.*neproto-control.service' "$root/etc/systemd/system/neproto-web.service"
     grep -q '^ReadWritePaths=/var/lib/neproto/update/inbox$' "$root/etc/systemd/system/neproto-web.service"
     grep -q 'admin.example.com' "$root/etc/caddy/Caddyfile"
     grep -q 'reverse_proxy 127.0.0.1:3100' "$root/etc/caddy/Caddyfile"

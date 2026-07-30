@@ -16,7 +16,7 @@ Verification:
 
 ```bash
 npm run lint -- --max-diagnostics=100
-NEPROTO_VERSION=np2-0.4.1 npm run build
+NEPROTO_VERSION=np2-0.5.0 npm run build
 ```
 
 The production health endpoint is `/api/health`. Deployment, domain, TLS, and

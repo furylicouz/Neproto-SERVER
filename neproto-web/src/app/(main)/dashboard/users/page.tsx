@@ -1,6 +1,7 @@
-import { users } from "./_components/data";
-import { Users } from "./_components/users";
+import { getRequestLocale } from "@/server/request-locale";
 
-export default function Page() {
-  return <Users users={users} />;
+import { NeProtoUsers } from "./_components/neproto-users";
+
+export default async function Page() {
+  return <NeProtoUsers locale={await getRequestLocale()} />;
 }

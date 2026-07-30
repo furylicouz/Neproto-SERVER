@@ -24,7 +24,7 @@ import { ThemeSwitcher } from "./_components/sidebar/theme-switcher";
 
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
   if (!(await hasAdminSession())) {
-    redirect("/auth/v1/login");
+    redirect("/auth/v2/login");
   }
   const locale = await getRequestLocale();
   const cookieStore = await cookies();
@@ -84,7 +84,7 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
                   <SimpleIcon icon={siGithub} className="fill-primary-foreground" />
                 </Link>
               </Button>
-              <AccountSwitcher users={users} />
+              <AccountSwitcher users={users} locale={locale} />
             </div>
           </div>
         </header>

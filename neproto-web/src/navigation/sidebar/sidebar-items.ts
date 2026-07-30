@@ -1,4 +1,6 @@
 import {
+  Activity,
+  ArchiveRestore,
   Banknote,
   Calendar,
   ChartBar,
@@ -15,9 +17,12 @@ import {
   type LucideIcon,
   Mail,
   MessageSquare,
+  Network,
   ReceiptText,
   RefreshCw,
+  Route,
   Server,
+  Settings,
   ShoppingBag,
   SquareArrowUpRight,
   Users,
@@ -87,6 +92,18 @@ export function getSidebarItems(locale: AppLocale = "en"): NavGroup[] {
     },
     {
       id: 2,
+      label: navigation.management,
+      items: [
+        { id: "users", title: navigation.users, url: "/dashboard/users", icon: Users },
+        { id: "cluster", title: navigation.cluster, url: "/dashboard/cluster", icon: Network },
+        { id: "routes", title: navigation.routes, url: "/dashboard/routes", icon: Route },
+        { id: "services", title: navigation.services, url: "/dashboard/services", icon: Activity },
+        { id: "settings", title: navigation.settings, url: "/dashboard/settings", icon: Settings },
+        { id: "backups", title: navigation.backups, url: "/dashboard/backups", icon: ArchiveRestore },
+      ],
+    },
+    {
+      id: 3,
       label: navigation.templates,
       items: [
         {

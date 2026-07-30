@@ -1,7 +1,7 @@
 [Unit]
 Description=NeProto Web administration
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target neproto-control.service
+After=network-online.target neproto-control.service
 
 [Service]
 Type=simple
