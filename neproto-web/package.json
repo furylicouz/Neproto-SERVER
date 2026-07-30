@@ -1,11 +1,11 @@
 {
   "name": "neproto-web",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "test": "node --test src/lib/admin-session-core.test.mjs src/lib/admin-control-core.test.mjs src/lib/update-status-core.test.mjs",
+    "test": "node --test src/lib/admin-session-core.test.mjs src/lib/admin-control-core.test.mjs src/lib/update-status-core.test.mjs src/lib/cluster-view-model.test.mjs src/lib/dashboard-view-model.test.mjs",
     "start": "next start",
     "lint": "biome lint",
     "format": "biome format --write",

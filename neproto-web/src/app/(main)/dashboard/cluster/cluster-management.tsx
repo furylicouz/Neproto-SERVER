@@ -2,13 +2,11 @@
 
 import * as React from "react";
 
-import { Eye, EyeOff, MoreHorizontal, Plus, RefreshCw, Server, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 
-import { AdminError, AdminLoading, PageHeader, StateBadge } from "@/components/admin/admin-ui";
+import { AdminError, AdminLoading } from "@/components/admin/admin-ui";
 import { JobDialog } from "@/components/admin/job-dialog";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -17,18 +15,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAdminResource } from "@/hooks/use-admin-resource";
 import {
   adminFetch,
@@ -39,6 +28,8 @@ import {
   waitForAdminJob,
 } from "@/lib/admin-api";
 import type { AppLocale } from "@/lib/i18n";
+
+import { ClusterInfrastructure } from "./cluster-infrastructure";
 
 interface EnrolmentForm {
   host: string;
@@ -64,20 +55,11 @@ const emptyForm: EnrolmentForm = {
   addresses: "",
 };
 
-function nodeTrafficLabel(enabled: boolean, ru: boolean) {
-  if (enabled) return ru ? "Вывести из трафика" : "Drain";
-  return ru ? "Включить" : "Enable";
-}
-
-function nodeVisibilityLabel(visible: boolean, ru: boolean) {
-  if (visible) return ru ? "Скрыть" : "Hide";
-  return ru ? "Опубликовать" : "Publish";
-}
-
 export function ClusterManagement({ locale }: { locale: AppLocale }) {
   const ru = locale === "ru";
   const cluster = useAdminResource<ClusterState>("cluster", 10_000);
   const users = useAdminResource<{ users: NP2User[] }>("users");
+  const [query, setQuery] = React.useState("");
   const [form, setForm] = React.useState<EnrolmentForm>(emptyForm);
   const [enrolOpen, setEnrolOpen] = React.useState(false);
   const [fingerprint, setFingerprint] = React.useState("");
@@ -138,7 +120,10 @@ export function ClusterManagement({ locale }: { locale: AppLocale }) {
 
   async function setNodeFlag(node: ClusterNode, action: "enable" | "publish", enabled: boolean) {
     try {
-      await adminFetch(`cluster/nodes/${encodeURIComponent(node.id)}/${action}`, { method: "POST", json: { enabled } });
+      await adminFetch(`cluster/nodes/${encodeURIComponent(node.id)}/${action}`, {
+        method: "POST",
+        json: { enabled },
+      });
       await cluster.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Request failed");
@@ -156,7 +141,7 @@ export function ClusterManagement({ locale }: { locale: AppLocale }) {
       });
       setAssignNode(null);
       await cluster.refresh();
-      toast.success(ru ? "Назначение обновлено" : "Assignment updated");
+      toast.success(ru ? "Назначение пользователя обновлено" : "Assignment updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Request failed");
     }
@@ -177,8 +162,9 @@ export function ClusterManagement({ locale }: { locale: AppLocale }) {
   async function removeNode(node: ClusterNode) {
     if (
       !window.confirm(ru ? `Удалить узел «${node.name}» из кластера?` : `Remove node “${node.name}” from the cluster?`)
-    )
+    ) {
       return;
+    }
     setBusy(true);
     try {
       await adminFetch(`cluster/nodes/${encodeURIComponent(node.id)}`, {
@@ -198,124 +184,23 @@ export function ClusterManagement({ locale }: { locale: AppLocale }) {
   if (cluster.error || !cluster.data) return <AdminError message={cluster.error || "Cluster unavailable"} />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title={ru ? "Кластер" : "Cluster"}
-        description={`${cluster.data.cluster_id} · ${ru ? "ревизия" : "revision"} ${cluster.data.revision}`}
-        actions={
-          <>
-            <Button variant="outline" disabled={busy} onClick={() => void syncUsers()}>
-              <Users />
-              {ru ? "Синхронизировать" : "Sync users"}
-            </Button>
-            <Button onClick={() => setEnrolOpen(true)}>
-              <Plus />
-              {ru ? "Добавить узел" : "Enrol node"}
-            </Button>
-          </>
-        }
+    <div className="flex flex-col gap-4">
+      <ClusterInfrastructure
+        cluster={cluster.data}
+        query={query}
+        busy={busy}
+        ru={ru}
+        onQueryChange={setQuery}
+        onRefresh={() => void cluster.refresh().catch((error) => toast.error(String(error)))}
+        onSyncUsers={() => void syncUsers()}
+        onEnrolNode={() => setEnrolOpen(true)}
+        onSetNodeFlag={(node, action, enabled) => void setNodeFlag(node, action, enabled)}
+        onAssignUser={(node) => {
+          setAssignNode(node);
+          setSelectedUser("");
+        }}
+        onRemoveNode={(node) => void removeNode(node)}
       />
-      <Card>
-        <CardHeader>
-          <CardTitle>{ru ? "Инфраструктура NP/2" : "NP/2 infrastructure"}</CardTitle>
-          <CardDescription>
-            {cluster.data.nodes.length} {ru ? "узлов" : "nodes"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{ru ? "Сервер" : "Server"}</TableHead>
-                <TableHead>{ru ? "Роли" : "Roles"}</TableHead>
-                <TableHead>{ru ? "Состояние" : "State"}</TableHead>
-                <TableHead>Ping</TableHead>
-                <TableHead>{ru ? "Клиенты" : "Clients"}</TableHead>
-                <TableHead className="w-12" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cluster.data.nodes.map((node) => {
-                const master = node.roles.includes("master");
-                return (
-                  <TableRow key={node.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="rounded-lg border p-2">
-                          <Server className="size-4" />
-                        </div>
-                        <div>
-                          <div className="font-medium">{node.name}</div>
-                          <div className="text-muted-foreground text-xs">
-                            {node.region} · {node.public_identity}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs">{node.roles.join(", ")}</TableCell>
-                    <TableCell>
-                      <StateBadge state={node.enabled ? node.health || "unknown" : "drain"} />
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {node.latency_ms > 0 ? `${node.latency_ms} ms` : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        disabled={master || !node.enabled}
-                        checked={node.client_visible}
-                        onCheckedChange={(value) => void setNodeFlag(node, "publish", value)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost">
-                            <MoreHorizontal />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            disabled={master}
-                            onClick={() => void setNodeFlag(node, "enable", !node.enabled)}
-                          >
-                            <RefreshCw />
-                            {nodeTrafficLabel(node.enabled, ru)}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            disabled={master}
-                            onClick={() => void setNodeFlag(node, "publish", !node.client_visible)}
-                          >
-                            {node.client_visible ? <EyeOff /> : <Eye />}
-                            {nodeVisibilityLabel(node.client_visible, ru)}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setAssignNode(node);
-                              setSelectedUser("");
-                            }}
-                          >
-                            <Users />
-                            {ru ? "Назначить пользователя" : "Assign user"}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            disabled={master || busy}
-                            onClick={() => void removeNode(node)}
-                          >
-                            <Trash2 />
-                            {ru ? "Удалить" : "Remove"}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
 
       <Dialog open={enrolOpen} onOpenChange={setEnrolOpen}>
         <DialogContent className="sm:max-w-2xl">
@@ -395,6 +280,7 @@ export function ClusterManagement({ locale }: { locale: AppLocale }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       <JobDialog
         job={job}
         title={ru ? "Операция с кластером" : "Cluster operation"}
