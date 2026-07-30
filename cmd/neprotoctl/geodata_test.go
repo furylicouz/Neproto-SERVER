@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,39 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 )
+
+func TestSecureGeoDataFilesDoesNotMutateProvisionedDirectoryMode(t *testing.T) {
+	directory := "/etc/neproto/geodata"
+	var chowned, chmodded []string
+	err := secureGeoDataFiles(
+		directory,
+		1234,
+		func(path string, _, gid int) error {
+			if gid != 1234 {
+				t.Fatalf("gid=%d", gid)
+			}
+			chowned = append(chowned, path)
+			return nil
+		},
+		func(path string, mode fs.FileMode) error {
+			if path == directory {
+				t.Fatal("runtime must not reset the installer-owned setgid directory mode")
+			}
+			if mode != 0o640 {
+				t.Fatalf("mode=%#o", mode)
+			}
+			chmodded = append(chmodded, path)
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(directory, "geoip.dat"), filepath.Join(directory, "geosite.dat")}
+	if strings.Join(chowned, "|") != strings.Join(want, "|") || strings.Join(chmodded, "|") != strings.Join(want, "|") {
+		t.Fatalf("chowned=%v chmodded=%v", chowned, chmodded)
+	}
+}
 
 func TestGeoDataScheduleWritesSafeSystemdDropIn(t *testing.T) {
 	root := t.TempDir()

@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -190,19 +191,21 @@ func secureGeoDataForService(manager *admin.Manager) error {
 	if installation.ServiceGID == nil {
 		return errors.New("service group is unavailable")
 	}
-	directory := manager.GeodataDirectory()
-	if err := os.Chown(directory, -1, *installation.ServiceGID); err != nil {
-		return err
-	}
-	if err := os.Chmod(directory, 0o770|os.ModeSetgid); err != nil {
-		return err
-	}
+	return secureGeoDataFiles(manager.GeodataDirectory(), *installation.ServiceGID, os.Chown, os.Chmod)
+}
+
+func secureGeoDataFiles(
+	directory string,
+	serviceGID int,
+	chown func(string, int, int) error,
+	chmod func(string, fs.FileMode) error,
+) error {
 	for _, name := range []string{"geoip.dat", "geosite.dat"} {
 		path := filepath.Join(directory, name)
-		if err := os.Chown(path, -1, *installation.ServiceGID); err != nil {
+		if err := chown(path, -1, serviceGID); err != nil {
 			return err
 		}
-		if err := os.Chmod(path, 0o640); err != nil {
+		if err := chmod(path, 0o640); err != nil {
 			return err
 		}
 	}
