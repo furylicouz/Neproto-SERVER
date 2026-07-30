@@ -2,8 +2,13 @@
 set -Eeuo pipefail
 
 repository_url=https://github.com/furylicouz/Neproto-SERVER
+embedded_version=np2-0.4.0
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-version=$(tr -d '[:space:]' <"$script_dir/VERSION")
+version=${NEPROTO_VERSION:-}
+if [[ -z $version && -f $script_dir/VERSION ]]; then
+  version=$(tr -d '[:space:]' <"$script_dir/VERSION")
+fi
+[[ -n $version ]] || version=$embedded_version
 [[ $version =~ ^np2-[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
   printf 'ERROR: invalid VERSION: %s\n' "$version" >&2
   exit 2

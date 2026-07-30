@@ -17,6 +17,15 @@ console.
 ## Quick setup
 
 Supported hosts: Ubuntu 22.04/24.04/26.04 and Debian 12 on AMD64 or ARM64.
+Run as `root`; Git is not required:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/furylicouz/Neproto-SERVER/main/install.sh)
+```
+
+The standalone bootstrap downloads the immutable release matching the embedded
+stable version, verifies its SHA-256 checksum, and opens the full-screen setup
+wizard. Cloning the repository is optional:
 
 ```bash
 git clone https://github.com/furylicouz/Neproto-SERVER.git
@@ -24,8 +33,7 @@ cd Neproto-SERVER
 sudo ./install.sh
 ```
 
-The command downloads the release matching `VERSION`, verifies its SHA-256
-checksum, and opens the full-screen setup wizard. The wizard asks for:
+The wizard asks for:
 
 1. Docker or bare-metal deployment;
 2. the primary NP/2 domain, for example `vpn.example.com`;

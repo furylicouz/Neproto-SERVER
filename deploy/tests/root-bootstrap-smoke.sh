@@ -12,4 +12,16 @@ actual=$("$repository/install.sh" --print-release-url)
 }
 
 "$repository/install.sh" --help | grep -q -- '--bootstrap-bundle'
+
+standalone_dir=$(mktemp -d)
+trap 'rm -rf -- "$standalone_dir"' EXIT
+cp "$repository/install.sh" "$standalone_dir/install.sh"
+standalone=$(
+  cd "$standalone_dir"
+  ./install.sh --print-release-url
+)
+[[ $standalone == "$expected" ]] || {
+  printf 'standalone bootstrap depends on repository files\nexpected: %s\nactual:   %s\n' "$expected" "$standalone" >&2
+  exit 1
+}
 printf 'PASS: root bootstrap contract\n'
