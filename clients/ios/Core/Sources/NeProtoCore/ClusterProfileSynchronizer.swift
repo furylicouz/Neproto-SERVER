@@ -13,6 +13,7 @@ public enum ClusterProfileSynchronizer {
         existing: [ServerProfile],
         bootstrapProfileID: UUID,
         catalog: ClusterCatalog,
+        suppressedNodeIDs: Set<String> = [],
         makeUUID: () -> UUID = UUID.init
     ) throws -> [ServerProfile] {
         guard let bootstrap = existing.first(where: { $0.id == bootstrapProfileID }) else {
@@ -37,7 +38,7 @@ public enum ClusterProfileSynchronizer {
 
         var synchronized: [ServerProfile] = []
         synchronized.reserveCapacity(catalog.servers.count)
-        for server in catalog.servers {
+        for server in catalog.servers where !suppressedNodeIDs.contains(server.nodeID) {
             let previous: ServerProfile?
             if server.nodeID == bootstrapNodeID {
                 previous = bootstrap

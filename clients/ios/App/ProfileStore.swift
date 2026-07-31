@@ -10,7 +10,6 @@ struct ClusterClientState: Codable, Equatable {
 }
 
 enum ProfileStoreError: LocalizedError {
-    case managedProfile
     case profileIsNotClusterBootstrap
     case clusterNotSynchronized
     case clientRoutesDisabled
@@ -18,7 +17,6 @@ enum ProfileStoreError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .managedProfile: "Сервер управляется администратором кластера NP/2."
         case .profileIsNotClusterBootstrap: "Профиль не содержит криптографическую привязку к кластеру NP/2."
         case .clusterNotSynchronized: "Каталог кластера NP/2 ещё не синхронизирован."
         case .clientRoutesDisabled: "Администратор запретил локальные маршруты."
@@ -34,8 +32,10 @@ final class ProfileStore: ObservableObject {
 
     private let defaults: UserDefaults
     private let secretStore: KeychainSecretStore
+    private var suppressedNodeIDsByCluster: [String: Set<String>]
     private let storageKey = "np2.server-profiles.v1"
     private let clusterStorageKey = "np2.cluster-client-state.v1"
+    private let suppressedNodesStorageKey = "np2.cluster-suppressed-nodes.v1"
 
     init(defaults: UserDefaults = .standard, secretStore: KeychainSecretStore = KeychainSecretStore()) {
         self.defaults = defaults
@@ -52,6 +52,12 @@ final class ProfileStore: ObservableObject {
         } else {
             clusterStates = [:]
         }
+        if let data = defaults.data(forKey: suppressedNodesStorageKey),
+           let decoded = try? JSONDecoder().decode([String: Set<String>].self, from: data) {
+            suppressedNodeIDsByCluster = decoded
+        } else {
+            suppressedNodeIDsByCluster = [:]
+        }
     }
 
     func save(profile: ServerProfile, secret: String) throws {
@@ -67,16 +73,50 @@ final class ProfileStore: ObservableObject {
     }
 
     func remove(profileID: UUID) throws {
-        if let profile = profiles.first(where: { $0.id == profileID }), profile.managedByCluster {
-            throw ProfileStoreError.managedProfile
+        let previousProfiles = profiles
+        let previousClusterStates = clusterStates
+        let previousSuppressedNodeIDs = suppressedNodeIDsByCluster
+        if let profile = profiles.first(where: { $0.id == profileID }),
+           profile.managedByCluster,
+           let clusterID = profile.clusterID,
+           let nodeID = profile.clusterNodeID {
+            let hasRemainingClusterProfile = profiles.contains {
+                $0.id != profileID && $0.clusterID == clusterID
+            }
+            if hasRemainingClusterProfile {
+                suppressedNodeIDsByCluster[clusterID, default: []].insert(nodeID)
+            } else {
+                clusterStates.removeValue(forKey: clusterID)
+                suppressedNodeIDsByCluster.removeValue(forKey: clusterID)
+            }
+        }
+        profiles.removeAll { $0.id == profileID }
+        do {
+            try persistProfiles()
+            try persistClusterStates()
+            try persistSuppressedNodes()
+        } catch {
+            profiles = previousProfiles
+            clusterStates = previousClusterStates
+            suppressedNodeIDsByCluster = previousSuppressedNodeIDs
+            try? persistProfiles()
+            try? persistClusterStates()
+            try? persistSuppressedNodes()
+            throw error
         }
         do {
             try secretStore.delete(profileID: profileID)
         } catch KeychainSecretStoreError.itemNotFound {
             // A missing credential must not make an otherwise deletable profile immortal.
+        } catch {
+            profiles = previousProfiles
+            clusterStates = previousClusterStates
+            suppressedNodeIDsByCluster = previousSuppressedNodeIDs
+            try? persistProfiles()
+            try? persistClusterStates()
+            try? persistSuppressedNodes()
+            throw error
         }
-        profiles.removeAll { $0.id == profileID }
-        try persistProfiles()
     }
 
     @discardableResult
@@ -138,7 +178,8 @@ final class ProfileStore: ObservableObject {
         let synchronized = try ClusterProfileSynchronizer.synchronize(
             existing: profiles,
             bootstrapProfileID: bootstrapProfileID,
-            catalog: catalog
+            catalog: catalog,
+            suppressedNodeIDs: suppressedNodeIDsByCluster[clusterID] ?? []
         )
         let secret = try secretStore.read(profileID: bootstrapProfileID)
         for profile in synchronized where profile.clusterID == clusterID {
@@ -239,5 +280,11 @@ final class ProfileStore: ObservableObject {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         defaults.set(try encoder.encode(clusterStates), forKey: clusterStorageKey)
+    }
+
+    private func persistSuppressedNodes() throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        defaults.set(try encoder.encode(suppressedNodeIDsByCluster), forKey: suppressedNodesStorageKey)
     }
 }

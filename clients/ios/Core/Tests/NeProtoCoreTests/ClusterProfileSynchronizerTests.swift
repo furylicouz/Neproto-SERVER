@@ -48,6 +48,35 @@ struct ClusterProfileSynchronizerTests {
         #expect(edge.managedByCluster)
         #expect(!profiles.contains(where: { $0.clusterNodeID == "old" }))
     }
+
+    @Test("locally removed cluster servers stay hidden after catalog synchronization")
+    func keepsLocallyRemovedServersHidden() throws {
+        let bootstrapID = UUID(uuidString: "AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")!
+        let bootstrap = ServerProfile(
+            id: bootstrapID, credentialID: "credential", name: "Moscow",
+            serverIdentity: "vpn.example.com", serverAddress: "8.8.8.8",
+            httpsPath: "/private/https/session", webRTCPath: "/private/webrtc/offer",
+            clusterID: "cluster-01",
+            catalogPublicKey: Data(repeating: 0x44, count: 32).base64URLEncodedString(),
+            clusterNodeID: "master", managedByCluster: true, coverProfile: .interactive
+        )
+        let catalog = ClusterCatalog(
+            version: 1, clusterID: "cluster-01", revision: 5,
+            issuedAt: "2026-07-19T12:00:00Z", expiresAt: "2026-07-19T13:00:00Z", userID: "credential",
+            servers: [
+                ClusterServer(nodeID: "master", name: "Moscow", region: "Russia", serverIdentity: "vpn.example.com", serverAddresses: ["8.8.8.8"], httpsPath: nil, webRTCPath: nil, http3Path: nil, requireDatagrams: false, enabled: true),
+                ClusterServer(nodeID: "old-edge", name: "Old edge", region: "Netherlands", serverIdentity: "old.example.com", serverAddresses: ["9.9.9.9"], httpsPath: "/edge/https/session", webRTCPath: "/edge/webrtc/offer", http3Path: nil, requireDatagrams: false, enabled: true),
+            ],
+            adminRoutes: [], permissions: .init(allowAutoSelection: true, allowClientRoutes: true)
+        )
+
+        let profiles = try ClusterProfileSynchronizer.synchronize(
+            existing: [bootstrap], bootstrapProfileID: bootstrapID, catalog: catalog,
+            suppressedNodeIDs: ["old-edge"]
+        )
+
+        #expect(profiles.map(\.clusterNodeID) == ["master"])
+    }
 }
 
 private extension Data {
