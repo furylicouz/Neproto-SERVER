@@ -55,6 +55,26 @@ const emptyForm: EnrolmentForm = {
   addresses: "",
 };
 
+const nodeIDPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+function normalizedEnrolmentForm(form: EnrolmentForm): EnrolmentForm {
+  return {
+    ...form,
+    host: form.host.trim().toLowerCase(),
+    port: form.port.trim(),
+    user: form.user.trim(),
+    node_id: form.node_id.trim().toLowerCase(),
+    name: form.name.trim(),
+    region: form.region.trim(),
+    domain: form.domain.trim().toLowerCase(),
+    addresses: form.addresses
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .join(", "),
+  };
+}
+
 export function ClusterManagement({ locale }: { locale: AppLocale }) {
   const ru = locale === "ru";
   const cluster = useAdminResource<ClusterState>("cluster", 10_000);
@@ -68,15 +88,26 @@ export function ClusterManagement({ locale }: { locale: AppLocale }) {
   const [selectedUser, setSelectedUser] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
-  const setField = (field: keyof EnrolmentForm, value: string) =>
+  const setField = (field: keyof EnrolmentForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
+    if (field === "host" || field === "port") {
+      setFingerprint("");
+    }
+  };
 
   async function verifyHost() {
+    const normalized = normalizedEnrolmentForm(form);
+    setForm(normalized);
     setBusy(true);
     try {
       const started = await adminFetch<ControlJob>("cluster/host-key", {
         method: "POST",
-        json: { host: form.host, port: Number(form.port), user: form.user, password: form.password },
+        json: {
+          host: normalized.host,
+          port: Number(normalized.port),
+          user: normalized.user,
+          password: normalized.password,
+        },
       });
       setJob(started);
       const complete = await waitForAdminJob<{ fingerprint: string }>(started.id, setJob);
@@ -90,15 +121,25 @@ export function ClusterManagement({ locale }: { locale: AppLocale }) {
   }
 
   async function enrol() {
+    const normalized = normalizedEnrolmentForm(form);
+    if (!nodeIDPattern.test(normalized.node_id)) {
+      toast.error(
+        ru
+          ? "Node ID: только строчные латинские буквы, цифры, - и _; первый символ — буква или цифра"
+          : "Node ID must start with a lowercase letter or digit and contain only lowercase letters, digits, - or _",
+      );
+      return;
+    }
+    setForm(normalized);
     setBusy(true);
     try {
       const started = await adminFetch<ControlJob>("cluster/enrol", {
         method: "POST",
         json: {
-          ...form,
-          port: Number(form.port),
+          ...normalized,
+          port: Number(normalized.port),
           fingerprint,
-          addresses: form.addresses
+          addresses: normalized.addresses
             .split(",")
             .map((value) => value.trim())
             .filter(Boolean),

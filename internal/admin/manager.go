@@ -39,6 +39,7 @@ var (
 	ErrInvalidUser       = errors.New("invalid NP/2 user")
 	ErrUserNotFound      = errors.New("NP/2 user not found")
 	ErrUserMustBeRevoked = errors.New("NP/2 user must be revoked before deletion")
+	ErrLastActiveUser    = errors.New("cannot revoke the last active NP/2 user")
 )
 
 // Installation is the non-secret state written by the deployment installer.
@@ -575,6 +576,13 @@ func (m *Manager) RevokeUser(identifier string) error {
 	userPosition := findUserPosition(index.Users, identifier)
 	if userPosition < 0 || index.Users[userPosition].Status != StatusActive {
 		return ErrUserNotFound
+	}
+	loaded, err := credentials.LoadActiveDirectory(m.activeDirectory())
+	if err != nil {
+		return err
+	}
+	if len(loaded) == 1 && loaded[0].ID == identifier {
+		return ErrLastActiveUser
 	}
 	activePath := m.activeSecretPath(identifier)
 	revokedPath, err := m.uniqueRevokedPath(identifier)

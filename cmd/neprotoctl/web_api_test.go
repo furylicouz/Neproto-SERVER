@@ -97,6 +97,9 @@ func TestWebAPIUserLifecycleReturnsExplicitCredentialExport(t *testing.T) {
 	writeFeatureTestInstallation(t, root)
 	controller := &fakeController{snapshot: serviceSnapshot{NP2: "active"}}
 	handler := mustWebAPIHandler(t, root, controller)
+	if _, err := handler.(*webAPI).manager.AddUser("Service keeper", "web"); err != nil {
+		t.Fatal(err)
+	}
 
 	created := httptest.NewRecorder()
 	handler.ServeHTTP(created, jsonRequest(t, http.MethodPost, "/v1/users", map[string]any{

@@ -70,7 +70,8 @@ func TestManagerAddsListsAndExportsIndependentUser(t *testing.T) {
 func TestManagerRotatesAndRevokesCredentialAtomically(t *testing.T) {
 	root := t.TempDir()
 	writeInstallation(t, root)
-	random := append(bytes.Repeat([]byte{0x11}, 48), bytes.Repeat([]byte{0x22}, 64)...)
+	random := append(bytes.Repeat([]byte{0x11}, 48), bytes.Repeat([]byte{0x22}, 48)...)
+	random = append(random, bytes.Repeat([]byte{0x33}, 32)...)
 	manager, err := Open(root, bytes.NewReader(random), func() time.Time {
 		return time.Date(2026, time.July, 17, 22, 0, 0, 0, time.UTC)
 	})
@@ -79,6 +80,9 @@ func TestManagerRotatesAndRevokesCredentialAtomically(t *testing.T) {
 	}
 	user, err := manager.AddUser("Bob", "interactive")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AddUser("Service keeper", "web"); err != nil {
 		t.Fatal(err)
 	}
 	beforeURI, err := manager.ExportUserURI(user.ID)
@@ -107,7 +111,8 @@ func TestManagerRotatesAndRevokesCredentialAtomically(t *testing.T) {
 		t.Fatalf("active credential survived revocation: %v", err)
 	}
 	users, err := manager.ListUsers()
-	if err != nil || len(users) != 1 || users[0].Status != StatusRevoked || users[0].RevokedAt == nil {
+	revoked, found := findUser(users, user.ID)
+	if err != nil || len(users) != 2 || !found || revoked.Status != StatusRevoked || revoked.RevokedAt == nil {
 		t.Fatalf("revoked index=%#v err=%v", users, err)
 	}
 }
@@ -154,12 +159,15 @@ func TestManagerUpdatesDevicePolicyAndTrafficResetGeneration(t *testing.T) {
 func TestManagerPermanentlyDeletesOnlyRevokedUserAndClusterAccess(t *testing.T) {
 	root := t.TempDir()
 	writeInstallation(t, root)
-	manager, err := Open(root, bytes.NewReader(bytes.Repeat([]byte{0x63}, 256)), time.Now)
+	manager, err := Open(root, nil, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	user, err := manager.AddUser("Disposable iPhone", "web")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.AddUser("Service keeper", "web"); err != nil {
 		t.Fatal(err)
 	}
 	state, err := manager.EnsureLocalCluster()
@@ -181,7 +189,7 @@ func TestManagerPermanentlyDeletesOnlyRevokedUserAndClusterAccess(t *testing.T) 
 		t.Fatal(err)
 	}
 	users, err := manager.ListUsers()
-	if err != nil || len(users) != 0 {
+	if err != nil || len(users) != 1 || users[0].Name != "Service keeper" {
 		t.Fatalf("users=%+v err=%v", users, err)
 	}
 	state, err = manager.ClusterState()
@@ -202,6 +210,26 @@ func TestManagerPermanentlyDeletesOnlyRevokedUserAndClusterAccess(t *testing.T) 
 	}
 	if _, err := manager.AddUser("Disposable iPhone", "web"); err != nil {
 		t.Fatalf("deleted user name was not released: %v", err)
+	}
+}
+
+func TestManagerRefusesToRevokeTheLastActiveUser(t *testing.T) {
+	root := t.TempDir()
+	writeInstallation(t, root)
+	manager, err := Open(root, bytes.NewReader(bytes.Repeat([]byte{0x45}, 256)), time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := manager.AddUser("Only active user", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.RevokeUser(user.ID); !errors.Is(err, ErrLastActiveUser) {
+		t.Fatalf("last active user revoke error=%v", err)
+	}
+	users, err := manager.ListUsers()
+	if err != nil || len(users) != 1 || users[0].Status != StatusActive {
+		t.Fatalf("last active user changed: users=%+v err=%v", users, err)
 	}
 }
 

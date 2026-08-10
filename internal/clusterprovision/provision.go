@@ -40,13 +40,46 @@ type EnrollmentRequest struct {
 }
 
 func (request EnrollmentRequest) Validate() error {
-	if !validSSHHost(request.Host) || request.Port == 0 || !validSSHUser(request.User) ||
-		(len(request.Password) == 0) == (len(request.PrivateKeyPEM) == 0) ||
-		!validNodeID(request.NodeID) || !validLabel(request.Name, 96) || !validLabel(request.Region, 96) ||
-		(request.PinnedHostKey != "" && !strings.HasPrefix(request.PinnedHostKey, "SHA256:")) {
-		return ErrInvalidEnrollment
+	if err := request.ValidateSSHConnection(); err != nil {
+		return err
+	}
+	if !validNodeID(request.NodeID) {
+		return invalidEnrollmentField("node_id", "must start with a lowercase letter or digit and contain only lowercase letters, digits, '-' or '_'")
+	}
+	if !validLabel(request.Name, 96) {
+		return invalidEnrollmentField("name", "must be 1-96 characters without surrounding whitespace or line breaks")
+	}
+	if !validLabel(request.Region, 96) {
+		return invalidEnrollmentField("region", "must be 1-96 characters without surrounding whitespace or line breaks")
 	}
 	return nil
+}
+
+// ValidateSSHConnection validates only the transport and authentication
+// fields needed to discover a host key. Node metadata is intentionally not
+// required until the operator submits the final enrolment request.
+func (request EnrollmentRequest) ValidateSSHConnection() error {
+	if !validSSHHost(request.Host) {
+		return invalidEnrollmentField("host", "must be an IP address or DNS hostname without a URL scheme")
+	}
+	if request.Port == 0 {
+		return invalidEnrollmentField("port", "must be between 1 and 65535")
+	}
+	if !validSSHUser(request.User) {
+		return invalidEnrollmentField("user", "must contain only letters, digits, '-' or '_'")
+	}
+	passwordLength, privateKeyLength := len(request.Password), len(request.PrivateKeyPEM)
+	if (passwordLength == 0) == (privateKeyLength == 0) || passwordLength > 1024 || privateKeyLength > 64<<10 {
+		return invalidEnrollmentField("authentication", "must contain exactly one bounded password or private key")
+	}
+	if request.PinnedHostKey != "" && !strings.HasPrefix(request.PinnedHostKey, "SHA256:") {
+		return invalidEnrollmentField("fingerprint", "must use the SHA256 format")
+	}
+	return nil
+}
+
+func invalidEnrollmentField(field, requirement string) error {
+	return fmt.Errorf("%w: %s %s", ErrInvalidEnrollment, field, requirement)
 }
 
 type Remote interface {

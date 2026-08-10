@@ -51,7 +51,7 @@ func DiscoverSSHHostKey(ctx context.Context, request EnrollmentRequest) (string,
 		return "", ErrInvalidEnrollment
 	}
 	request.PinnedHostKey = ""
-	remote, err := DialSSH(ctx, request)
+	remote, err := dialSSH(ctx, request, false)
 	if remote != nil {
 		_ = remote.Close()
 		return "", ErrInvalidEnrollment
@@ -64,11 +64,21 @@ func DiscoverSSHHostKey(ctx context.Context, request EnrollmentRequest) (string,
 }
 
 func DialSSH(ctx context.Context, request EnrollmentRequest) (Remote, error) {
+	return dialSSH(ctx, request, true)
+}
+
+func dialSSH(ctx context.Context, request EnrollmentRequest, requireNodeMetadata bool) (Remote, error) {
 	if ctx == nil {
 		return nil, ErrInvalidEnrollment
 	}
-	if err := request.Validate(); err != nil {
-		return nil, err
+	var validationErr error
+	if requireNodeMetadata {
+		validationErr = request.Validate()
+	} else {
+		validationErr = request.ValidateSSHConnection()
+	}
+	if validationErr != nil {
+		return nil, validationErr
 	}
 	auth := make([]ssh.AuthMethod, 0, 1)
 	if len(request.Password) > 0 {

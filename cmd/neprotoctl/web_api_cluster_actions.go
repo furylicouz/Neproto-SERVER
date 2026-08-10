@@ -9,6 +9,7 @@ import (
 
 	"neproto.local/chameleon/internal/admin"
 	"neproto.local/chameleon/internal/cluster"
+	"neproto.local/chameleon/internal/clusterprovision"
 )
 
 func (api *webAPI) startHostKeyDiscovery(writer http.ResponseWriter, request *http.Request) {
@@ -21,13 +22,21 @@ func (api *webAPI) startHostKeyDiscovery(writer http.ResponseWriter, request *ht
 	if !api.decodeJSON(writer, request, &input) {
 		return
 	}
-	if len(input.Host) == 0 || len(input.Host) > 253 || input.Port < 1 || input.Port > 65535 ||
-		len(input.User) == 0 || len(input.User) > 64 || len(input.Password) == 0 || len(input.Password) > 1024 {
-		api.writeError(writer, http.StatusBadRequest, "invalid_request", "invalid SSH connection settings")
-		return
-	}
 	draft := clusterEnrollmentDraft{host: input.Host, port: uint16(input.Port), user: input.User, password: []byte(input.Password)}
 	input.Password = ""
+	validation := clusterprovision.EnrollmentRequest{
+		Host: draft.host, Port: draft.port, User: draft.user, Password: draft.password,
+	}
+	if input.Port < 1 || input.Port > 65535 || len(draft.password) > 1024 {
+		zeroClusterEnrollmentDraft(&draft)
+		api.writeError(writer, http.StatusBadRequest, "invalid_request", "invalid cluster node enrolment request: invalid SSH connection settings")
+		return
+	}
+	if err := validation.ValidateSSHConnection(); err != nil {
+		zeroClusterEnrollmentDraft(&draft)
+		api.writeError(writer, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
 	api.startJob(writer, "cluster_host_key", func(report func(int, string)) (any, error) {
 		defer zeroClusterEnrollmentDraft(&draft)
 		report(20, "Connecting to the new server over SSH")
@@ -56,7 +65,7 @@ func (api *webAPI) startClusterEnrolment(writer http.ResponseWriter, request *ht
 	if !api.decodeJSON(writer, request, &input) {
 		return
 	}
-	if len(input.Host) == 0 || len(input.Host) > 253 || input.Port < 1 || input.Port > 65535 ||
+	if input.Port < 1 || input.Port > 65535 ||
 		len(input.User) == 0 || len(input.User) > 64 || len(input.Password) == 0 || len(input.Password) > 1024 ||
 		len(input.Fingerprint) < 8 || len(input.Fingerprint) > 256 || !strings.HasPrefix(input.Fingerprint, "SHA256:") ||
 		len(input.NodeID) == 0 || len(input.NodeID) > 64 || len(input.Name) == 0 || len(input.Name) > 96 ||
@@ -71,6 +80,15 @@ func (api *webAPI) startClusterEnrolment(writer http.ResponseWriter, request *ht
 		domain: input.Domain, addresses: append([]string(nil), input.Addresses...),
 	}
 	input.Password = ""
+	validation := clusterprovision.EnrollmentRequest{
+		Host: draft.host, Port: draft.port, User: draft.user, Password: draft.password,
+		PinnedHostKey: draft.fingerprint, NodeID: draft.nodeID, Name: draft.name, Region: draft.region,
+	}
+	if err := validation.Validate(); err != nil {
+		zeroClusterEnrollmentDraft(&draft)
+		api.writeError(writer, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
 	api.startJob(writer, "cluster_enrolment", func(report func(int, string)) (any, error) {
 		defer zeroClusterEnrollmentDraft(&draft)
 		var output, failures bytes.Buffer

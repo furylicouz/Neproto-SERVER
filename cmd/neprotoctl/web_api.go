@@ -635,6 +635,8 @@ func (api *webAPI) writeOperationError(writer http.ResponseWriter, err error) {
 		api.writeError(writer, http.StatusNotFound, "user_not_found", "user not found")
 	case errors.Is(err, admin.ErrUserMustBeRevoked):
 		api.writeError(writer, http.StatusConflict, "user_must_be_revoked", "revoke the user before deletion")
+	case errors.Is(err, admin.ErrLastActiveUser):
+		api.writeError(writer, http.StatusConflict, "last_active_user", "create another active user before revoking this one")
 	case errors.Is(err, admin.ErrInvalidUser), errors.Is(err, admin.ErrInvalidState), errors.Is(err, cluster.ErrInvalidState):
 		api.writeError(writer, http.StatusBadRequest, "invalid_request", "request contains invalid data")
 	default:

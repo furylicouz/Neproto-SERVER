@@ -314,6 +314,9 @@ func TestUserLifecycleCommands(t *testing.T) {
 	}
 	fields := strings.Fields(output.String())
 	identifier := strings.Trim(fields[len(fields)-1], "()")
+	if _, err := mustOpenManager(t, root).AddUser("Service keeper", "web"); err != nil {
+		t.Fatal(err)
+	}
 	output.Reset()
 	if code := execute([]string{"user", "export", "--id", identifier, "--format", "uri"}, root, &output, &errors, controller); code != 0 {
 		t.Fatalf("export code=%d stderr=%s", code, errors.String())
@@ -357,7 +360,7 @@ func TestUserLifecycleCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(users) != 0 {
+	if len(users) != 1 || users[0].Name != "Service keeper" {
 		t.Fatalf("users after delete=%+v", users)
 	}
 	if !strings.Contains(output.String(), "Permanently deleted revoked user "+identifier) {

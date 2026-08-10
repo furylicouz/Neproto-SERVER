@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -206,5 +207,33 @@ func TestWebAPIHostKeyFailureRedactsTheTemporaryPassword(t *testing.T) {
 			t.Fatalf("job did not fail: %s", status.Body.String())
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestWebAPIClusterEnrolmentRejectsInvalidMetadataBeforeStartingJob(t *testing.T) {
+	root := t.TempDir()
+	writeFeatureTestInstallation(t, root)
+	handler := mustWebAPIHandler(t, root, &fakeController{})
+	api := handler.(*webAPI)
+	called := false
+	api.enrolNode = func(*admin.Manager, serviceController, clusterEnrollmentDraft, io.Writer, io.Writer, func(int, string)) error {
+		called = true
+		return nil
+	}
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, jsonRequest(t, http.MethodPost, "/v1/cluster/enrol", map[string]any{
+		"host": "203.0.113.20", "port": 22, "user": "root", "password": "temporary-password",
+		"fingerprint": "SHA256:trusted-fingerprint", "node_id": "Edge 01", "name": "Edge",
+		"region": "Amsterdam", "domain": "edge.example.com", "addresses": []string{"203.0.113.20"},
+	}))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	if called {
+		t.Fatal("invalid enrolment started a background provisioning job")
+	}
+	if !strings.Contains(response.Body.String(), "node_id") {
+		t.Fatalf("field-specific diagnostic missing: %s", response.Body.String())
 	}
 }

@@ -7,12 +7,56 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
 )
+
+func TestDiscoverSSHHostKeyOnlyRequiresConnectionFields(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostKey, err := ssh.NewSignerFromKey(privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	serverDone := make(chan struct{})
+	go func() {
+		defer close(serverDone)
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer connection.Close()
+		configuration := &ssh.ServerConfig{NoClientAuth: true}
+		configuration.AddHostKey(hostKey)
+		_, _, _, _ = ssh.NewServerConn(connection, configuration)
+	}()
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	fingerprint, err := DiscoverSSHHostKey(ctx, EnrollmentRequest{
+		Host: "127.0.0.1", Port: uint16(port), User: "root", Password: []byte("temporary"),
+	})
+	if err != nil {
+		t.Fatalf("DiscoverSSHHostKey(%s) error = %v", strconv.Itoa(port), err)
+	}
+	if fingerprint != ssh.FingerprintSHA256(hostKey.PublicKey()) {
+		t.Fatalf("fingerprint=%q", fingerprint)
+	}
+	<-serverDone
+}
 
 func TestEnrollmentRequestRejectsShellAndNetworkInjection(t *testing.T) {
 	valid := EnrollmentRequest{Host: "203.0.113.10", Port: 22, User: "root", Password: []byte("temporary"), PinnedHostKey: "SHA256:pin", NodeID: "edge-01", Name: "Edge", Region: "Helsinki"}
