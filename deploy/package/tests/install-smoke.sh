@@ -170,7 +170,7 @@ test_mode() {
   fi
   grep -q 'cannot revoke the last active NP/2 user' "$root/revoke-last.out"
   [[ -s $root/etc/neproto/users/active/$identifier.secret ]]
-  NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user add --name "Smoke Service Keeper" --profile balanced >/dev/null
+  NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user add --name "Smoke Service Keeper" --profile quiet >/dev/null
   NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user revoke --id "$identifier" >/dev/null
   [[ ! -e $root/etc/neproto/users/active/$identifier.secret ]]
   grep -q "$identifier" "$root/etc/neproto/users/index.json"
