@@ -10,9 +10,9 @@ public struct InstallationIdentityStore {
     private let defaults: UserDefaults
     private let key: String
 
-    public init(defaults: UserDefaults = .standard, key: String = defaultKey) {
+    public init(defaults: UserDefaults = .standard, key: String? = nil) {
         self.defaults = defaults
-        self.key = key
+        self.key = key ?? Self.defaultKey
     }
 
     public func identifier() -> UUID {
