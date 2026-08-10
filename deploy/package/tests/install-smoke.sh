@@ -164,6 +164,13 @@ test_mode() {
   grep -q '^Secret: ' "$root/profile.manual"
   grep -q '^Import URI: np2://import/v2/' "$root/profile.manual"
   NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user rotate --id "$identifier" >/dev/null
+  if NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user revoke --id "$identifier" >"$root/revoke-last.out" 2>&1; then
+    printf 'ERROR: sole active user was revoked\n' >&2
+    return 1
+  fi
+  grep -q 'cannot revoke the last active NP/2 user' "$root/revoke-last.out"
+  [[ -s $root/etc/neproto/users/active/$identifier.secret ]]
+  NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user add --name "Smoke Service Keeper" --profile balanced >/dev/null
   NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user revoke --id "$identifier" >/dev/null
   [[ ! -e $root/etc/neproto/users/active/$identifier.secret ]]
   grep -q "$identifier" "$root/etc/neproto/users/index.json"
