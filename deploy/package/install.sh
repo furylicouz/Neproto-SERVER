@@ -20,6 +20,15 @@ requested_interactive=false
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 info() { printf '[NeProto] %s\n' "$*"; }
 
+ensure_mode() {
+  local desired=$1
+  local path=$2
+  local current
+
+  current=$(stat -c '%a' -- "$path") || die "cannot inspect permissions: $path"
+  [[ "$current" == "$desired" ]] || chmod "$desired" "$path"
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--mode docker|bare-metal] [--domain DOMAIN]
@@ -560,7 +569,7 @@ fi
 chmod 0640 "$etc_neproto/server.json"
 chmod 0640 "$etc_neproto/web.env"
 chmod 0640 "$web_admin_secret"
-chmod 2770 "$etc_neproto/geodata"
+ensure_mode 2770 "$etc_neproto/geodata"
 chmod 0660 "$etc_neproto/geodata/geoip.dat" "$etc_neproto/geodata/geosite.dat"
 chown root:"$service_gid" "$etc_neproto/tls"
 chmod 0750 "$etc_neproto/tls"
@@ -569,7 +578,7 @@ chown "$service_uid":"$service_gid" "$update_inbox"
 # The updater writes status files as root while the unprivileged web process
 # reads them through the shared service group. setgid keeps every atomic temp
 # file and rename in that group across future upgrades.
-chmod 2750 "$update_dir"
+ensure_mode 2750 "$update_dir"
 chmod 0700 "$update_inbox"
 
 provision_certificate() {

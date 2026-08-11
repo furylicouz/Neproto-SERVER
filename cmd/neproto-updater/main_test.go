@@ -84,19 +84,40 @@ func TestUpdateServiceSandboxAllowsManagedSetgidDirectories(t *testing.T) {
 		t.Fatal("locate updater test source")
 	}
 	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
-	installer, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "install.sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(installer), `chmod 2770 "$etc_neproto/geodata"`) ||
-		!strings.Contains(string(installer), `chmod 2750 "$update_dir"`) {
-		t.Fatal("test premise changed: managed directories no longer require setgid")
-	}
 	unit, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "systemd", "neproto-update.service"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(unit), "RestrictSUIDSGID=true") {
 		t.Fatal("update sandbox blocks the installer's required setgid chmod operations")
+	}
+}
+
+func TestManagedUpdateDoesNotRepeatExistingSetgidChmod(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	installer, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(installer)
+	for _, expected := range []string{
+		`ensure_mode 2770 "$etc_neproto/geodata"`,
+		`ensure_mode 2750 "$update_dir"`,
+	} {
+		if !strings.Contains(script, expected) {
+			t.Fatalf("managed update repeats a restricted chmod instead of using %s", expected)
+		}
+	}
+	for _, forbidden := range []string{
+		`chmod 2770 "$etc_neproto/geodata"`,
+		`chmod 2750 "$update_dir"`,
+	} {
+		if strings.Contains(script, forbidden) {
+			t.Fatalf("managed update still performs unconditional restricted operation: %s", forbidden)
+		}
 	}
 }

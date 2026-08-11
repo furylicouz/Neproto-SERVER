@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 repository_url=https://github.com/furylicouz/Neproto-SERVER
-embedded_version=np2-0.5.9
+embedded_version=np2-0.5.10
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 version=${NEPROTO_VERSION:-}
 if [[ -z $version && -f $script_dir/VERSION ]]; then
