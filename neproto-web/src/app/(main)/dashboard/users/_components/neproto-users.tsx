@@ -73,7 +73,6 @@ export function NeProtoUsers({ locale }: { locale: AppLocale }) {
   const cluster = useAdminResource<ClusterState>("cluster");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [profile, setProfile] = React.useState("web");
   const [busy, setBusy] = React.useState(false);
   const [credential, setCredential] = React.useState<CredentialView | null>(null);
   const [deleteUser, setDeleteUser] = React.useState<NP2User | null>(null);
@@ -91,7 +90,7 @@ export function NeProtoUsers({ locale }: { locale: AppLocale }) {
     try {
       const result = await adminFetch<{ user: NP2User; uri: string }>("users", {
         method: "POST",
-        json: { name, profile },
+        json: { name },
       });
       const [manual, qr] = await Promise.all([
         adminFetch<{ value: string }>(`users/${encodeURIComponent(result.user.id)}/export?format=manual`),
@@ -294,7 +293,7 @@ export function NeProtoUsers({ locale }: { locale: AppLocale }) {
             <TableHeader>
               <TableRow>
                 <TableHead>{ru ? "Имя" : "Name"}</TableHead>
-                <TableHead>{ru ? "Профиль" : "Profile"}</TableHead>
+                <TableHead>{ru ? "Режим" : "Mode"}</TableHead>
                 <TableHead>{ru ? "Статус" : "Status"}</TableHead>
                 <TableHead>{ru ? "Трафик" : "Traffic"}</TableHead>
                 <TableHead>{ru ? "Устройства" : "Devices"}</TableHead>
@@ -309,7 +308,7 @@ export function NeProtoUsers({ locale }: { locale: AppLocale }) {
                     <div className="font-medium">{user.name}</div>
                     <div className="font-mono text-muted-foreground text-xs">{user.id}</div>
                   </TableCell>
-                  <TableCell>{user.profile}</TableCell>
+                  <TableCell>{ru ? "Автоматически" : "Automatic"}</TableCell>
                   <TableCell>
                     <div className="flex flex-col items-start gap-1">
                       <StateBadge state={connectionState(user)} label={connectionStateLabel(user, ru)} />
@@ -420,27 +419,14 @@ export function NeProtoUsers({ locale }: { locale: AppLocale }) {
             <DialogTitle>{ru ? "Новый пользователь NP/2" : "New NP/2 user"}</DialogTitle>
             <DialogDescription>
               {ru
-                ? "Профиль определяет поведение маскировки клиента."
-                : "The profile controls client carrier behavior."}
+                ? "NP/2 автоматически адаптирует транспорт и маскировку под текущий трафик и сеть."
+                : "NP/2 automatically adapts transport and cover behavior to current traffic and network conditions."}
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field>
               <FieldLabel>{ru ? "Имя устройства или пользователя" : "Device or user name"}</FieldLabel>
               <Input value={name} maxLength={96} onChange={(event) => setName(event.target.value)} />
-            </Field>
-            <Field>
-              <FieldLabel>{ru ? "Профиль" : "Profile"}</FieldLabel>
-              <Select value={profile} onValueChange={setProfile}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="web">Web</SelectItem>
-                  <SelectItem value="interactive">Interactive</SelectItem>
-                  <SelectItem value="quiet">Quiet</SelectItem>
-                </SelectContent>
-              </Select>
             </Field>
           </FieldGroup>
           <DialogFooter>

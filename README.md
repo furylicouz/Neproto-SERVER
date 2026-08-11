@@ -6,7 +6,7 @@ One release archive contains everything required for either a bare-metal or
 Docker deployment: Go services, Caddy, a pinned Node.js runtime, and the
 standalone web application.
 
-Current release: **NP/2 Constellation `np2-0.5.7`**.
+Current release: **NP/2 Constellation `np2-0.5.8`**.
 
 NeProto Web is built, installed, supervised, and published by the same server
 installer. Its authenticated update screen checks the pinned GitHub repository
@@ -155,6 +155,7 @@ sudo cat /etc/neproto/web-admin.secret
 cmd/                 NP/2 server, client, laboratory, and control binaries
 internal/            Protocol, carriers, sessions, proxy, cluster, and admin
 clients/ios/          Native iOS client sources
+clients/windows/      Native Windows VPN client, service, and installer
 mobile/               Mobile bridge/runtime
 neproto-web/          Next.js NeProto Admin frontend
 deploy/package/       Production installer, services, containers, and tests
@@ -185,15 +186,29 @@ Build the complete Linux AMD64/ARM64 release:
 deploy/build-server-bundle.sh "$(cat VERSION)" dist
 ```
 
+Build the Windows 10/11 x64 client and its single-file installer from
+PowerShell on Windows:
+
+```powershell
+.\clients\windows\build.ps1
+```
+
+The resulting `dist/windows/NeProto-Setup-<version>-x64.exe` installs the WPF
+application, the LocalSystem NP/2 tunnel service, and the signed Wintun driver
+payload. The desktop application runs without elevation; only setup and
+removal request administrator approval. Production releases must Authenticode
+sign the setup bootstrap, application, service, uninstaller, and Wintun DLL.
+
 The release builder compiles the Go programs and pinned Caddy version, verifies
 the pinned Node.js distributions, builds Next.js standalone output, normalizes
 archive permissions, and emits both the archive and its checksum.
 
 ## Releases and updates
 
-Pushing a tag equal to the contents of `VERSION` (for example `np2-0.5.7`)
-triggers the release workflow. It builds the complete bundle, runs isolated
-bare-metal/Docker lifecycle tests, and publishes the archive plus checksum to
+Pushing a tag equal to the contents of `VERSION` (for example `np2-0.5.8`)
+triggers the release workflow. It builds the complete server bundle and the
+Windows x64 setup, runs isolated bare-metal/Docker lifecycle tests plus Windows
+payload verification, and publishes both artifacts with their checksums to
 GitHub Releases.
 
 The web `Updates` screen shows the installed version, the latest stable GitHub

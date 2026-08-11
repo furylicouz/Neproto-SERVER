@@ -1,0 +1,13 @@
+<Window x:Class="NeProto.App.ImportWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Добавить NP/2 сервер" Width="610" Height="390" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Style="{StaticResource NeProtoWindowStyle}">
+  <Grid Margin="28">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <TextBlock Text="Добавить сервер" FontSize="26" FontWeight="SemiBold"/>
+    <TextBlock Grid.Row="1" Text="Вставьте ссылку np2://import/v2 из панели сервера. Секрет будет сразу передан системной службе и сохранён через DPAPI." TextWrapping="Wrap" Foreground="{StaticResource SecondaryTextBrush}" Margin="0,12,0,18"/>
+    <TextBox x:Name="UriBox" Grid.Row="2" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Mono"/>
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+      <Button Content="Отмена" Width="110" Margin="0,0,10,0" Click="Cancel_Click"/>
+      <Button Content="Добавить" Width="120" Style="{StaticResource PrimaryButtonStyle}" Click="Add_Click"/>
+    </StackPanel>
+  </Grid>
+</Window>

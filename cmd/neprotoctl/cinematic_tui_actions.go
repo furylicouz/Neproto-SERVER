@@ -109,10 +109,6 @@ func handleTUIDialogKey(event *tcell.EventKey, model *constellationTUIModel) (ha
 		}
 		return true, false
 	}
-	if dialog.operation == tuiOperationUserAdd && event.Key() == tcell.KeyTab {
-		dialog.aux = nextUserProfile(dialog.aux)
-		return true, false
-	}
 	if dialog.kind == tuiDialogConfirm {
 		if event.Key() == tcell.KeyEnter {
 			model.pending = tuiPendingOperation{operation: dialog.operation, value: dialog.value, aux: dialog.aux}
@@ -354,7 +350,7 @@ func activeUserDialogOptions(users []admin.User) []tuiDialogOption {
 	options := make([]tuiDialogOption, 0, len(users))
 	for _, user := range users {
 		if user.Status == admin.StatusActive {
-			options = append(options, tuiDialogOption{label: user.Name + "  [" + user.Profile + "]", value: user.ID})
+			options = append(options, tuiDialogOption{label: user.Name + "  [automatic]", value: user.ID})
 		}
 	}
 	return options
@@ -599,17 +595,6 @@ func infoDialog(title string, lines []string) *tuiDialog {
 	return &tuiDialog{kind: tuiDialogInfo, title: title, lines: lines}
 }
 
-func nextUserProfile(current string) string {
-	switch current {
-	case "web":
-		return "interactive"
-	case "interactive":
-		return "quiet"
-	default:
-		return "web"
-	}
-}
-
 func executeConstellationOperation(manager *admin.Manager, controller serviceController, model *constellationTUIModel) {
 	pending := model.pending
 	model.pending = tuiPendingOperation{}
@@ -625,7 +610,7 @@ func executeConstellationOperation(manager *admin.Manager, controller serviceCon
 			code = 1
 			break
 		}
-		fmt.Fprintf(&output, "Created %s (%s) with %s profile.\n", user.Name, user.ID, user.Profile)
+		fmt.Fprintf(&output, "Created %s (%s) with automatic traffic adaptation.\n", user.Name, user.ID)
 		if err := controller.Action("restart", &output, &failures); err != nil {
 			fmt.Fprintf(&failures, "credential created, but restart failed: %v\n", err)
 			code = 1

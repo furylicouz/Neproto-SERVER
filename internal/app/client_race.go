@@ -247,7 +247,11 @@ func clientCarrierOrder(http3Configured bool, cachedKind protocol.CarrierKind, c
 		}
 		order = append(order, mode)
 	}
-	if cached {
+	// HTTPS is a compatibility carrier. A successful HTTPS session on a prior
+	// path must not pin future media sessions away from configured HTTP/3
+	// datagrams; probe the fast carriers again and keep HTTPS as the bounded
+	// fallback.
+	if cached && !(http3Configured && cachedKind == protocol.CarrierHTTPS) {
 		appendUnique(carrierProbeMode(cachedKind))
 	}
 	if http3Configured {

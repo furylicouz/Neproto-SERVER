@@ -16,11 +16,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xjasonlyu/tun2socks/v2/core/device"
+
 	"neproto.local/chameleon/internal/app"
 	"neproto.local/chameleon/internal/buildinfo"
 	"neproto.local/chameleon/internal/cluster"
 	"neproto.local/chameleon/internal/config"
 	"neproto.local/chameleon/internal/constellation"
+	"neproto.local/chameleon/internal/cover"
 	"neproto.local/chameleon/internal/protocol"
 	"neproto.local/chameleon/internal/proxy"
 	"neproto.local/chameleon/internal/session"
@@ -34,7 +37,7 @@ var (
 	ErrTunnelAlreadyStarted = errors.New("NP/2 packet tunnel is already running")
 	ErrInvalidTunnelFD      = errors.New("invalid packet tunnel file descriptor")
 	ErrMigrationInProgress  = errors.New("NP/2 carrier migration is already running")
-	ErrCarrierPoolMismatch  = errors.New("NP/2 carrier pool member does not match the primary HTTPS carrier")
+	ErrCarrierPoolMismatch  = errors.New("NP/2 carrier pool candidate is not compatible with the active primary")
 )
 
 const (
@@ -101,6 +104,25 @@ type trafficStats struct {
 	DNSAttributionCached    int64
 	FirstFlightDomainHits   int64
 	FirstFlightFallbacks    int64
+	TCPStreamAttempts       int64
+	TCPStreamSuccesses      int64
+	TCPStreamFailures       int64
+	ActiveStreams           int64
+	FlowControlStalls       int64
+	ProtocolErrors          int64
+	SentCells               int64
+	ReceivedCells           int64
+	SentCellPayloadBytes    int64
+	ReceivedPayloadBytes    int64
+	WindowUpdatesSent       int64
+	WindowUpdatesReceived   int64
+	CoverRealWireBytes      int64
+	CoverPaddingBytes       int64
+	CoverDummyWireBytes     int64
+	CoverProfileTransitions int64
+	CoverWebSessions        int64
+	CoverRealtimeSessions   int64
+	CoverStreamSessions     int64
 }
 
 type clientConnector func(context.Context, config.Client) (mobileRuntime, error)
@@ -295,6 +317,52 @@ func (c *controller) startTunnel(fileDescriptor int) error {
 	return nil
 }
 
+func (c *controller) startTunnelDevice(endpoint device.Device, mtu uint32) error {
+	if endpoint == nil {
+		return ErrInvalidTunnelFD
+	}
+	c.mu.Lock()
+	if c.state == "running" {
+		c.mu.Unlock()
+		return ErrTunnelAlreadyStarted
+	}
+	if c.state != "connected" || c.runtime == nil {
+		c.mu.Unlock()
+		return ErrNotConnected
+	}
+	runtime := c.runtime
+	generation := c.generation
+	c.mu.Unlock()
+	provider, ok := runtime.(interface {
+		StartTunnelDevice(device.Device, uint32) error
+	})
+	if !ok {
+		return ErrNotConnected
+	}
+	if err := provider.StartTunnelDevice(endpoint, mtu); err != nil {
+		c.mu.Lock()
+		if c.generation == generation {
+			c.state = "failed"
+			c.lastErr = err.Error()
+		}
+		cancel := c.cancel
+		c.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+		_ = runtime.Close()
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.generation != generation || c.state != "connected" {
+		_ = runtime.Close()
+		return context.Canceled
+	}
+	c.state = "running"
+	return nil
+}
+
 func (c *controller) failStart(generation uint64, err error, done chan struct{}) {
 	c.mu.Lock()
 	if c.generation == generation {
@@ -444,8 +512,16 @@ func (c *controller) serverAddresses() string {
 
 func (c *controller) carrierName() string {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.carrier
+	runtime := c.runtime
+	state := c.state
+	cached := c.carrier
+	c.mu.Unlock()
+	if runtime != nil && (state == "connected" || state == "running" || state == "migrating") {
+		if current := runtime.CarrierName(); current != "" {
+			return current
+		}
+	}
+	return cached
 }
 
 func (c *controller) trafficStats() trafficStats {
@@ -499,6 +575,8 @@ type np2Runtime struct {
 	mu                   sync.Mutex
 	clientConfig         config.Client
 	connect              func(context.Context, config.Client) (*session.Authenticated, error)
+	connectFast          func(context.Context, config.Client) (*session.Authenticated, error)
+	connectCompatibility func(context.Context, config.Client) (*session.Authenticated, error)
 	session              *session.Authenticated
 	router               *tunstack.SessionRouter
 	stack                *tunstack.Stack
@@ -555,17 +633,30 @@ func (r *np2Runtime) CatalogJSON(ctx context.Context) (string, error) {
 }
 
 func connectRuntime(ctx context.Context, clientConfig config.Client) (mobileRuntime, error) {
-	authenticated, err := app.ConnectClientHTTPSFirst(ctx, clientConfig)
+	authenticated, err := app.ConnectClient(ctx, clientConfig)
 	if err != nil {
 		return nil, err
 	}
-	return newNP2Runtime(clientConfig, authenticated, app.ConnectClientHTTPSFirst)
+	return newNP2RuntimeWithConnectors(
+		clientConfig, authenticated, app.ConnectClient, app.ConnectClientDatagramPreferred,
+		app.ConnectClientHTTPSFirst,
+	)
 }
 
 func newNP2Runtime(
 	clientConfig config.Client,
 	authenticated *session.Authenticated,
 	connect func(context.Context, config.Client) (*session.Authenticated, error),
+) (*np2Runtime, error) {
+	return newNP2RuntimeWithConnectors(clientConfig, authenticated, connect, nil)
+}
+
+func newNP2RuntimeWithConnectors(
+	clientConfig config.Client,
+	authenticated *session.Authenticated,
+	connect func(context.Context, config.Client) (*session.Authenticated, error),
+	connectFast func(context.Context, config.Client) (*session.Authenticated, error),
+	connectCompatibility ...func(context.Context, config.Client) (*session.Authenticated, error),
 ) (*np2Runtime, error) {
 	if authenticated == nil || authenticated.Mux == nil || connect == nil {
 		return nil, ErrNotConnected
@@ -609,19 +700,22 @@ func newNP2Runtime(
 	if poolConfiguredTarget > 3 {
 		poolConfiguredTarget = 3
 	}
-	poolTarget := poolConfiguredTarget
-	if carrierName != "https" {
-		poolTarget = 1
+	compatibilityConnector := connect
+	if len(connectCompatibility) > 0 && connectCompatibility[0] != nil {
+		compatibilityConnector = connectCompatibility[0]
 	}
 	runtime := &np2Runtime{
-		clientConfig: clientConfig, connect: connect, session: authenticated, router: router,
+		clientConfig: clientConfig, connect: connect, connectFast: connectFast,
+		connectCompatibility: compatibilityConnector,
+		session:              authenticated, router: router,
 		serverAddresses: routes, carrierName: carrierName, generation: 1,
 		primaryRouteID: 1,
 		retired:        make(map[uint64]*session.Authenticated), nextRetiredID: 1,
 		done:               make(chan struct{}),
 		nativeProbeTimeout: 1500 * time.Millisecond, drainTimeout: 30 * time.Second,
 		poolContext: poolContext, poolCancel: poolCancel,
-		poolConfiguredTarget: poolConfiguredTarget, poolTarget: poolTarget,
+		poolConfiguredTarget: poolConfiguredTarget,
+		poolTarget:           carrierPoolTarget(poolConfiguredTarget, carrierName),
 		poolSessions:         make(map[uint64]*session.Authenticated),
 		constellationControl: constellationControl, continuityRouter: continuityRouter,
 		continuityMaxFlows: continuityMaxFlows,
@@ -778,6 +872,26 @@ func (r *np2Runtime) StartTunnel(fileDescriptor int) error {
 	return nil
 }
 
+func (r *np2Runtime) StartTunnelDevice(endpoint device.Device, mtu uint32) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed || r.session == nil || r.router == nil {
+		return ErrNotConnected
+	}
+	if r.stack != nil {
+		return ErrTunnelAlreadyStarted
+	}
+	stack, err := tunstack.StartWithSessionRouterDevice(endpoint, mtu, r.router)
+	if err != nil {
+		return err
+	}
+	r.stack = stack
+	if r.poolConfiguredTarget > 1 {
+		go r.runCarrierPool()
+	}
+	return nil
+}
+
 func (r *np2Runtime) Wait(ctx context.Context) error {
 	if ctx == nil {
 		return context.Canceled
@@ -868,22 +982,30 @@ func (r *np2Runtime) warmCarrierPool(ctx context.Context, desired int) error {
 		}
 		healthy := 1 + len(r.poolSessions)
 		connect := r.connect
+		connectFast := r.connectFast
+		connectCompatibility := r.connectCompatibility
 		clientConfig := r.clientConfig
 		primaryCarrier := r.carrierName
 		r.mu.Unlock()
 		if healthy >= target {
 			return nil
 		}
-		if primaryCarrier != "https" {
-			return ErrCarrierPoolMismatch
+		var authenticated *session.Authenticated
+		var err error
+		if primaryCarrier == "https" && connectFast != nil {
+			authenticated, err = connectFast(attemptContext, clientConfig)
+		} else if primaryCarrier != "https" && connectCompatibility != nil {
+			authenticated, err = connectCompatibility(attemptContext, clientConfig)
 		}
-
-		authenticated, err := connect(attemptContext, clientConfig)
+		if err != nil || authenticated == nil {
+			authenticated, err = connect(attemptContext, clientConfig)
+		}
 		if err != nil {
 			r.recordPoolFailure()
 			return err
 		}
-		if authenticated == nil || authenticated.Mux == nil || authenticated.Carrier != protocol.CarrierHTTPS {
+		if authenticated == nil || authenticated.Mux == nil ||
+			carrierPriority(authenticated.Carrier) == 0 {
 			if authenticated != nil && authenticated.Mux != nil {
 				_ = authenticated.Mux.Close()
 			}
@@ -913,6 +1035,28 @@ func (r *np2Runtime) warmCarrierPool(ctx context.Context, desired int) error {
 			r.recordPoolFailure()
 			return err
 		}
+		if carrierPriority(authenticated.Carrier) > carrierNamePriority(primaryCarrier) {
+			if err := r.promoteWarmCandidate(
+				primaryCarrier, authenticated, maximumPayload, datagrams, control, continuityState,
+			); err != nil {
+				if control != nil {
+					_ = control.Close()
+				}
+				_ = authenticated.Mux.Close()
+				r.recordPoolFailure()
+				return err
+			}
+			return nil
+		}
+		candidateName, nameErr := mobileCarrierName(authenticated.Carrier)
+		if nameErr != nil || (primaryCarrier != "https" && candidateName == primaryCarrier) {
+			if control != nil {
+				_ = control.Close()
+			}
+			_ = authenticated.Mux.Close()
+			r.recordPoolFailure()
+			return ErrCarrierPoolMismatch
+		}
 		r.mu.Lock()
 		if r.closed || r.migrationInProgress || r.carrierName != primaryCarrier ||
 			r.poolTarget < target {
@@ -926,12 +1070,19 @@ func (r *np2Runtime) warmCarrierPool(ctx context.Context, desired int) error {
 			}
 			return ErrMigrationInProgress
 		}
-		routeID, err := r.router.Add(authenticated.Mux, maximumPayload, datagrams)
+		standby := primaryCarrier != "https"
+		var routeID uint64
+		if standby {
+			routeID, err = r.router.AddStandby(authenticated.Mux, maximumPayload, datagrams)
+		} else {
+			routeID, err = r.router.Add(authenticated.Mux, maximumPayload, datagrams)
+		}
 		if err == nil && r.continuityRouter != nil {
 			err = r.continuityRouter.AddRoute(tunstack.ContinuityRoute{
 				ID: routeID, Mux: authenticated.Mux, Control: control,
 				ConstellationID: continuityState.ConstellationID, LeaseKey: continuityState.LeaseKey,
 				SupportsDatagram: authenticated.Datagrams != nil && authenticated.Datagrams.Enabled(),
+				Standby:          standby,
 			})
 			if err != nil {
 				r.router.Remove(routeID)
@@ -955,6 +1106,128 @@ func (r *np2Runtime) warmCarrierPool(ctx context.Context, desired int) error {
 		}
 		go r.watchPoolSession(routeID, authenticated)
 	}
+}
+
+func carrierPriority(kind protocol.CarrierKind) int {
+	switch kind {
+	case protocol.CarrierHTTP3:
+		return 3
+	case protocol.CarrierWebRTC:
+		return 2
+	case protocol.CarrierHTTPS:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func carrierNamePriority(name string) int {
+	switch name {
+	case "http3":
+		return carrierPriority(protocol.CarrierHTTP3)
+	case "webrtc":
+		return carrierPriority(protocol.CarrierWebRTC)
+	case "https":
+		return carrierPriority(protocol.CarrierHTTPS)
+	default:
+		return 0
+	}
+}
+
+func carrierPoolTarget(configured int, carrierName string) int {
+	configured = min(max(configured, 1), 3)
+	if carrierName != "https" {
+		return min(configured, 2)
+	}
+	return configured
+}
+
+func (r *np2Runtime) promoteWarmCandidate(
+	expectedPrimary string,
+	replacement *session.Authenticated,
+	maximumPayload uint64,
+	datagrams *session.DatagramMux,
+	replacementControl *constellation.ControlChannel,
+	continuityState constellation.ClientControlState,
+) error {
+	if r == nil || replacement == nil || replacement.Mux == nil {
+		return ErrCarrierPoolMismatch
+	}
+	replacementName, err := mobileCarrierName(replacement.Carrier)
+	if err != nil || carrierNamePriority(replacementName) <= carrierNamePriority(expectedPrimary) {
+		return ErrCarrierPoolMismatch
+	}
+
+	r.mu.Lock()
+	if r.closed || r.migrationInProgress || r.session == nil ||
+		r.carrierName != expectedPrimary {
+		r.mu.Unlock()
+		return ErrMigrationInProgress
+	}
+	current := r.session
+	oldRouteID := r.primaryRouteID
+	replacementRouteID, err := r.router.AddStandby(replacement.Mux, maximumPayload, datagrams)
+	if err != nil {
+		r.mu.Unlock()
+		return err
+	}
+	if r.continuityRouter != nil {
+		if err := r.continuityRouter.AddRoute(tunstack.ContinuityRoute{
+			ID: replacementRouteID, Mux: replacement.Mux, Control: replacementControl,
+			ConstellationID: continuityState.ConstellationID, LeaseKey: continuityState.LeaseKey,
+			SupportsDatagram: replacement.Datagrams != nil && replacement.Datagrams.Enabled(),
+			Standby:          true,
+		}); err != nil {
+			r.router.Remove(replacementRouteID)
+			r.mu.Unlock()
+			return err
+		}
+	}
+	if err := r.router.Promote(replacementRouteID); err != nil {
+		if r.continuityRouter != nil {
+			r.continuityRouter.RemoveRoute(replacementRouteID)
+		}
+		r.router.Remove(replacementRouteID)
+		r.mu.Unlock()
+		return err
+	}
+	if r.continuityRouter != nil {
+		if !r.continuityRouter.SetStandby(replacementRouteID, false) ||
+			!r.continuityRouter.SetStandby(oldRouteID, true) {
+			_ = r.router.Promote(oldRouteID)
+			r.continuityRouter.RemoveRoute(replacementRouteID)
+			r.router.Remove(replacementRouteID)
+			r.mu.Unlock()
+			return ErrCarrierPoolMismatch
+		}
+	}
+	if !r.router.SetStandby(oldRouteID, true) {
+		_ = r.router.Promote(oldRouteID)
+		if r.continuityRouter != nil {
+			_ = r.continuityRouter.SetStandby(oldRouteID, false)
+			r.continuityRouter.RemoveRoute(replacementRouteID)
+		}
+		r.router.Remove(replacementRouteID)
+		r.mu.Unlock()
+		return ErrCarrierPoolMismatch
+	}
+	r.generation++
+	replacementGeneration := r.generation
+	r.session = replacement
+	r.primaryRouteID = replacementRouteID
+	r.poolSessions[oldRouteID] = current
+	if replacementControl != nil {
+		r.controls[replacement] = replacementControl
+	}
+	r.carrierName = replacementName
+	r.poolTarget = carrierPoolTarget(r.poolConfiguredTarget, replacementName)
+	r.poolScaleUps++
+	r.pendingTerminal = nil
+	r.mu.Unlock()
+
+	go r.watchSession(replacementGeneration, replacement)
+	go r.watchPoolSession(oldRouteID, current)
+	return nil
 }
 
 func (r *np2Runtime) watchPoolSession(routeID uint64, authenticated *session.Authenticated) {
@@ -1263,10 +1536,7 @@ func (r *np2Runtime) NetworkChanged(ctx context.Context) (migrationResult, error
 		r.controls[replacement] = replacementControl
 	}
 	r.carrierName = carrierName
-	r.poolTarget = r.poolConfiguredTarget
-	if carrierName != "https" {
-		r.poolTarget = 1
-	}
+	r.poolTarget = carrierPoolTarget(r.poolConfiguredTarget, carrierName)
 	r.migrationInProgress = false
 	r.pendingTerminal = nil
 	r.mu.Unlock()
@@ -1366,6 +1636,10 @@ func (r *np2Runtime) promoteWarmCarrier(
 		r.mu.Unlock()
 		return false
 	}
+	if r.continuityRouter != nil && !r.continuityRouter.SetStandby(selectedID, false) {
+		r.mu.Unlock()
+		return false
+	}
 	oldRouteID := r.primaryRouteID
 	oldControl := r.controls[authenticated]
 	delete(r.controls, authenticated)
@@ -1378,10 +1652,7 @@ func (r *np2Runtime) promoteWarmCarrier(
 	if name, err := mobileCarrierName(selected.Carrier); err == nil {
 		r.carrierName = name
 	}
-	r.poolTarget = r.poolConfiguredTarget
-	if r.carrierName != "https" {
-		r.poolTarget = 1
-	}
+	r.poolTarget = carrierPoolTarget(r.poolConfiguredTarget, r.carrierName)
 	continuityRouter := r.continuityRouter
 	r.mu.Unlock()
 
@@ -1489,15 +1760,86 @@ func (r *np2Runtime) CarrierName() string {
 	return r.carrierName
 }
 
+func saturatingProtocolStatAdd(current int64, value uint64) int64 {
+	const maxInt64 = int64(^uint64(0) >> 1)
+	if current >= maxInt64 || value > uint64(maxInt64-current) {
+		return maxInt64
+	}
+	return current + int64(value)
+}
+
+// aggregateProtocolTrafficStats produces bounded, payload- and
+// destination-free counters suitable for Packet Tunnel diagnostics.
+func aggregateProtocolTrafficStats(muxStats []session.Stats, coverStats []cover.TransportStats) trafficStats {
+	var result trafficStats
+	for _, stats := range muxStats {
+		result.ActiveStreams = saturatingProtocolStatAdd(result.ActiveStreams, stats.ActiveStreams)
+		result.FlowControlStalls = saturatingProtocolStatAdd(result.FlowControlStalls, stats.FlowControlStalls)
+		result.ProtocolErrors = saturatingProtocolStatAdd(result.ProtocolErrors, stats.ProtocolErrors)
+		result.SentCells = saturatingProtocolStatAdd(result.SentCells, stats.SentCells)
+		result.ReceivedCells = saturatingProtocolStatAdd(result.ReceivedCells, stats.ReceivedCells)
+		result.SentCellPayloadBytes = saturatingProtocolStatAdd(result.SentCellPayloadBytes, stats.SentCellPayloadBytes)
+		result.ReceivedPayloadBytes = saturatingProtocolStatAdd(result.ReceivedPayloadBytes, stats.ReceivedPayloadBytes)
+		result.WindowUpdatesSent = saturatingProtocolStatAdd(result.WindowUpdatesSent, stats.WindowUpdatesSent)
+		result.WindowUpdatesReceived = saturatingProtocolStatAdd(result.WindowUpdatesReceived, stats.WindowUpdatesReceived)
+	}
+	for _, stats := range coverStats {
+		result.CoverRealWireBytes = saturatingProtocolStatAdd(result.CoverRealWireBytes, stats.RealWireBytes)
+		result.CoverPaddingBytes = saturatingProtocolStatAdd(result.CoverPaddingBytes, stats.PaddingBytes)
+		result.CoverDummyWireBytes = saturatingProtocolStatAdd(result.CoverDummyWireBytes, stats.DummyWireBytes)
+		result.CoverProfileTransitions = saturatingProtocolStatAdd(result.CoverProfileTransitions, stats.ProfileTransitions)
+		switch stats.TrafficClass {
+		case cover.TrafficWeb:
+			result.CoverWebSessions = saturatingProtocolStatAdd(result.CoverWebSessions, 1)
+		case cover.TrafficRealtime:
+			result.CoverRealtimeSessions = saturatingProtocolStatAdd(result.CoverRealtimeSessions, 1)
+		case cover.TrafficStream:
+			result.CoverStreamSessions = saturatingProtocolStatAdd(result.CoverStreamSessions, 1)
+		}
+	}
+	return result
+}
+
 func (r *np2Runtime) TrafficStats() trafficStats {
 	r.mu.Lock()
 	stack := r.stack
 	router := r.router
 	closed := r.closed
+	sessions := make([]*session.Authenticated, 0, 1+len(r.poolSessions)+len(r.retired))
+	seen := make(map[*session.Authenticated]struct{}, cap(sessions))
+	appendSession := func(authenticated *session.Authenticated) {
+		if authenticated == nil {
+			return
+		}
+		if _, exists := seen[authenticated]; exists {
+			return
+		}
+		seen[authenticated] = struct{}{}
+		sessions = append(sessions, authenticated)
+	}
+	appendSession(r.session)
+	for _, authenticated := range r.poolSessions {
+		appendSession(authenticated)
+	}
+	for _, authenticated := range r.retired {
+		appendSession(authenticated)
+	}
 	r.mu.Unlock()
-	if closed || stack == nil {
+	if closed || stack == nil || router == nil {
 		return trafficStats{}
 	}
+	muxStats := make([]session.Stats, 0, len(sessions))
+	coverStats := make([]cover.TransportStats, 0, len(sessions))
+	for _, authenticated := range sessions {
+		if authenticated.Mux != nil {
+			muxStats = append(muxStats, authenticated.Mux.Stats())
+		}
+		if authenticated.Cover != nil {
+			coverStats = append(coverStats, authenticated.Cover.Stats())
+		}
+	}
+	protocolStats := aggregateProtocolTrafficStats(muxStats, coverStats)
+	tcpAttempts, tcpSuccesses, tcpFailures := router.TCPStreamStats()
 	uploadRate, downloadRate, uploadTotal, downloadTotal := stack.TrafficStats()
 	dnsStats := stack.DNSAttributionStats()
 	poolTarget, poolHealthy, assignments, scaleUps, failures := r.carrierPoolStats()
@@ -1510,9 +1852,28 @@ func (r *np2Runtime) TrafficStats() trafficStats {
 		CarrierPoolFailures:   int64(failures),
 		DNSAttributionQueries: int64(dnsStats.Queries), DNSAttributionResponses: int64(dnsStats.Responses),
 		DNSAttributionHits: int64(dnsStats.Hits), DNSAttributionMisses: int64(dnsStats.Misses),
-		DNSAttributionCached:  int64(dnsStats.Cached),
-		FirstFlightDomainHits: int64(dnsStats.FirstFlightDomainHits),
-		FirstFlightFallbacks:  int64(dnsStats.FirstFlightFallbacks),
+		DNSAttributionCached:    int64(dnsStats.Cached),
+		FirstFlightDomainHits:   int64(dnsStats.FirstFlightDomainHits),
+		FirstFlightFallbacks:    int64(dnsStats.FirstFlightFallbacks),
+		TCPStreamAttempts:       int64(tcpAttempts),
+		TCPStreamSuccesses:      int64(tcpSuccesses),
+		TCPStreamFailures:       int64(tcpFailures),
+		ActiveStreams:           protocolStats.ActiveStreams,
+		FlowControlStalls:       protocolStats.FlowControlStalls,
+		ProtocolErrors:          protocolStats.ProtocolErrors,
+		SentCells:               protocolStats.SentCells,
+		ReceivedCells:           protocolStats.ReceivedCells,
+		SentCellPayloadBytes:    protocolStats.SentCellPayloadBytes,
+		ReceivedPayloadBytes:    protocolStats.ReceivedPayloadBytes,
+		WindowUpdatesSent:       protocolStats.WindowUpdatesSent,
+		WindowUpdatesReceived:   protocolStats.WindowUpdatesReceived,
+		CoverRealWireBytes:      protocolStats.CoverRealWireBytes,
+		CoverPaddingBytes:       protocolStats.CoverPaddingBytes,
+		CoverDummyWireBytes:     protocolStats.CoverDummyWireBytes,
+		CoverProfileTransitions: protocolStats.CoverProfileTransitions,
+		CoverWebSessions:        protocolStats.CoverWebSessions,
+		CoverRealtimeSessions:   protocolStats.CoverRealtimeSessions,
+		CoverStreamSessions:     protocolStats.CoverStreamSessions,
 	}
 }
 
@@ -1647,6 +2008,46 @@ func DNSAttributionCachedCount() int64 { return defaultController.trafficStats()
 func FirstFlightDomainHitCount() int64 { return defaultController.trafficStats().FirstFlightDomainHits }
 
 func FirstFlightFallbackCount() int64 { return defaultController.trafficStats().FirstFlightFallbacks }
+
+func TCPStreamAttemptCount() int64 { return defaultController.trafficStats().TCPStreamAttempts }
+
+func TCPStreamSuccessCount() int64 { return defaultController.trafficStats().TCPStreamSuccesses }
+
+func TCPStreamFailureCount() int64 { return defaultController.trafficStats().TCPStreamFailures }
+
+func ActiveStreamCount() int64 { return defaultController.trafficStats().ActiveStreams }
+
+func FlowControlStallCount() int64 { return defaultController.trafficStats().FlowControlStalls }
+
+func ProtocolErrorCount() int64 { return defaultController.trafficStats().ProtocolErrors }
+
+func SentCellCount() int64 { return defaultController.trafficStats().SentCells }
+
+func ReceivedCellCount() int64 { return defaultController.trafficStats().ReceivedCells }
+
+func SentCellPayloadByteCount() int64 { return defaultController.trafficStats().SentCellPayloadBytes }
+
+func ReceivedPayloadByteCount() int64 { return defaultController.trafficStats().ReceivedPayloadBytes }
+
+func WindowUpdateSentCount() int64 { return defaultController.trafficStats().WindowUpdatesSent }
+
+func WindowUpdateReceivedCount() int64 { return defaultController.trafficStats().WindowUpdatesReceived }
+
+func CoverRealWireByteCount() int64 { return defaultController.trafficStats().CoverRealWireBytes }
+
+func CoverPaddingByteCount() int64 { return defaultController.trafficStats().CoverPaddingBytes }
+
+func CoverDummyWireByteCount() int64 { return defaultController.trafficStats().CoverDummyWireBytes }
+
+func CoverProfileTransitionCount() int64 {
+	return defaultController.trafficStats().CoverProfileTransitions
+}
+
+func CoverWebSessionCount() int64 { return defaultController.trafficStats().CoverWebSessions }
+
+func CoverRealtimeSessionCount() int64 { return defaultController.trafficStats().CoverRealtimeSessions }
+
+func CoverStreamSessionCount() int64 { return defaultController.trafficStats().CoverStreamSessions }
 
 func NetworkChangeCount() int64 { return int64(defaultController.networkChangeCount()) }
 

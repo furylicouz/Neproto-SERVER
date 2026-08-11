@@ -479,6 +479,12 @@ final class VPNService: ObservableObject {
                         "dns_attribution_queries", "dns_attribution_responses", "dns_attribution_hits",
                         "dns_attribution_misses", "dns_attribution_cached",
                         "first_flight_domain_hits", "first_flight_fallbacks",
+                        "tcp_stream_attempts", "tcp_stream_successes", "tcp_stream_failures",
+                        "active_streams", "flow_control_stalls", "protocol_errors",
+                        "sent_cells", "received_cells", "sent_cell_payload_bytes", "received_payload_bytes",
+                        "window_updates_sent", "window_updates_received",
+                        "cover_real_wire_bytes", "cover_padding_bytes", "cover_dummy_wire_bytes",
+                        "cover_profile_transitions", "cover_web_sessions", "cover_realtime_sessions", "cover_stream_sessions",
                         "network_changes", "reconnects", "migrations",
                     ].compactMap { key -> String? in
                         guard let value = object[key] else { return nil }

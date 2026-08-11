@@ -151,17 +151,17 @@ func connectClientForRun(
 
 func clientConnectorForRun(
 	clientConfig config.Client,
-	performance runtimeClientConnect,
-	udpFirst runtimeClientConnect,
+	compatibility runtimeClientConnect,
+	adaptive runtimeClientConnect,
 ) (runtimeClientConnect, error) {
-	if performance == nil || udpFirst == nil {
+	if compatibility == nil || adaptive == nil {
 		return nil, config.ErrInvalidConfig
 	}
 	switch clientConfig.CarrierPolicy {
 	case "", config.CarrierPolicyPerformance:
-		return performance, nil
+		return adaptive, nil
 	case config.CarrierPolicyUDPFirst:
-		return udpFirst, nil
+		return adaptive, nil
 	default:
 		return nil, config.ErrInvalidConfig
 	}
@@ -181,6 +181,17 @@ func ConnectClient(ctx context.Context, clientConfig config.Client) (*session.Au
 // HTTPS carrier is unavailable.
 func ConnectClientHTTPSFirst(ctx context.Context, clientConfig config.Client) (*session.Authenticated, error) {
 	return connectClientHTTPSFirst(ctx, clientConfig, connectClient)
+}
+
+// ConnectClientDatagramPreferred is used only after a compatibility carrier
+// already provides connectivity. It gives HTTP/3 and then WebRTC their full
+// bounded authentication attempts without allowing HTTPS to cancel the warm
+// probe. The caller keeps the existing carrier until this function succeeds.
+func ConnectClientDatagramPreferred(
+	ctx context.Context,
+	clientConfig config.Client,
+) (*session.Authenticated, error) {
+	return connectClientDatagramPreferred(ctx, clientConfig, connectClient)
 }
 
 type clientSessionDial func(
@@ -207,12 +218,34 @@ func connectClientHTTPSFirst(
 	return nil, errors.Join(failures...)
 }
 
+func connectClientDatagramPreferred(
+	ctx context.Context, clientConfig config.Client, dial clientSessionDial,
+) (*session.Authenticated, error) {
+	if ctx == nil || dial == nil {
+		return nil, config.ErrInvalidConfig
+	}
+	modes := make([]ProbeMode, 0, 2)
+	if clientConfig.HTTP3Configured() {
+		modes = append(modes, ProbeHTTP3)
+	}
+	modes = append(modes, ProbeWebRTC)
+	failures := make([]error, 0, len(modes))
+	for _, mode := range modes {
+		authenticated, _, err := dial(ctx, clientConfig, mode)
+		if err == nil {
+			return authenticated, nil
+		}
+		failures = append(failures, fmt.Errorf("%s: %w", mobileCarrierAttemptLabel(mode), err))
+	}
+	return nil, errors.Join(failures...)
+}
+
 func mobileCarrierAttemptLabel(mode ProbeMode) string {
 	switch mode {
 	case ProbeHTTPS:
 		return "HTTPS carrier"
 	case ProbeHTTP3:
-		return "HTTP/3 fallback"
+		return "HTTP/3 carrier"
 	case ProbeWebRTC:
 		return "WebRTC fallback"
 	default:

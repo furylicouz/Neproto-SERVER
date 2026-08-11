@@ -90,12 +90,20 @@ Tunnel.
 
 `PacketTunnelProvider` handles Wi-Fi/cellular path changes outside the stop
 queue. It first sends an authenticated NP/2 `PING/PONG` over the current
-session. A surviving carrier stays active. Otherwise the client runs bounded
-authenticated carrier selection in the measured order HTTPS, HTTP/3, then
-WebRTC, atomically switches new TUN flows to the new
-session, and drains existing streams on the previous session for at most 30
-seconds. A reconnect failure does not tear down a still-live old session, and
-`stopTunnel` cancels migration immediately instead of waiting for its timeout.
+session. A surviving carrier stays active. Otherwise the client performs
+bounded automatic carrier selection, atomically switches new TUN flows to the
+replacement session, and drains existing streams on the previous session for
+at most 30 seconds. A reconnect failure does not tear down a still-live old
+session, and `stopTunnel` cancels migration immediately instead of waiting for
+its timeout.
+
+Initial connection is connectivity-first: HTTPS may establish the tunnel while
+HTTP/3 is still authenticating. When HTTPS is primary, a bounded background
+probe gives HTTP/3 and then WebRTC a complete attempt without exposing a mode
+selector to the user. A successfully authenticated faster carrier is promoted
+automatically; new TCP and UDP flows use it while existing streams drain on the
+previous carrier. HTTPS remains the compatibility path when native datagram
+carriers are unavailable.
 
 The app diagnostics expose aggregate network-change, reconnect, and migration
 counters without server routes, credentials, destinations, or payloads. This

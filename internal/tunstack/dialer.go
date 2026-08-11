@@ -18,9 +18,8 @@ import (
 )
 
 var (
-	ErrInvalidMetadata      = errors.New("invalid TUN flow metadata")
-	ErrUDPUnsupported       = errors.New("NP/2 UDP flows are not supported")
-	ErrReliableQUICFallback = errors.New("QUIC requires TCP fallback on reliable NP/2 UDP carrier")
+	ErrInvalidMetadata = errors.New("invalid TUN flow metadata")
+	ErrUDPUnsupported  = errors.New("NP/2 UDP flows are not supported")
 )
 
 type streamConnection interface {
@@ -40,6 +39,7 @@ type Dialer struct {
 	open                  streamOpenFunc
 	prepareOpen           func() (streamOpenFunc, error)
 	openUDP               udpOpenFunc
+	rejectUDP             func(uint16) bool
 	datagrams             *session.DatagramMux
 	dns                   *dnsAttribution
 	sniffDomains          bool
@@ -84,7 +84,8 @@ func newDialerWithSessionRouter(router *SessionRouter) (*Dialer, error) {
 	}
 	return &Dialer{
 		open: router.openStream, prepareOpen: router.pinStreamOpener,
-		openUDP: router.openUDP, dns: newDNSAttribution(time.Now), sniffDomains: true,
+		openUDP: router.openUDP,
+		dns:     newDNSAttribution(time.Now), sniffDomains: true,
 		udpOpenTimeout: 10 * time.Second,
 	}, nil
 }

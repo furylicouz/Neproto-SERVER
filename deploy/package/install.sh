@@ -412,6 +412,38 @@ EOF
 mv -f -- "$temporary" "$installation"
 chmod 0600 "$installation"
 
+# Managed upgrades must retain the cluster runtime installed by `np`. Only
+# installer-owned paths and bounded identifiers are accepted; arbitrary JSON
+# from the previous server configuration is never carried forward.
+cluster_runtime='{}'
+server_config=$etc_neproto/server.json
+if [[ -s $server_config ]]; then
+  cluster_runtime=$(jq -ce '
+    {
+      cluster_directory: (.cluster_directory // ""),
+      cluster_catalog_ttl: (.cluster_catalog_ttl // ""),
+      cluster_node_id: (.cluster_node_id // ""),
+      cluster_master_node_id: (.cluster_master_node_id // ""),
+      cluster_peer_directory: (.cluster_peer_directory // ""),
+      cluster_peer_map_file: (.cluster_peer_map_file // "")
+    } |
+    if .cluster_directory == "" then {}
+    elif .cluster_directory != "/etc/neproto/cluster" or .cluster_catalog_ttl != "1h" then
+      error("invalid managed cluster catalog paths")
+    elif .cluster_node_id == "" and .cluster_master_node_id == "" and
+         .cluster_peer_directory == "" and .cluster_peer_map_file == "" then
+      {cluster_directory, cluster_catalog_ttl}
+    elif (.cluster_node_id | test("^[a-z0-9][a-z0-9_-]{0,63}$")) and
+         (.cluster_master_node_id | test("^[a-z0-9][a-z0-9_-]{0,63}$")) and
+         .cluster_peer_directory == "/etc/neproto/cluster/peers" and
+         .cluster_peer_map_file == "/etc/neproto/cluster/accepted-peers.json" then .
+    else error("invalid managed cluster runtime") end
+  ' "$server_config") || die 'existing NP/2 cluster runtime is invalid'
+fi
+if [[ $cluster_runtime == '{}' && -s $etc_neproto/cluster/state.json ]]; then
+  cluster_runtime='{"cluster_directory":"/etc/neproto/cluster","cluster_catalog_ttl":"1h"}'
+fi
+
 cat >"$etc_neproto/web.env" <<EOF
 HOSTNAME=$web_host
 PORT=$web_port
@@ -419,7 +451,8 @@ NEPROTO_VERSION=$release_version
 EOF
 chmod 0640 "$etc_neproto/web.env"
 
-cat >"$etc_neproto/server.json" <<EOF
+temporary_server=$(mktemp "$etc_neproto/.server.XXXXXX")
+cat >"$temporary_server" <<EOF
 {
   "server_identity": "$domain",
   "credential_directory": "/etc/neproto/users/active",
@@ -471,7 +504,12 @@ cat >"$etc_neproto/server.json" <<EOF
   "shutdown_timeout": "10s"
 }
 EOF
-chmod 0640 "$etc_neproto/server.json"
+merged_server=$(mktemp "$etc_neproto/.server-merged.XXXXXX")
+jq --argjson cluster "$cluster_runtime" '. + $cluster' "$temporary_server" >"$merged_server" || \
+  die 'cannot merge NP/2 cluster runtime'
+mv -f -- "$merged_server" "$server_config"
+rm -f -- "$temporary_server"
+chmod 0640 "$server_config"
 
 sed -e "s/__DOMAIN__/$domain/g" -e "s|__HTTPS_PATH__|$https_path|g" -e "s|__WEBRTC_PATH__|$webrtc_path|g" \
   "$script_dir/templates/Caddyfile" >"$etc_caddy/Caddyfile"

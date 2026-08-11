@@ -62,3 +62,34 @@ jobs:
           cp -a neproto-web/.next/standalone/. "$stage/web/"
           cp -a neproto-web/.next/static/. "$stage/web/.next/static/"
           deploy/package/tests/web-bundle-smoke.sh "$stage"
+
+  verify-windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Verify Windows client core
+        shell: pwsh
+        run: |
+          go test ./internal/windowsclient ./internal/tunstack ./mobile/np2mobile
+          go vet ./internal/windowsclient ./internal/tunstack ./mobile/np2mobile
+          go build ./cmd/neproto-windows-service ./cmd/neproto-windows-setup
+
+      - name: Build and verify Windows installer
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw VERSION).Trim()
+          ./clients/windows/build.ps1 -Version $version
+          $setup = Get-Item "dist/windows/NeProto-Setup-$version-x64.exe"
+          & $setup.FullName /verify
+          if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }

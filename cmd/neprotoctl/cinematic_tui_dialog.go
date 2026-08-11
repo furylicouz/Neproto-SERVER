@@ -123,7 +123,7 @@ func renderTUIDialog(screen tcell.Screen, model *constellationTUIModel) {
 		}
 		putTUIText(screen, x, y, innerWidth, "> "+visibleInput+"_", tcell.StyleDefault.Foreground(tuiCyan).Background(tuiPanel).Bold(true))
 		if dialog.operation == tuiOperationUserAdd {
-			putTUIRight(screen, right-2, y, "PROFILE "+dialog.aux+" // TAB CHANGE", tcell.StyleDefault.Foreground(tuiGreen).Background(tuiPanel))
+			putTUIRight(screen, right-2, y, "TRAFFIC ADAPTATION AUTOMATIC", tcell.StyleDefault.Foreground(tuiGreen).Background(tuiPanel))
 		}
 	}
 	footer := "ENTER APPLY   ESC CANCEL"

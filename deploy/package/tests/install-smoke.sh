@@ -101,11 +101,30 @@ test_mode() {
   [[ $first_https =~ ^/[a-f0-9]{48}$ && $first_webrtc =~ ^/[a-f0-9]{48}$ && $first_http3 =~ ^/[a-f0-9]{48}$ ]]
   [[ $first_https != "$first_webrtc" && $first_https != "$first_http3" && $first_webrtc != "$first_http3" ]]
 
+  local server_json cluster_runtime
+  server_json=$root/etc/neproto/server.json
+  cluster_runtime=$(mktemp "$root/cluster-runtime.XXXXXX")
+  jq '. + {
+    cluster_directory: "/etc/neproto/cluster",
+    cluster_catalog_ttl: "1h",
+    cluster_node_id: "master",
+    cluster_master_node_id: "master",
+    cluster_peer_directory: "/etc/neproto/cluster/peers",
+    cluster_peer_map_file: "/etc/neproto/cluster/accepted-peers.json"
+  }' "$server_json" >"$cluster_runtime"
+  mv -f -- "$cluster_runtime" "$server_json"
+
   NEPROTO_TEST_MODE=1 "$package_dir/install.sh" --root "$root" --mode "$mode" \
     --domain vpn.example.com --addresses 8.8.8.8 "${web_arguments[@]}" --non-interactive --skip-start
   grep -q "\"https_path\": \"$first_https\"" "$state"
   grep -q "\"webrtc_path\": \"$first_webrtc\"" "$state"
   grep -q "\"http3_path\": \"$first_http3\"" "$state"
+  grep -q '"cluster_directory": "/etc/neproto/cluster"' "$server_json"
+  grep -q '"cluster_catalog_ttl": "1h"' "$server_json"
+  grep -q '"cluster_node_id": "master"' "$server_json"
+  grep -q '"cluster_master_node_id": "master"' "$server_json"
+  grep -q '"cluster_peer_directory": "/etc/neproto/cluster/peers"' "$server_json"
+  grep -q '"cluster_peer_map_file": "/etc/neproto/cluster/accepted-peers.json"' "$server_json"
   [[ $(<"$root/etc/neproto/web-admin.secret") == "$admin_secret_before" ]]
   [[ $(stat -c %a "$root/var/backups/neproto") == 700 ]]
   find "$root/var/backups/neproto" -mindepth 2 -maxdepth 2 -name web-admin.secret -type f -print -quit | grep -q .

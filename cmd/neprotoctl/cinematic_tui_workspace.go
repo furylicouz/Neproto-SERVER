@@ -163,7 +163,7 @@ func renderTUIUsersWorkspace(screen tcell.Screen, model *constellationTUIModel, 
 	muted := tcell.StyleDefault.Foreground(tuiMuted).Background(tuiBackground)
 	putTUIText(screen, x, y, width, fmt.Sprintf("USER ACCESS MATRIX // %d ACTIVE // %d REVOKED", model.snapshot.activeUsers, model.snapshot.revokedUsers), muted)
 	y += 2
-	putTUIText(screen, x, y, width, padTUIText(" ST  NAME                       PROFILE       CREDENTIAL", width), tcell.StyleDefault.Foreground(tuiCyan).Background(tuiPanel).Bold(true))
+	putTUIText(screen, x, y, width, padTUIText(" ST  NAME                       MODE          CREDENTIAL", width), tcell.StyleDefault.Foreground(tuiCyan).Background(tuiPanel).Bold(true))
 	y++
 	visible := maxInt(1, bottom-y-4)
 	start := 0
@@ -179,7 +179,7 @@ func renderTUIUsersWorkspace(screen tcell.Screen, model *constellationTUIModel, 
 		if user.Status != "active" {
 			status = "×"
 		}
-		line := fmt.Sprintf(" %s   %-26s %-13s %s", status, truncateRunes(user.Name, 26), user.Profile, user.ID)
+		line := fmt.Sprintf(" %s   %-26s %-13s %s", status, truncateRunes(user.Name, 26), "automatic", user.ID)
 		style := tcell.StyleDefault.Foreground(tuiWhite).Background(tuiBackground)
 		if index == model.listIndex {
 			style = style.Foreground(tuiBackground).Background(tuiCyan).Bold(true)

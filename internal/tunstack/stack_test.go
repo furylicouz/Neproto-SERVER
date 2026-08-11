@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/xjasonlyu/tun2socks/v2/tunnel/statistic"
+	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 func TestTrafficStatsReportsOneSecondRateAndTotals(t *testing.T) {
@@ -48,5 +49,42 @@ func TestStackReportsDestinationFreeDNSAttributionStats(t *testing.T) {
 	if got := stack.DNSAttributionStats(); got.Queries != 4 || got.Responses != 4 ||
 		got.Hits != 3 || got.Misses != 2 || got.Cached != 1 {
 		t.Fatalf("stats=%+v", got)
+	}
+}
+
+func TestStartWithSessionRouterDeviceRejectsNilDevice(t *testing.T) {
+	if _, err := StartWithSessionRouterDevice(nil, 1500, &SessionRouter{}); err != ErrInvalidStackConfig {
+		t.Fatalf("error=%v, want %v", err, ErrInvalidStackConfig)
+	}
+}
+
+func TestUDPTransportHandlerRejectsQUICBeforeCreatingAssociation(t *testing.T) {
+	forwarded := 0
+	rejected := 0
+	handler := newUDPTransportHandler(
+		func(stack.TransportEndpointID, *stack.PacketBuffer) bool {
+			forwarded++
+			return true
+		},
+		func(port uint16) bool {
+			if port != 443 {
+				return false
+			}
+			rejected++
+			return true
+		},
+	)
+
+	if handled := handler(stack.TransportEndpointID{LocalPort: 443}, nil); handled {
+		t.Fatal("UDP/443 was consumed; false is required for immediate ICMP port-unreachable")
+	}
+	if rejected != 1 || forwarded != 0 {
+		t.Fatalf("UDP/443 rejected=%d forwarded=%d, want 1/0", rejected, forwarded)
+	}
+	if handled := handler(stack.TransportEndpointID{LocalPort: 53}, nil); !handled {
+		t.Fatal("ordinary UDP was rejected")
+	}
+	if rejected != 1 || forwarded != 1 {
+		t.Fatalf("UDP/53 rejected=%d forwarded=%d, want 1/1", rejected, forwarded)
 	}
 }

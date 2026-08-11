@@ -103,23 +103,24 @@ func TestWebAPIUserLifecycleReturnsExplicitCredentialExport(t *testing.T) {
 
 	created := httptest.NewRecorder()
 	handler.ServeHTTP(created, jsonRequest(t, http.MethodPost, "/v1/users", map[string]any{
-		"name": "Alice iPhone", "profile": "web",
+		"name": "Alice iPhone",
 	}))
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create status=%d body=%s", created.Code, created.Body.String())
 	}
 	var creation struct {
 		User struct {
-			ID     string `json:"id"`
-			Name   string `json:"name"`
-			Status string `json:"status"`
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Status  string `json:"status"`
+			Profile string `json:"profile"`
 		} `json:"user"`
 		URI string `json:"uri"`
 	}
 	if err := json.Unmarshal(created.Body.Bytes(), &creation); err != nil {
 		t.Fatal(err)
 	}
-	if creation.User.ID == "" || creation.User.Name != "Alice iPhone" || creation.User.Status != "active" || !strings.HasPrefix(creation.URI, "np2://") {
+	if creation.User.ID == "" || creation.User.Name != "Alice iPhone" || creation.User.Status != "active" || creation.User.Profile != "web" || !strings.HasPrefix(creation.URI, "np2://") {
 		t.Fatalf("unexpected creation response: %+v", creation)
 	}
 	if len(controller.actions) != 1 || controller.actions[0] != "restart" {

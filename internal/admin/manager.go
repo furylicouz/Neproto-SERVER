@@ -356,7 +356,8 @@ func replaceCaddyDomain(raw []byte, oldDomain, newDomain string) ([]byte, error)
 }
 
 func (m *Manager) AddUser(name, profile string) (User, error) {
-	if !validUserName(name) || !validProfile(profile) {
+	profile, ok := automaticUserProfile(profile)
+	if !validUserName(name) || !ok {
 		return User{}, ErrInvalidUser
 	}
 	index, err := m.loadIndex()
@@ -405,6 +406,9 @@ func (m *Manager) ListUsers() ([]User, error) {
 		return nil, err
 	}
 	users := append([]User(nil), index.Users...)
+	for position := range users {
+		users[position].Profile = "web"
+	}
 	sortUsers(users)
 	return users, nil
 }
@@ -503,7 +507,7 @@ func (m *Manager) ExportUserProfile(identifier string) (onboarding.Profile, erro
 		EnableForwardSecrecy: m.installation.EnableForwardSecrecy,
 		ClusterID:            clusterID,
 		CatalogPublicKey:     catalogPublicKey,
-		Profile:              user.Profile,
+		Profile:              "web",
 		Secret:               encodedSecret,
 	}, nil
 }
@@ -956,6 +960,16 @@ func validUserName(value string) bool {
 
 func validProfile(value string) bool {
 	return value == "quiet" || value == "web" || value == "interactive"
+}
+
+// automaticUserProfile keeps legacy API and CLI inputs readable while making
+// the production policy deterministic. Mosaic classifies each flow as web,
+// realtime, or stream at runtime; users no longer select a static profile.
+func automaticUserProfile(value string) (string, bool) {
+	if value == "" || validProfile(value) {
+		return "web", true
+	}
+	return "", false
 }
 
 func validIdentifier(value string) bool {

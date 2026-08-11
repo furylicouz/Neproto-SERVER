@@ -9,6 +9,7 @@ coverage.out
 coverage
 *.exe
 .tools/
+.tmp/
 neproto-web/.next/
 neproto-web/node_modules/
 deploy/package/docker/caddy
@@ -17,3 +18,5 @@ clients/ios/.build/
 clients/ios/DerivedData/
 clients/ios/Frameworks/*.xcframework/
 clients/ios/NeProto.xcodeproj/
+clients/windows/**/bin/
+clients/windows/**/obj/

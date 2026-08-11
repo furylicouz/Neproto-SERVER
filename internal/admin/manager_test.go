@@ -82,6 +82,9 @@ func TestManagerRotatesAndRevokesCredentialAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if user.Profile != "web" {
+		t.Fatalf("legacy manual profile was not normalized to automatic mode: %q", user.Profile)
+	}
 	if _, err := manager.AddUser("Service keeper", "web"); err != nil {
 		t.Fatal(err)
 	}

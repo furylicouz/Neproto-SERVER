@@ -4,7 +4,7 @@
   "socks_listen": "127.0.0.1:1080",
   "https_url": "wss://vpn.example.com/replace-with-random-https-route",
   "webrtc_signaling_url": "https://vpn.example.com/replace-with-random-webrtc-route",
-  "profile": "interactive",
+  "profile": "web",
   "carrier_policy": "performance",
   "max_cover_overhead_percent": 30,
   "initial_window_bytes": 2097152,

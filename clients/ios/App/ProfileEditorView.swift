@@ -13,7 +13,6 @@ struct ProfileEditorView: View {
     @State private var http3Path = ""
     @State private var requireDatagrams = false
     @State private var secret = ""
-    @State private var coverProfile = CoverProfile.interactive
     @State private var errorMessage: String?
 
     var body: some View {
@@ -55,13 +54,6 @@ struct ProfileEditorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Section("Маскировка") {
-                    Picker("Профиль", selection: $coverProfile) {
-                        ForEach(CoverProfile.allCases) { profile in
-                            Text(profile.title).tag(profile)
-                        }
-                    }
-                }
                 if let errorMessage {
                     Section {
                         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -92,7 +84,7 @@ struct ProfileEditorView: View {
             webRTCPath: webRTCPath.trimmingCharacters(in: .whitespacesAndNewlines),
             http3Path: http3Path.trimmingCharacters(in: .whitespacesAndNewlines),
             requireDatagrams: requireDatagrams,
-            coverProfile: coverProfile
+            coverProfile: .web
         )
         do {
             try onSave(profile, secret.trimmingCharacters(in: .whitespacesAndNewlines))

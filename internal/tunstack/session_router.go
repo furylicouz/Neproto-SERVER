@@ -20,6 +20,9 @@ type SessionRouter struct {
 	tieCursor     uint64
 	assignments   atomic.Uint64
 	quicFallbacks atomic.Uint64
+	tcpAttempts   atomic.Uint64
+	tcpSuccesses  atomic.Uint64
+	tcpFailures   atomic.Uint64
 	continuity    *ClientContinuityRouter
 	clientRoutes  *ClientRoutePolicy
 }
@@ -53,6 +56,7 @@ type sessionRoute struct {
 	activeStreams func() uint64
 	datagrams     *session.DatagramMux
 	maxUDPPayload uint64
+	standby       bool
 }
 
 func NewSessionRouter(
@@ -95,6 +99,20 @@ func (r *SessionRouter) Add(
 	return r.addRoute(route)
 }
 
+// AddStandby admits an authenticated carrier for failover without assigning
+// ordinary TCP flows to it while a non-standby route remains healthy.
+func (r *SessionRouter) AddStandby(
+	mux *session.Mux,
+	maxUDPPayload uint64,
+	datagrams *session.DatagramMux,
+) (uint64, error) {
+	route, err := makeSessionRoute(mux, maxUDPPayload, datagrams)
+	if err != nil {
+		return 0, err
+	}
+	return r.addStandbyRoute(route)
+}
+
 // Remove withdraws a secondary route from future TCP flow selection. Existing
 // streams keep their original Mux and are closed by the runtime that owns it.
 func (r *SessionRouter) Remove(id uint64) bool {
@@ -110,13 +128,37 @@ func (r *SessionRouter) Promote(id uint64) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, route := range r.routes {
+	for index, route := range r.routes {
 		if route.id == id && route.open != nil {
+			route.standby = false
+			r.routes[index] = route
 			r.active = route
 			return nil
 		}
 	}
 	return ErrInvalidStackConfig
+}
+
+// SetStandby changes whether a route participates in normal TCP assignment.
+// The route remains authenticated and eligible for explicit promotion.
+func (r *SessionRouter) SetStandby(id uint64, standby bool) bool {
+	if r == nil || id == 0 {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for index, route := range r.routes {
+		if route.id != id || route.open == nil {
+			continue
+		}
+		route.standby = standby
+		r.routes[index] = route
+		if r.active.id == id {
+			r.active = route
+		}
+		return true
+	}
+	return false
 }
 
 func makeSessionRoute(
@@ -170,14 +212,18 @@ func (r *SessionRouter) pinStreamOpener() (streamOpenFunc, error) {
 	if continuityRouter != nil {
 		r.assignments.Add(1)
 		return func(ctx context.Context, metadata []byte) (streamConnection, error) {
+			r.tcpAttempts.Add(1)
 			if clientRoutes != nil {
 				var err error
 				metadata, err = clientRoutes.rewrite(metadata)
 				if err != nil {
+					r.tcpFailures.Add(1)
 					return nil, err
 				}
 			}
-			return continuityRouter.openStream(ctx, metadata)
+			stream, err := continuityRouter.openStream(ctx, metadata)
+			r.observeTCPStreamOpen(err)
+			return stream, err
 		}, nil
 	}
 	route, err := r.selectLeastLoaded()
@@ -186,15 +232,27 @@ func (r *SessionRouter) pinStreamOpener() (streamOpenFunc, error) {
 	}
 	r.assignments.Add(1)
 	return func(ctx context.Context, metadata []byte) (streamConnection, error) {
+		r.tcpAttempts.Add(1)
 		if clientRoutes != nil {
 			var err error
 			metadata, err = clientRoutes.rewrite(metadata)
 			if err != nil {
+				r.tcpFailures.Add(1)
 				return nil, err
 			}
 		}
-		return route.open(ctx, metadata)
+		stream, err := route.open(ctx, metadata)
+		r.observeTCPStreamOpen(err)
+		return stream, err
 	}, nil
+}
+
+func (r *SessionRouter) observeTCPStreamOpen(err error) {
+	if err != nil {
+		r.tcpFailures.Add(1)
+		return
+	}
+	r.tcpSuccesses.Add(1)
 }
 
 func (r *SessionRouter) addRoute(route sessionRoute) (uint64, error) {
@@ -225,6 +283,11 @@ func (r *SessionRouter) addRoute(route sessionRoute) (uint64, error) {
 	return route.id, nil
 }
 
+func (r *SessionRouter) addStandbyRoute(route sessionRoute) (uint64, error) {
+	route.standby = true
+	return r.addRoute(route)
+}
+
 func (r *SessionRouter) removeRoute(id uint64) bool {
 	if r == nil || id == 0 {
 		return false
@@ -253,6 +316,15 @@ func (r *SessionRouter) selectLeastLoaded() (sessionRoute, error) {
 	}
 	if len(routes) == 0 {
 		return sessionRoute{}, ErrInvalidStackConfig
+	}
+	activeRoutes := make([]sessionRoute, 0, len(routes))
+	for _, route := range routes {
+		if !route.standby {
+			activeRoutes = append(activeRoutes, route)
+		}
+	}
+	if len(activeRoutes) > 0 {
+		routes = activeRoutes
 	}
 	minimum := ^uint64(0)
 	ties := make([]sessionRoute, 0, len(routes))
@@ -287,6 +359,15 @@ func (r *SessionRouter) PoolStats() (healthy int, assignments uint64) {
 	return healthy, r.assignments.Load()
 }
 
+// TCPStreamStats reports aggregate open outcomes without retaining target
+// addresses, domains, metadata or payloads.
+func (r *SessionRouter) TCPStreamStats() (attempts, successes, failures uint64) {
+	if r == nil {
+		return 0, 0, 0
+	}
+	return r.tcpAttempts.Load(), r.tcpSuccesses.Load(), r.tcpFailures.Load()
+}
+
 func (r *SessionRouter) openUDP(
 	ctx context.Context,
 	metadata []byte,
@@ -307,22 +388,6 @@ func (r *SessionRouter) openUDP(
 	}
 	if route.maxUDPPayload == 0 {
 		return nil, nil, 0, ErrUDPUnsupported
-	}
-	request, err := proxy.DecodeOpenRequest(metadata)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	// HTTP/3 application traffic sent through a reliable-only carrier becomes
-	// QUIC-over-TCP. A lost outer TCP segment then stalls both reliability
-	// layers and is materially slower than the application's normal HTTPS/TCP
-	// fallback. Reject only QUIC's standard destination port before opening an
-	// NP/2 stream; DNS, calls, games, and every other UDP destination remain
-	// available. Fast carrier datagrams preserve native QUIC semantics.
-	if route.datagrams == nil &&
-		(request.Command == proxy.CommandUDPFixed || request.Command == proxy.CommandUDPClientRoute) &&
-		request.Target.Port == 443 {
-		r.quicFallbacks.Add(1)
-		return nil, nil, 0, ErrReliableQUICFallback
 	}
 	stream, err := route.open(ctx, metadata)
 	if err != nil {
@@ -354,12 +419,11 @@ func (r *SessionRouter) UDPMode() string {
 	if route.datagrams != nil {
 		return "fast-datagram"
 	}
-	return "reliable-stream-quic-fallback"
+	return "reliable-stream-degraded"
 }
 
-// QUICFallbackCount is the cumulative number of UDP/443 flows rejected so
-// applications can retry over HTTPS/TCP without QUIC-over-TCP head-of-line
-// blocking.
+// QUICFallbackCount is retained for diagnostics compatibility. Production
+// clients no longer reject UDP/443; the value remains zero.
 func (r *SessionRouter) QUICFallbackCount() uint64 {
 	if r == nil {
 		return 0

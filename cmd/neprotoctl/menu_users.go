@@ -61,14 +61,14 @@ func printUsers(console menuConsole, users []admin.User) {
 		fmt.Fprintln(console.output, "No users have been created.")
 		return
 	}
-	fmt.Fprintln(console.output, "#   STATUS   PROFILE       NAME                         ID")
+	fmt.Fprintln(console.output, "#   STATUS   MODE          NAME                         ID")
 	for index, user := range users {
 		fmt.Fprintf(
 			console.output,
 			"%-3d %-8s %-13s %-28s %s\n",
 			index+1,
 			user.Status,
-			user.Profile,
+			"automatic",
 			truncateRunes(user.Name, 28),
 			user.ID,
 		)
@@ -81,17 +81,7 @@ func menuAddUser(console menuConsole, manager *admin.Manager, controller service
 		fmt.Fprintln(console.output, "Creation cancelled.")
 		return
 	}
-	fmt.Fprintln(console.output, "Traffic profile: 1=quiet, 2=web, 3=interactive")
-	profileSelection, ok := console.readLine("Profile [2]: ")
-	if !ok {
-		return
-	}
-	profile := map[string]string{"": "web", "1": "quiet", "2": "web", "3": "interactive"}[profileSelection]
-	if profile == "" {
-		fmt.Fprintln(console.output, "Invalid traffic profile.")
-		return
-	}
-	user, err := manager.AddUser(name, profile)
+	user, err := manager.AddUser(name, "web")
 	if err != nil {
 		fmt.Fprintf(console.errors, "create user failed: %v\n", err)
 		return

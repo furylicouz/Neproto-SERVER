@@ -358,7 +358,7 @@ func TestConstellationTUIWorkspaceActionsStayInsideDialog(t *testing.T) {
 	}
 	handleConstellationTUIKey(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), &model)
 	quit, invoke = handleConstellationTUIKey(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), &model)
-	if quit || !invoke || model.pending.operation != tuiOperationUserAdd || model.pending.value != "Bob" || model.pending.aux != "interactive" {
+	if quit || !invoke || model.pending.operation != tuiOperationUserAdd || model.pending.value != "Bob" || model.pending.aux != "web" {
 		t.Fatalf("new-user action not queued internally: quit=%v invoke=%v pending=%+v", quit, invoke, model.pending)
 	}
 

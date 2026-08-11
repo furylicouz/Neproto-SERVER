@@ -41,7 +41,7 @@ struct ServerProfileTests {
         #expect(object["enable_constellation"] as? Bool == true)
         #expect(object["enable_forward_secrecy"] as? Bool == true)
         #expect(object["max_cover_overhead_percent"] as? Int == 30)
-        #expect(object["profile"] as? String == CoverProfile.interactive.rawValue)
+        #expect(object["profile"] as? String == CoverProfile.web.rawValue)
         #expect(object["socks_listen"] == nil)
         #expect(object["max_socks_connections"] == nil)
         #expect(object["secret_file"] as? String == "keychain")

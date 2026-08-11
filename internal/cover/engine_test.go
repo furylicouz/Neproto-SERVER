@@ -78,6 +78,27 @@ func TestProfilesRespectRealCellLatencyCeilings(t *testing.T) {
 	}
 }
 
+func TestWebProfileAddsDelayOncePerBurstInsteadOfEveryCell(t *testing.T) {
+	engine, err := NewEngine(Config{
+		Profile: ProfileWeb, MaxOverheadPercent: 20, MaxBudgetBytes: 65_535,
+		Seed: [32]byte{0x62, 0x75, 0x72, 0x73, 0x74},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_900_000_000, 0)
+	for index := 0; index < 64; index++ {
+		plannedAt := now.Add(time.Duration(index) * time.Millisecond)
+		decision, planErr := engine.PlanReal(plannedAt, 1500)
+		if planErr != nil {
+			t.Fatal(planErr)
+		}
+		if index > 0 && !decision.SendAt.Equal(plannedAt) {
+			t.Fatalf("cell %d in one burst received per-cell delay %s", index, decision.SendAt.Sub(plannedAt))
+		}
+	}
+}
+
 func TestOverheadNeverExceedsConfiguredBudget(t *testing.T) {
 	const budgetPercent = 30
 	engine, err := NewEngine(Config{

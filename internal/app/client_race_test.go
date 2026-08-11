@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -126,6 +127,14 @@ func TestClientCarrierOrderUsesFreshPreferenceWithoutDroppingFallbacks(t *testin
 		if got[index] != want[index] {
 			t.Fatalf("order=%v want=%v", got, want)
 		}
+	}
+}
+
+func TestClientCarrierOrderDoesNotPinCachedHTTPSAheadOfDatagrams(t *testing.T) {
+	got := clientCarrierOrder(true, protocol.CarrierHTTPS, true)
+	want := []ProbeMode{ProbeHTTP3, ProbeWebRTC, ProbeHTTPS}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("order=%v want=%v", got, want)
 	}
 }
 

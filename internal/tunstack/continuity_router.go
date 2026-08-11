@@ -33,6 +33,7 @@ type ContinuityRoute struct {
 	RTT              time.Duration
 	LossPPM          uint32
 	ThroughputBPS    uint64
+	Standby          bool
 }
 
 type ClientContinuityRouterConfig struct {
@@ -176,6 +177,27 @@ func (r *ClientContinuityRouter) UpdateRouteMetrics(
 	route.ThroughputBPS = metrics.ThroughputBPS
 	r.routes[id] = route
 	return nil
+}
+
+// SetStandby excludes a healthy compatibility route from ordinary flow
+// scheduling while keeping it available when no primary route remains.
+func (r *ClientContinuityRouter) SetStandby(id uint64, standby bool) bool {
+	if r == nil || id == 0 {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed {
+		return false
+	}
+	route, exists := r.routes[id]
+	if !exists {
+		return false
+	}
+	route.Standby = standby
+	r.routes[id] = route
+	r.signalRoutesLocked()
+	return true
 }
 
 func (r *ClientContinuityRouter) SwitchRoute(route ContinuityRoute) error {
@@ -503,17 +525,26 @@ func (r *ClientContinuityRouter) selectRouteLocked(
 	class constellation.FlowClass,
 ) (ContinuityRoute, error) {
 	candidates := make([]constellation.ScheduleCandidate, 0, len(r.routes))
+	standbyCandidates := make([]constellation.ScheduleCandidate, 0, len(r.routes))
 	for _, route := range r.routes {
 		if route.LeaseKey == exclude || route.Mux.Err() != nil {
 			continue
 		}
-		candidates = append(candidates, constellation.ScheduleCandidate{
+		candidate := constellation.ScheduleCandidate{
 			LeaseKey: route.LeaseKey, Carrier: route.Mux.CarrierKind(), Healthy: true,
 			SupportsDatagram: route.SupportsDatagram,
 			ActiveStreams:    route.Mux.Stats().ActiveStreams, MaxStreams: route.Mux.MaxStreams(),
 			QueueBytes: route.QueueBytes, RTT: route.RTT, LossPPM: route.LossPPM,
 			ThroughputBPS: route.ThroughputBPS,
-		})
+		}
+		if route.Standby {
+			standbyCandidates = append(standbyCandidates, candidate)
+		} else {
+			candidates = append(candidates, candidate)
+		}
+	}
+	if len(candidates) == 0 {
+		candidates = standbyCandidates
 	}
 	selectedKey, err := r.scheduler.Select(class, protocol.ContinuityID{}, candidates)
 	if err != nil {

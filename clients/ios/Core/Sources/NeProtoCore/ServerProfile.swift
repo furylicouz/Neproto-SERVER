@@ -156,7 +156,9 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
             httpsURL: "wss://\(serverIdentity)\(httpsPath)",
             webRTCSignalingURL: "https://\(serverIdentity)\(webRTCPath)",
             http3URL: normalizedHTTP3Path.map { "https://\(serverIdentity)\($0)" },
-            profile: coverProfile.rawValue,
+            // "web" is the backward-compatible wire value for Mosaic's
+            // automatic runtime web/realtime/stream classification.
+            profile: CoverProfile.web.rawValue,
             carrierPolicy: "performance",
             maxCoverOverheadPercent: 30,
             initialWindowBytes: 2_097_152,

@@ -184,7 +184,40 @@ func TestTransportReceivePassesCarrierMessagesThrough(t *testing.T) {
 	}
 }
 
-func transportTypeMap(t *testing.T) protocol.TypeMap {
+func BenchmarkTransportWebBurst(b *testing.B) {
+	typeMap := transportTypeMap(b)
+	engine, err := NewEngine(Config{
+		Profile: ProfileWeb, MaxOverheadPercent: 0, Seed: [32]byte{0x42},
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	underlying := &discardCarrier{}
+	transport, err := NewTransport(TransportConfig{
+		Carrier: underlying, TypeMap: typeMap, Engine: engine, PaddingSeed: [32]byte{0x43},
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = transport.Close() })
+	raw, err := protocol.EncodeCell(typeMap, protocol.Cell{
+		Kind: protocol.CellData, StreamID: 1, Sequence: 1,
+		Payload: bytes.Repeat([]byte{0xa5}, protocol.MaxCellPayloadSize),
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.SetBytes(int64(len(raw)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for index := 0; index < b.N; index++ {
+		if err := transport.Send(context.Background(), raw); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func transportTypeMap(t testing.TB) protocol.TypeMap {
 	t.Helper()
 	typeMap, err := protocol.NewTypeMap([32]byte{0x91, 0x31})
 	if err != nil {
@@ -237,3 +270,13 @@ func (c *recordingCarrier) Close() error {
 }
 
 func (c *recordingCarrier) Kind() protocol.CarrierKind { return protocol.CarrierHTTPS }
+
+type discardCarrier struct{}
+
+func (*discardCarrier) Send(context.Context, []byte) error { return nil }
+func (*discardCarrier) Receive(ctx context.Context) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+func (*discardCarrier) Close() error               { return nil }
+func (*discardCarrier) Kind() protocol.CarrierKind { return protocol.CarrierHTTPS }

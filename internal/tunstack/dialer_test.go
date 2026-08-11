@@ -356,6 +356,53 @@ func TestSessionRouterPromotesSecondaryWithoutDiscardingHealthyPool(t *testing.T
 	}
 }
 
+func TestSessionRouterStandbyDoesNotReceiveTCPUntilPromoted(t *testing.T) {
+	primaryOpens := 0
+	standbyOpens := 0
+	router := &SessionRouter{}
+	if err := router.switchRoute(sessionRoute{
+		open: func(context.Context, []byte) (streamConnection, error) {
+			primaryOpens++
+			return &loopbackStream{}, nil
+		},
+		activeStreams: func() uint64 { return 4 },
+	}); err != nil {
+		t.Fatal(err)
+	}
+	standbyID, err := router.addStandbyRoute(sessionRoute{
+		open: func(context.Context, []byte) (streamConnection, error) {
+			standbyOpens++
+			return &loopbackStream{}, nil
+		},
+		activeStreams: func() uint64 { return 0 },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream, err := router.openStream(context.Background(), []byte("target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = stream.Close()
+	if primaryOpens != 1 || standbyOpens != 0 {
+		t.Fatalf("before promotion primary=%d standby=%d", primaryOpens, standbyOpens)
+	}
+	if !router.SetStandby(1, true) {
+		t.Fatal("old primary was not changed to standby")
+	}
+	if err := router.Promote(standbyID); err != nil {
+		t.Fatal(err)
+	}
+	stream, err = router.openStream(context.Background(), []byte("target"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = stream.Close()
+	if primaryOpens != 1 || standbyOpens != 1 {
+		t.Fatalf("after promotion primary=%d standby=%d", primaryOpens, standbyOpens)
+	}
+}
+
 func TestSessionRouterRejectsInvalidOrUDPDisabledRoute(t *testing.T) {
 	router := &SessionRouter{}
 	if err := router.switchRoute(sessionRoute{}); !errors.Is(err, ErrInvalidStackConfig) {
@@ -375,7 +422,7 @@ func TestSessionRouterRejectsInvalidOrUDPDisabledRoute(t *testing.T) {
 	}
 }
 
-func TestSessionRouterForcesQUICToTCPOnReliableUDPRoute(t *testing.T) {
+func TestSessionRouterCarriesQUICOverReliableUDPAsLastResort(t *testing.T) {
 	opened := 0
 	router := &SessionRouter{active: sessionRoute{
 		open: func(context.Context, []byte) (streamConnection, error) {
@@ -389,19 +436,20 @@ func TestSessionRouterForcesQUICToTCPOnReliableUDPRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = dialer.DialUDP(&M.Metadata{
+	quic, err := dialer.DialUDP(&M.Metadata{
 		Network: M.UDP, DstIP: netip.MustParseAddr("1.1.1.1"), DstPort: 443,
 	})
-	if !errors.Is(err, ErrReliableQUICFallback) {
-		t.Fatalf("UDP/443 error=%v, want reliable-carrier QUIC fallback", err)
+	if err != nil {
+		t.Fatalf("UDP/443 reliable fallback: %v", err)
 	}
-	if opened != 0 {
-		t.Fatalf("UDP/443 opened %d NP/2 streams before fallback", opened)
+	defer quic.Close()
+	if opened != 1 {
+		t.Fatalf("UDP/443 opened %d NP/2 streams, want 1", opened)
 	}
-	if got := router.QUICFallbackCount(); got != 1 {
-		t.Fatalf("QUIC fallback count=%d, want 1", got)
+	if got := router.QUICFallbackCount(); got != 0 {
+		t.Fatalf("QUIC rejection count=%d, want 0", got)
 	}
-	if got := router.UDPMode(); got != "reliable-stream-quic-fallback" {
+	if got := router.UDPMode(); got != "reliable-stream-degraded" {
 		t.Fatalf("UDP mode=%q", got)
 	}
 
@@ -412,8 +460,8 @@ func TestSessionRouterForcesQUICToTCPOnReliableUDPRoute(t *testing.T) {
 		t.Fatalf("ordinary UDP must remain available: %v", err)
 	}
 	defer dns.Close()
-	if opened != 1 {
-		t.Fatalf("ordinary UDP opened %d NP/2 streams, want 1", opened)
+	if opened != 2 {
+		t.Fatalf("ordinary UDP opened %d NP/2 streams, want 2", opened)
 	}
 }
 
@@ -483,6 +531,40 @@ func TestDialerRejectsInvalidMetadata(t *testing.T) {
 		if _, err := dialer.DialContext(context.Background(), metadata); !errors.Is(err, ErrInvalidMetadata) {
 			t.Fatalf("metadata=%#v error=%v", metadata, err)
 		}
+	}
+}
+
+func TestSessionRouterReportsTCPStreamOpenOutcomes(t *testing.T) {
+	wantErr := errors.New("target unavailable")
+	calls := 0
+	router := &SessionRouter{active: sessionRoute{
+		open: func(context.Context, []byte) (streamConnection, error) {
+			calls++
+			if calls == 2 {
+				return nil, wantErr
+			}
+			return &stubStream{}, nil
+		},
+	}, routes: []sessionRoute{}}
+	router.routes = []sessionRoute{router.active}
+
+	for index := 0; index < 2; index++ {
+		opener, err := router.pinStreamOpener()
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = opener(context.Background(), []byte{1})
+		if index == 0 && err != nil {
+			t.Fatalf("successful open: %v", err)
+		}
+		if index == 1 && !errors.Is(err, wantErr) {
+			t.Fatalf("failed open error=%v", err)
+		}
+	}
+
+	attempts, successes, failures := router.TCPStreamStats()
+	if attempts != 2 || successes != 1 || failures != 1 {
+		t.Fatalf("stream stats attempts=%d successes=%d failures=%d", attempts, successes, failures)
 	}
 }
 

@@ -9,7 +9,45 @@ permissions:
   contents: write
 
 jobs:
+  package-windows:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Validate tag and source version
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw VERSION).Trim()
+          if ($env:GITHUB_REF_NAME -ne $version) { throw "Tag does not match VERSION" }
+
+      - name: Build and verify Windows installer
+        shell: pwsh
+        run: |
+          ./clients/windows/build.ps1 -Version "${{ github.ref_name }}"
+          $setup = Get-Item "dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe"
+          & $setup.FullName /verify
+          if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: neproto-windows-${{ github.ref_name }}
+          path: |
+            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe
+            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe.sha256
+          if-no-files-found: error
+
   package:
+    needs: package-windows
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -40,6 +78,11 @@ jobs:
           tar -xzf "dist/neproto-server-bundle-$GITHUB_REF_NAME.tar.gz" -C /tmp/neproto-release
           sudo "/tmp/neproto-release/neproto-server-bundle-$GITHUB_REF_NAME/tests/install-smoke.sh" amd64 "$GITHUB_REF_NAME"
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: neproto-windows-${{ github.ref_name }}
+          path: dist/windows
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:
@@ -48,3 +91,5 @@ jobs:
           files: |
             dist/neproto-server-bundle-${{ github.ref_name }}.tar.gz
             dist/neproto-server-bundle-${{ github.ref_name }}.tar.gz.sha256
+            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe
+            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe.sha256

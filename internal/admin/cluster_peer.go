@@ -331,7 +331,7 @@ func (m *Manager) clusterPeerClientJSON(endpoint ClusterPeerEndpoint, secretPath
 		"socks_listen":               "127.0.0.1:0",
 		"https_url":                  "wss://" + endpoint.ServerIdentity + endpoint.HTTPSPath,
 		"webrtc_signaling_url":       "https://" + endpoint.ServerIdentity + endpoint.WebRTCPath,
-		"profile":                    "interactive",
+		"profile":                    "web",
 		"carrier_policy":             "performance",
 		"max_cover_overhead_percent": 20,
 		"initial_window_bytes":       1048576,

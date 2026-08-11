@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+const realBurstIdleThreshold = 50 * time.Millisecond
+
 const (
 	MaxWireCellBytes      = 65_535
 	defaultMaxBudgetBytes = 65_535
@@ -66,6 +68,7 @@ type Engine struct {
 	random             *coverRandom
 	stats              Stats
 	mosaic             mosaicState
+	lastRealPlan       time.Time
 }
 
 func NewEngine(config Config) (*Engine, error) {
@@ -109,7 +112,12 @@ func (e *Engine) PlanReal(now time.Time, wireBytes int) (RealDecision, error) {
 	e.creditUnits -= uint64(paddingBytes) * 100
 	e.stats.PaddingBytes = saturatingAdd(e.stats.PaddingBytes, uint64(paddingBytes))
 
-	delay := e.randomDelay(e.profile.limits.MaxRealDelay)
+	delay := time.Duration(0)
+	if e.lastRealPlan.IsZero() || now.Before(e.lastRealPlan) ||
+		now.Sub(e.lastRealPlan) >= realBurstIdleThreshold {
+		delay = e.randomDelay(e.profile.limits.MaxRealDelay)
+	}
+	e.lastRealPlan = now
 	return RealDecision{
 		PaddingBytes:  paddingBytes,
 		SendAt:        now.Add(delay),

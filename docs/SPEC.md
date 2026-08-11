@@ -197,7 +197,17 @@ The engine accepts real cells and produces a schedule of real, padded, and dummy
 
 Rules:
 
+- Production client and administrative UIs expose one automatic mode. They
+  serialize the backward-compatible base value `web`; legacy imported
+  `quiet` and `interactive` values remain decodable but are normalized to
+  `web` when a runtime configuration is generated.
 - Real cells approaching the latency ceiling bypass dummy scheduling.
+- The latency ceiling shapes the start of an outbound burst, not every cell in
+  that burst. After an idle boundary, the first real cell may receive the
+  profile's bounded session-keyed delay; immediately following real cells use
+  a zero-added-delay fast path until the burst becomes idle again. Padding and
+  dummy budgets remain active. Per-cell sleeps must never impose a throughput
+  ceiling on bulk or media transfers.
 - Dummy and padding bytes are charged to a token bucket; budget exhaustion disables cover until tokens recover.
 - Timing randomness comes from a session-keyed deterministic generator seeded with CSPRNG session entropy.
 - Fixed-profile peers change profiles only through authenticated `PROFILE`
@@ -282,21 +292,53 @@ type Carrier interface {
 
 ### Hybrid selection
 
-1. Runtime clients default to the measured performance order HTTPS, HTTP/3,
-   then WebRTC. HTTPS avoids known high-loss UDP paths; HTTP/3 and WebRTC remain
-   bounded fallbacks when HTTPS is unavailable.
-2. Profiles may explicitly select `carrier_policy=udp-first` to start the fresh
-   cached carrier, then stagger HTTP/3, WebRTC, and HTTPS candidates. Diagnostic
-   `ProbeAuto` retains this authenticated race for per-network measurement.
-3. The iOS Packet Tunnel serializes `carrier_policy=performance` explicitly and
-   reuses that order for both initial connection and carrier migration.
-4. A candidate wins only after NP/2 authentication and required v2.2 extension
+1. Runtime clients default to an authenticated adaptive race that prioritizes
+   carriers with native unreliable datagrams: HTTP/3, then WebRTC, with HTTPS
+   delayed as the route-compatible fallback. A cached HTTP/3 or WebRTC result
+   may start first; a cached HTTPS result must not suppress a fresh datagram
+   probe when HTTP/3 is configured.
+2. `carrier_policy=performance` and the legacy `carrier_policy=udp-first` both
+   use this adaptive selection. Diagnostic `ProbeAuto` uses the same bounded
+   race for per-network measurement.
+3. iOS, Windows, and desktop clients reuse the selected policy for the initial
+   connection, warm carrier pool, and carrier migration. They must not pin a
+   media session to HTTPS merely because HTTPS authenticated first on a prior
+   network.
+4. HTTPS may win the initial race to provide immediate connectivity. When a
+   later authenticated warm probe exposes native unreliable datagrams, the
+   runtime atomically promotes HTTP/3 (or WebRTC when HTTP/3 is unavailable) to
+   the primary route. New TCP and UDP flows use the promoted carrier; existing
+   streams drain on their original carrier for a bounded interval. This
+   background probe gives HTTP/3 its bounded handshake window without letting
+   the already-working HTTPS fallback cancel it. Promotion is automatic and
+   must not require a user-visible transport mode.
+5. A candidate wins or is promoted only after NP/2 authentication and required v2.2 extension
    policy succeeds; every losing carrier is closed.
-5. On an iOS network change, first probe the current authenticated session with
+6. On an iOS network change, first probe the current authenticated session with
    `PING/PONG`. If it survives, keep it. Otherwise authenticate a replacement.
-6. Atomically route new TUN flows to the replacement session. Existing streams
+7. Atomically route new TUN flows to the replacement session. Existing streams
    remain on the old session for a bounded 30-second drain; NP/2 does not claim
    cross-carrier byte-level stream resumption.
+8. When the configured carrier bound permits it, a native-datagram primary
+   keeps one independently authenticated, carrier-diverse compatibility
+   standby. Unexpected primary loss promotes a healthy standby before the
+   packet tunnel is declared terminal. The replacement pool is replenished in
+   the background; no user-visible transport selection is introduced. A
+   compatibility standby is excluded from ordinary TCP, UDP, and continuity
+   scheduling while the native primary is healthy, so failover capacity cannot
+   silently move media traffic back to the slower compatibility carrier.
+
+When the selected carrier exposes only reliable NP/2 UDP associations, the
+client preserves bounded reliable UDP as a last-resort compatibility path. It
+does not reject application UDP/443 as a normal media strategy: production
+media uses HTTP/3 or WebRTC datagrams whenever either carrier is available. The
+client may report a degraded reliable-UDP state, but it must not create a retry
+storm by repeatedly refusing the application's QUIC flows.
+
+On Windows, endpoint-exclusion routes for the NP/2 server must be resolved via
+an active physical uplink rather than an unrelated third-party tunnel adapter.
+If no safe physical route exists, connection fails before installing the
+NeProto default routes instead of silently nesting NP/2 inside another VPN.
 
 ## Configuration and Commands
 

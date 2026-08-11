@@ -17,6 +17,7 @@ import (
 
 	"neproto.local/chameleon/internal/carrier"
 	"neproto.local/chameleon/internal/config"
+	"neproto.local/chameleon/internal/cover"
 	"neproto.local/chameleon/internal/protocol"
 	"neproto.local/chameleon/internal/session"
 	"neproto.local/chameleon/internal/tunstack"
@@ -117,6 +118,25 @@ func TestControllerReportsLiveTrafficOnlyForActiveRuntime(t *testing.T) {
 	runtime.dnsAttributionCached = 6
 	runtime.firstFlightDomainHits = 4
 	runtime.firstFlightFallbacks = 2
+	runtime.tcpStreamAttempts = 14
+	runtime.tcpStreamSuccesses = 12
+	runtime.tcpStreamFailures = 2
+	runtime.activeStreams = 9
+	runtime.flowControlStalls = 11
+	runtime.protocolErrors = 1
+	runtime.sentCells = 1_200
+	runtime.receivedCells = 4_800
+	runtime.sentCellPayloadBytes = 600_000
+	runtime.receivedPayloadBytes = 8_000_000
+	runtime.windowUpdatesSent = 31
+	runtime.windowUpdatesReceived = 17
+	runtime.coverRealWireBytes = 8_500_000
+	runtime.coverPaddingBytes = 250_000
+	runtime.coverDummyWireBytes = 50_000
+	runtime.coverProfileTransitions = 6
+	runtime.coverWebSessions = 1
+	runtime.coverRealtimeSessions = 2
+	runtime.coverStreamSessions = 3
 	controller := newController(func(context.Context, config.Client) (mobileRuntime, error) {
 		return runtime, nil
 	})
@@ -136,12 +156,50 @@ func TestControllerReportsLiveTrafficOnlyForActiveRuntime(t *testing.T) {
 		got.CarrierPoolFailures != 0 || got.DNSAttributionQueries != 8 ||
 		got.DNSAttributionResponses != 7 || got.DNSAttributionHits != 5 ||
 		got.DNSAttributionMisses != 3 || got.DNSAttributionCached != 6 ||
-		got.FirstFlightDomainHits != 4 || got.FirstFlightFallbacks != 2 {
+		got.FirstFlightDomainHits != 4 || got.FirstFlightFallbacks != 2 ||
+		got.TCPStreamAttempts != 14 || got.TCPStreamSuccesses != 12 || got.TCPStreamFailures != 2 ||
+		got.ActiveStreams != 9 || got.FlowControlStalls != 11 || got.ProtocolErrors != 1 ||
+		got.SentCells != 1_200 || got.ReceivedCells != 4_800 ||
+		got.SentCellPayloadBytes != 600_000 || got.ReceivedPayloadBytes != 8_000_000 ||
+		got.WindowUpdatesSent != 31 || got.WindowUpdatesReceived != 17 ||
+		got.CoverRealWireBytes != 8_500_000 || got.CoverPaddingBytes != 250_000 ||
+		got.CoverDummyWireBytes != 50_000 || got.CoverProfileTransitions != 6 ||
+		got.CoverWebSessions != 1 || got.CoverRealtimeSessions != 2 || got.CoverStreamSessions != 3 {
 		t.Fatalf("active stats=%+v", got)
 	}
 	controller.stop()
 	if got := controller.trafficStats(); got != (trafficStats{}) {
 		t.Fatalf("stopped stats=%+v", got)
+	}
+}
+
+func TestAggregateProtocolTrafficStatsIsPayloadAndDestinationFree(t *testing.T) {
+	got := aggregateProtocolTrafficStats(
+		[]session.Stats{
+			{ActiveStreams: 2, SentCells: 10, ReceivedCells: 20, SentCellPayloadBytes: 1_000,
+				ReceivedPayloadBytes: 2_000, WindowUpdatesSent: 3, WindowUpdatesReceived: 4,
+				FlowControlStalls: 5, ProtocolErrors: 1},
+			{ActiveStreams: 3, SentCells: 30, ReceivedCells: 40, SentCellPayloadBytes: 3_000,
+				ReceivedPayloadBytes: 4_000, WindowUpdatesSent: 6, WindowUpdatesReceived: 7,
+				FlowControlStalls: 8, ProtocolErrors: 2},
+		},
+		[]cover.TransportStats{
+			{RealWireBytes: 2_100, PaddingBytes: 100, DummyWireBytes: 50,
+				TrafficClass: cover.TrafficWeb, ProfileTransitions: 2},
+			{RealWireBytes: 4_200, PaddingBytes: 200, DummyWireBytes: 75,
+				TrafficClass: cover.TrafficStream, ProfileTransitions: 3},
+			{TrafficClass: cover.TrafficRealtime, ProfileTransitions: 1},
+		},
+	)
+
+	if got.ActiveStreams != 5 || got.SentCells != 40 || got.ReceivedCells != 60 ||
+		got.SentCellPayloadBytes != 4_000 || got.ReceivedPayloadBytes != 6_000 ||
+		got.WindowUpdatesSent != 9 || got.WindowUpdatesReceived != 11 ||
+		got.FlowControlStalls != 13 || got.ProtocolErrors != 3 ||
+		got.CoverRealWireBytes != 6_300 || got.CoverPaddingBytes != 300 ||
+		got.CoverDummyWireBytes != 125 || got.CoverProfileTransitions != 6 ||
+		got.CoverWebSessions != 1 || got.CoverRealtimeSessions != 1 || got.CoverStreamSessions != 1 {
+		t.Fatalf("aggregate stats=%+v", got)
 	}
 }
 
@@ -190,6 +248,22 @@ func TestControllerMigratesRunningRuntimeWithoutStoppingTunnel(t *testing.T) {
 	if got := controller.trafficStats(); got != (trafficStats{}) {
 		// The stub reports zeros, but it remains available through the same runtime.
 		t.Fatalf("traffic stats after migration=%+v", got)
+	}
+}
+
+func TestControllerReportsCarrierPromotedInsideRuntime(t *testing.T) {
+	runtime := newStubRuntime()
+	controller := newController(nil)
+	controller.state = "running"
+	controller.runtime = runtime
+	controller.carrier = "webrtc"
+
+	runtime.mu.Lock()
+	runtime.carrier = "https"
+	runtime.mu.Unlock()
+
+	if got := controller.carrierName(); got != "https" {
+		t.Fatalf("carrier=%q, want promoted runtime carrier https", got)
 	}
 }
 
@@ -368,16 +442,23 @@ func TestNP2RuntimeWarmsIndependentHTTPSCarrierPool(t *testing.T) {
 	}
 }
 
-func TestNP2RuntimeRejectsMixedCarrierPoolMember(t *testing.T) {
+func TestNP2RuntimePromotesWarmHTTP3CarrierOverHTTPS(t *testing.T) {
 	primaryClient, primaryServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTPS)
 	secondaryClient, secondaryServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTP3)
-	runtime, err := newNP2Runtime(
+	compatibilityCalls := 0
+	fastCalls := 0
+	runtime, err := newNP2RuntimeWithConnectors(
 		config.Client{
 			ServerAddresses:     []netip.Addr{netip.MustParseAddr("104.171.136.10")},
 			MaxParallelCarriers: 3,
 		},
 		&session.Authenticated{Mux: primaryClient, Carrier: protocol.CarrierHTTPS},
 		func(context.Context, config.Client) (*session.Authenticated, error) {
+			compatibilityCalls++
+			return nil, errors.New("compatibility connector must remain idle during fast promotion")
+		},
+		func(context.Context, config.Client) (*session.Authenticated, error) {
+			fastCalls++
 			return &session.Authenticated{Mux: secondaryClient, Carrier: protocol.CarrierHTTP3}, nil
 		},
 	)
@@ -389,12 +470,24 @@ func TestNP2RuntimeRejectsMixedCarrierPoolMember(t *testing.T) {
 		_ = primaryServer.Close()
 		_ = secondaryServer.Close()
 	})
-	if err := runtime.warmCarrierPool(context.Background(), 2); !errors.Is(err, ErrCarrierPoolMismatch) {
-		t.Fatalf("mixed carrier pool error=%v", err)
+	if err := runtime.warmCarrierPool(context.Background(), 2); err != nil {
+		t.Fatalf("promote warm HTTP/3 carrier: %v", err)
+	}
+	runtime.mu.Lock()
+	promoted := runtime.session != nil && runtime.session.Mux == secondaryClient &&
+		runtime.carrierName == "http3" && runtime.poolTarget == 2 &&
+		len(runtime.poolSessions) == 1 && runtime.poolSessions[1] != nil &&
+		runtime.poolSessions[1].Mux == primaryClient
+	runtime.mu.Unlock()
+	if !promoted {
+		t.Fatal("authenticated HTTP/3 warm carrier was not promoted to primary")
+	}
+	if fastCalls != 1 || compatibilityCalls != 0 {
+		t.Fatalf("fast calls=%d compatibility calls=%d", fastCalls, compatibilityCalls)
 	}
 	_, healthy, _, _, failures := runtime.carrierPoolStats()
-	if healthy != 1 || failures != 1 {
-		t.Fatalf("mixed carrier pool healthy=%d failures=%d", healthy, failures)
+	if healthy != 2 || failures != 0 {
+		t.Fatalf("promoted carrier healthy=%d failures=%d", healthy, failures)
 	}
 }
 
@@ -581,6 +674,49 @@ func TestNP2RuntimePromotesWarmCarrierWhenPrimaryFails(t *testing.T) {
 	}
 }
 
+func TestNP2RuntimePromotesHTTPSStandbyWhenWebRTCPrimaryFails(t *testing.T) {
+	primaryClient, primaryServer, _ := newMigrationMuxPair(t, protocol.CarrierWebRTC)
+	secondaryClient, secondaryServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTPS)
+	runtime, err := newNP2Runtime(
+		config.Client{
+			ServerAddresses:     []netip.Addr{netip.MustParseAddr("104.171.136.10")},
+			MaxParallelCarriers: 2,
+		},
+		&session.Authenticated{Mux: primaryClient, Carrier: protocol.CarrierWebRTC},
+		func(context.Context, config.Client) (*session.Authenticated, error) {
+			return &session.Authenticated{Mux: secondaryClient, Carrier: protocol.CarrierHTTPS}, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = runtime.Close()
+		_ = primaryServer.Close()
+		_ = secondaryServer.Close()
+	})
+	if err := runtime.warmCarrierPool(context.Background(), 2); err != nil {
+		t.Fatalf("warm HTTPS compatibility standby: %v", err)
+	}
+	if _, healthy, _, _, failures := runtime.carrierPoolStats(); healthy != 2 || failures != 0 {
+		t.Fatalf("compatibility pool healthy=%d failures=%d", healthy, failures)
+	}
+
+	_ = primaryClient.Close()
+	deadline := time.Now().Add(time.Second)
+	for runtime.CarrierName() != "https" {
+		if time.Now().After(deadline) {
+			t.Fatal("HTTPS standby was not promoted after WebRTC failure")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	waitContext, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := runtime.Wait(waitContext); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WebRTC failure stopped runtime instead of promoting HTTPS: %v", err)
+	}
+}
+
 func TestNP2RuntimeReconnectsNewFlowsAndDrainsExistingFlow(t *testing.T) {
 	oldClient, oldServer, oldWire := newMigrationMuxPair(t, protocol.CarrierHTTPS)
 	newClient, newServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTP3)
@@ -661,7 +797,7 @@ func TestNP2RuntimeReconnectsNewFlowsAndDrainsExistingFlow(t *testing.T) {
 	_ = newConnection.Close()
 }
 
-func TestNP2RuntimeMigrationDrainsPoolAndDisablesItForHTTP3(t *testing.T) {
+func TestNP2RuntimeMigrationDrainsOldPoolAndKeepsHTTP3StandbyTarget(t *testing.T) {
 	oldPrimary, oldPrimaryServer, oldWire := newMigrationMuxPair(t, protocol.CarrierHTTPS)
 	oldSecondary, oldSecondaryServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTPS)
 	replacement, replacementServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTP3)
@@ -718,7 +854,7 @@ func TestNP2RuntimeMigrationDrainsPoolAndDisablesItForHTTP3(t *testing.T) {
 		}
 	}
 	runtime.mu.Unlock()
-	if poolTarget != 1 || poolMembers != 0 || !retiredSecondary {
+	if poolTarget != 2 || poolMembers != 0 || !retiredSecondary {
 		t.Fatalf("migrated pool target=%d members=%d retired_secondary=%v",
 			poolTarget, poolMembers, retiredSecondary)
 	}
@@ -729,7 +865,7 @@ func TestNP2RuntimeMigrationDrainsPoolAndDisablesItForHTTP3(t *testing.T) {
 	_ = serverStream.Close()
 }
 
-func TestNP2RuntimeMigrationEnablesConfiguredPoolAfterHTTPSFallback(t *testing.T) {
+func TestNP2RuntimeMigrationKeepsConfiguredPoolAfterHTTPSFallback(t *testing.T) {
 	oldPrimary, oldServer, oldWire := newMigrationMuxPair(t, protocol.CarrierHTTP3)
 	replacement, replacementServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTPS)
 	secondary, secondaryServer, _ := newMigrationMuxPair(t, protocol.CarrierHTTPS)
@@ -760,7 +896,7 @@ func TestNP2RuntimeMigrationEnablesConfiguredPoolAfterHTTPSFallback(t *testing.T
 		_ = replacementServer.Close()
 		_ = secondaryServer.Close()
 	})
-	if target, healthy, _, _, _ := runtime.carrierPoolStats(); target != 1 || healthy != 1 {
+	if target, healthy, _, _, _ := runtime.carrierPoolStats(); target != 2 || healthy != 1 {
 		t.Fatalf("initial HTTP/3 pool target=%d healthy=%d", target, healthy)
 	}
 	oldWire.blockReceive.Store(true)
@@ -996,6 +1132,25 @@ type stubRuntime struct {
 	dnsAttributionCached    int64
 	firstFlightDomainHits   int64
 	firstFlightFallbacks    int64
+	tcpStreamAttempts       int64
+	tcpStreamSuccesses      int64
+	tcpStreamFailures       int64
+	activeStreams           int64
+	flowControlStalls       int64
+	protocolErrors          int64
+	sentCells               int64
+	receivedCells           int64
+	sentCellPayloadBytes    int64
+	receivedPayloadBytes    int64
+	windowUpdatesSent       int64
+	windowUpdatesReceived   int64
+	coverRealWireBytes      int64
+	coverPaddingBytes       int64
+	coverDummyWireBytes     int64
+	coverProfileTransitions int64
+	coverWebSessions        int64
+	coverRealtimeSessions   int64
+	coverStreamSessions     int64
 	migrationStarted        chan struct{}
 	releaseMigration        chan struct{}
 	migrationOnce           sync.Once
@@ -1153,6 +1308,25 @@ func (r *stubRuntime) TrafficStats() trafficStats {
 		DNSAttributionCached:    r.dnsAttributionCached,
 		FirstFlightDomainHits:   r.firstFlightDomainHits,
 		FirstFlightFallbacks:    r.firstFlightFallbacks,
+		TCPStreamAttempts:       r.tcpStreamAttempts,
+		TCPStreamSuccesses:      r.tcpStreamSuccesses,
+		TCPStreamFailures:       r.tcpStreamFailures,
+		ActiveStreams:           r.activeStreams,
+		FlowControlStalls:       r.flowControlStalls,
+		ProtocolErrors:          r.protocolErrors,
+		SentCells:               r.sentCells,
+		ReceivedCells:           r.receivedCells,
+		SentCellPayloadBytes:    r.sentCellPayloadBytes,
+		ReceivedPayloadBytes:    r.receivedPayloadBytes,
+		WindowUpdatesSent:       r.windowUpdatesSent,
+		WindowUpdatesReceived:   r.windowUpdatesReceived,
+		CoverRealWireBytes:      r.coverRealWireBytes,
+		CoverPaddingBytes:       r.coverPaddingBytes,
+		CoverDummyWireBytes:     r.coverDummyWireBytes,
+		CoverProfileTransitions: r.coverProfileTransitions,
+		CoverWebSessions:        r.coverWebSessions,
+		CoverRealtimeSessions:   r.coverRealtimeSessions,
+		CoverStreamSessions:     r.coverStreamSessions,
 	}
 }
 

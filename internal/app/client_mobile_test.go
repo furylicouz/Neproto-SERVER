@@ -99,21 +99,65 @@ func TestConnectClientHTTPSFirstFallsBackFromHTTP3ToWebRTC(t *testing.T) {
 	}
 }
 
-func TestConnectClientForRunUsesPerformancePolicyByDefault(t *testing.T) {
+func TestConnectClientDatagramPreferredGivesHTTP3ItsFullAttemptBeforeWebRTC(t *testing.T) {
+	want := &session.Authenticated{}
+	var modes []ProbeMode
+	got, err := connectClientDatagramPreferred(context.Background(), config.Client{
+		HTTP3URL: "https://vpn.example.test/http3",
+	}, func(
+		_ context.Context, _ config.Client, mode ProbeMode,
+	) (*session.Authenticated, hybrid.Result, error) {
+		modes = append(modes, mode)
+		if mode != ProbeHTTP3 {
+			t.Fatalf("unexpected carrier mode %v", mode)
+		}
+		return want, hybrid.Result{}, nil
+	})
+	if err != nil || got != want {
+		t.Fatalf("datagram-preferred result=%p error=%v", got, err)
+	}
+	if !reflect.DeepEqual(modes, []ProbeMode{ProbeHTTP3}) {
+		t.Fatalf("carrier order=%v", modes)
+	}
+}
+
+func TestConnectClientDatagramPreferredFallsBackToWebRTCWithoutHTTPS(t *testing.T) {
+	want := &session.Authenticated{}
+	var modes []ProbeMode
+	got, err := connectClientDatagramPreferred(context.Background(), config.Client{
+		HTTP3URL: "https://vpn.example.test/http3",
+	}, func(
+		_ context.Context, _ config.Client, mode ProbeMode,
+	) (*session.Authenticated, hybrid.Result, error) {
+		modes = append(modes, mode)
+		if mode == ProbeWebRTC {
+			return want, hybrid.Result{}, nil
+		}
+		return nil, hybrid.Result{}, errors.New("carrier unavailable")
+	})
+	if err != nil || got != want {
+		t.Fatalf("datagram fallback result=%p error=%v", got, err)
+	}
+	if !reflect.DeepEqual(modes, []ProbeMode{ProbeHTTP3, ProbeWebRTC}) {
+		t.Fatalf("carrier order=%v", modes)
+	}
+}
+
+func TestConnectClientForRunUsesAdaptiveDatagramPolicyByDefault(t *testing.T) {
 	want := &session.Authenticated{}
 	performanceCalls := 0
 	udpFirstCalls := 0
 	got, err := connectClientForRun(context.Background(), config.Client{},
 		func(context.Context, config.Client) (*session.Authenticated, error) {
 			performanceCalls++
-			return want, nil
+			return nil, errors.New("unexpected compatibility connector")
 		},
 		func(context.Context, config.Client) (*session.Authenticated, error) {
 			udpFirstCalls++
-			return nil, errors.New("unexpected UDP-first connector")
+			return want, nil
 		},
 	)
-	if err != nil || got != want || performanceCalls != 1 || udpFirstCalls != 0 {
+	if err != nil || got != want || performanceCalls != 0 || udpFirstCalls != 1 {
 		t.Fatalf("result=%p error=%v performance=%d udp-first=%d",
 			got, err, performanceCalls, udpFirstCalls)
 	}

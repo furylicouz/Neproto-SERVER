@@ -141,6 +141,34 @@ func TestClientContinuityRouterMigratesLiveFlowWithoutRedial(t *testing.T) {
 	_ = secondServerControl.Close()
 }
 
+func TestClientContinuityRouterUsesStandbyOnlyWhenPrimaryIsExcluded(t *testing.T) {
+	primaryMux, primaryPeer := newContinuityRouterMuxPair(t)
+	standbyMux, standbyPeer := newContinuityRouterMuxPair(t)
+	t.Cleanup(func() {
+		_ = primaryMux.Close()
+		_ = primaryPeer.Close()
+		_ = standbyMux.Close()
+		_ = standbyPeer.Close()
+	})
+	primaryKey := protocol.ContinuityID{1}
+	standbyKey := protocol.ContinuityID{2}
+	router := &ClientContinuityRouter{
+		routes: map[uint64]ContinuityRoute{
+			1: {ID: 1, Mux: primaryMux, LeaseKey: primaryKey},
+			2: {ID: 2, Mux: standbyMux, LeaseKey: standbyKey, Standby: true},
+		},
+		scheduler: constellation.Scheduler{},
+	}
+	selected, err := router.selectRouteLocked(protocol.ContinuityID{}, constellation.FlowInteractive)
+	if err != nil || selected.ID != 1 {
+		t.Fatalf("normal selection route=%d error=%v", selected.ID, err)
+	}
+	selected, err = router.selectRouteLocked(primaryKey, constellation.FlowInteractive)
+	if err != nil || selected.ID != 2 {
+		t.Fatalf("failover selection route=%d error=%v", selected.ID, err)
+	}
+}
+
 func assertContinuityRouterRead(t *testing.T, ctx context.Context, reader io.Reader, want string) {
 	t.Helper()
 	result := make(chan error, 1)

@@ -76,6 +76,20 @@ func StartWithSessionRouter(fileDescriptor int, mtu uint32, router *SessionRoute
 	return startWithDialer(fileDescriptor, mtu, dialer)
 }
 
+// StartWithSessionRouterDevice attaches an already-created platform TUN device
+// to the same direct NP/2 data plane used by NetworkExtension. The caller owns
+// platform address and route setup; Stack owns and closes the device.
+func StartWithSessionRouterDevice(endpoint device.Device, mtu uint32, router *SessionRouter) (*Stack, error) {
+	if endpoint == nil || mtu < minimumMTU || mtu > maximumMTU || router == nil {
+		return nil, ErrInvalidStackConfig
+	}
+	dialer, err := NewDialerWithSessionRouter(router)
+	if err != nil {
+		return nil, err
+	}
+	return startWithDevice(endpoint, dialer)
+}
+
 func start(fileDescriptor int, mtu uint32, mux *session.Mux, maxUDPPayload uint64) (*Stack, error) {
 	return startWithDatagrams(fileDescriptor, mtu, mux, maxUDPPayload, nil)
 }
@@ -111,6 +125,13 @@ func startWithDialer(fileDescriptor int, mtu uint32, dialer *Dialer) (*Stack, er
 	if err != nil {
 		return nil, err
 	}
+	return startWithDevice(endpoint, dialer)
+}
+
+func startWithDevice(endpoint device.Device, dialer *Dialer) (*Stack, error) {
+	if endpoint == nil || dialer == nil {
+		return nil, ErrInvalidStackConfig
+	}
 	statistic.DefaultManager.ResetStatistic()
 	flowTunnel := tunnel.New(dialer, statistic.DefaultManager)
 	flowTunnel.ProcessAsync()
@@ -122,6 +143,7 @@ func startWithDialer(fileDescriptor int, mtu uint32, dialer *Dialer) (*Stack, er
 		endpoint.Close()
 		return nil, err
 	}
+	installUDPTransportHandler(userspaceStack, flowTunnel, dialer)
 	return &Stack{device: endpoint, stack: userspaceStack, tunnel: flowTunnel, dialer: dialer}, nil
 }
 
