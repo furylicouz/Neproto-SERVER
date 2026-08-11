@@ -348,7 +348,6 @@ func (engine *Engine) persist(status Status) (Status, error) {
 
 func (engine *Engine) fail(status Status, code, message string, cause error) (Status, error) {
 	status.State = "failed"
-	status.Progress = mustProgress("failed")
 	status.Message = message
 	status.ErrorCode = code
 	failed, writeErr := engine.persist(status)

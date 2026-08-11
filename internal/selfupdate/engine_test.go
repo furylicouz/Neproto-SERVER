@@ -223,7 +223,8 @@ func TestEngineApplyRejectsChecksumMismatchBeforeInstaller(t *testing.T) {
 	engine.client = server.Client()
 	engine.runInstaller = func(context.Context, string, []string) error { called = true; return nil }
 	status, err := engine.Apply(context.Background())
-	if err == nil || status.State != "failed" || status.ErrorCode != "verification_failed" {
+	if err == nil || status.State != "failed" || status.ErrorCode != "verification_failed" ||
+		status.Progress != mustProgress("verifying") {
 		t.Fatalf("expected verification failure, status=%+v err=%v", status, err)
 	}
 	if called {

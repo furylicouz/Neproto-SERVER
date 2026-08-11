@@ -331,6 +331,16 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
                 {messages.checkedAt}: {checkedAt}
               </div>
             </div>
+            {status.state === "failed" && (
+              <Alert variant="destructive" className="md:col-span-2">
+                <AlertTriangle />
+                <AlertTitle>{stageLabel}</AlertTitle>
+                <AlertDescription>
+                  {status.message}
+                  {status.error_code ? ` (${status.error_code})` : ""}
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
           <CardFooter className="justify-end gap-2">
             <Button variant="outline" disabled={checking || active} onClick={() => void requestAction("check")}>
@@ -382,6 +392,12 @@ export function UpdatePanel({ locale, messages }: { readonly locale: AppLocale; 
               <span className="tabular-nums">{status?.progress || 0}%</span>
             </div>
             <Progress value={status?.progress || 0} aria-label={stageLabel || messages.checking} />
+            {status?.state === "failed" && (
+              <p className="text-destructive text-sm">
+                {status.message}
+                {status.error_code ? ` (${status.error_code})` : ""}
+              </p>
+            )}
           </div>
           {!active && !polling && (
             <AlertDialogFooter>

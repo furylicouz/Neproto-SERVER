@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +74,29 @@ func TestScheduledCheckIsIdempotentlyConsumedWhileUpdaterIsBusy(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("check marker was not consumed: %v", err)
+	}
+}
+
+func TestUpdateServiceSandboxAllowsManagedSetgidDirectories(t *testing.T) {
+	t.Helper()
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	installer, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(installer), `chmod 2770 "$etc_neproto/geodata"`) ||
+		!strings.Contains(string(installer), `chmod 2750 "$update_dir"`) {
+		t.Fatal("test premise changed: managed directories no longer require setgid")
+	}
+	unit, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "systemd", "neproto-update.service"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(unit), "RestrictSUIDSGID=true") {
+		t.Fatal("update sandbox blocks the installer's required setgid chmod operations")
 	}
 }

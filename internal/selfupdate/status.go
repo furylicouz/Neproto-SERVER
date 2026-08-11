@@ -10,7 +10,7 @@ var stageProgress = map[string]int{
 	"installing":  75,
 	"restarting":  95,
 	"succeeded":   100,
-	"failed":      100,
+	"failed":      0,
 }
 
 func ProgressForStage(stage string) (int, bool) {

@@ -69,7 +69,6 @@ export function expireStaleUpdateStatus(status, now) {
   return {
     ...status,
     state: "failed",
-    progress: 100,
     message: checkTimedOut ? "Update check timed out" : "Update operation timed out",
     error_code: checkTimedOut ? "update_check_timeout" : "update_operation_timeout",
     updated_at: new Date(now).toISOString(),

@@ -97,6 +97,7 @@ test("stale active update states terminate instead of polling forever", () => {
   const expiredCheck = expireStaleUpdateStatus(stuckCheck, now);
   assert.equal(expiredCheck.state, "failed");
   assert.equal(expiredCheck.error_code, "update_check_timeout");
+  assert.equal(expiredCheck.progress, 5);
 
   const freshInstall = {
     ...status,
@@ -113,4 +114,5 @@ test("stale active update states terminate instead of polling forever", () => {
   const expiredInstall = expireStaleUpdateStatus(stuckInstall, now);
   assert.equal(expiredInstall.state, "failed");
   assert.equal(expiredInstall.error_code, "update_operation_timeout");
+  assert.equal(expiredInstall.progress, 75);
 });

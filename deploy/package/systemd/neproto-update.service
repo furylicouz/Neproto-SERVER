@@ -18,7 +18,9 @@ ProtectKernelLogs=true
 ProtectControlGroups=true
 LockPersonality=true
 RestrictRealtime=true
-RestrictSUIDSGID=true
+# The managed installer preserves setgid on the shared geodata and updater
+# state directories so unprivileged services retain group access after atomic
+# file replacement. This verified root-only transaction must permit that chmod.
 RestrictNamespaces=true
 RemoveIPC=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
