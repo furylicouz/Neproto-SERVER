@@ -2,6 +2,11 @@
 set -Eeuo pipefail
 
 package_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+temporary_root=${NEPROTO_TEST_TMPDIR:-/var/lib}
+[[ -d $temporary_root && -w $temporary_root ]] || {
+  printf 'ERROR: test temporary root is not writable: %s\n' "$temporary_root" >&2
+  exit 1
+}
 "$package_dir/tests/platform-smoke.sh"
 architecture=${1:-amd64}
 expected_version=${2:-}
@@ -23,7 +28,7 @@ fi
 test_mode() {
   local mode=$1
   local root admin_secret_before
-  root=$(mktemp -d)
+  root=$(mktemp -d "$temporary_root/neproto-install-smoke.XXXXXX")
   chmod 0755 "$root"
   trap 'rm -rf -- "$root"' RETURN
 
@@ -210,8 +215,8 @@ test_mode docker
 
 test_cluster_node() {
   local root bootstrap p1 p2 p3 p4 p5 p6 p7 p8 p9
-  root=$(mktemp -d)
-  bootstrap=$(mktemp)
+  root=$(mktemp -d "$temporary_root/neproto-cluster-smoke.XXXXXX")
+  bootstrap=$(mktemp "$temporary_root/neproto-cluster-bootstrap.XXXXXX")
   trap 'rm -rf -- "$root" "$bootstrap" "$bootstrap.retry" "$bootstrap.foreign"' RETURN
   chmod 0755 "$root"
   p1=/111111111111111111111111111111111111111111111111
