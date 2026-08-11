@@ -12,7 +12,11 @@ actual=$("$repository/install.sh" --print-release-url)
 }
 
 "$repository/install.sh" --help | grep -q -- '--bootstrap-bundle'
-grep -Fq 'cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"' \
+grep -Fq 'tar -C "$script_dir/web" --mode='"'"'a-s,u+rwX,go+rX,go-w'"'"' -cf - .' \
+  "$repository/deploy/package/install.sh"
+grep -Fq 'tar --no-same-owner --no-same-permissions -C "$web_stage" -xf -' \
+  "$repository/deploy/package/install.sh"
+! grep -Fq 'cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/."' \
   "$repository/deploy/package/install.sh"
 ! grep -Fq 'cp -a -- "$script_dir/web/."' "$repository/deploy/package/install.sh"
 
