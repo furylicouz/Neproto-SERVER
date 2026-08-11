@@ -29,6 +29,16 @@ ensure_mode() {
   [[ "$current" == "$desired" ]] || chmod "$desired" "$path"
 }
 
+ensure_owner_group() {
+  local desired_owner=$1
+  local desired_group=$2
+  local path=$3
+  local current
+
+  current=$(stat -c '%u:%g' -- "$path") || die "cannot inspect ownership: $path"
+  [[ "$current" == "$desired_owner:$desired_group" ]] || chown "$desired_owner:$desired_group" -- "$path"
+}
+
 usage() {
   cat <<'EOF'
 Usage: ./install.sh [--mode docker|bare-metal] [--domain DOMAIN]
@@ -563,7 +573,8 @@ chmod 0644 "$systemd_dir/neproto-control.service"
 chown root:"$service_gid" "$etc_neproto" "$etc_neproto/users" "$etc_neproto/server.json"
 chown root:"$service_gid" "$etc_neproto/web.env"
 chown root:"$service_gid" "$web_admin_secret"
-chown -R root:"$service_gid" "$etc_neproto/geodata"
+find "$etc_neproto/geodata" -mindepth 1 -exec chown -h root:"$service_gid" -- {} +
+ensure_owner_group 0 "$service_gid" "$etc_neproto/geodata"
 chown "$service_uid":"$service_gid" "$etc_neproto/users/active"
 chown "$service_uid":"$service_gid" "$usage_dir"
 chmod 0750 "$etc_neproto"
@@ -581,7 +592,7 @@ ensure_mode 2770 "$etc_neproto/geodata"
 chmod 0660 "$etc_neproto/geodata/geoip.dat" "$etc_neproto/geodata/geosite.dat"
 chown root:"$service_gid" "$etc_neproto/tls"
 chmod 0750 "$etc_neproto/tls"
-chown root:"$service_gid" "$update_dir"
+ensure_owner_group 0 "$service_gid" "$update_dir"
 chown "$service_uid":"$service_gid" "$update_inbox"
 # The updater writes status files as root while the unprivileged web process
 # reads them through the shared service group. setgid keeps every atomic temp

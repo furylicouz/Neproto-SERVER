@@ -12,8 +12,9 @@ command -v systemd-run >/dev/null || {
 }
 
 root=$(mktemp -d)
+log=$(mktemp)
 unit="neproto-legacy-updater-smoke-$$"
-trap 'rm -rf -- "$root"' EXIT
+trap 'rm -rf -- "$root"; rm -f -- "$log"' EXIT
 chmod 0755 "$root"
 
 # Match an already-managed 0.5.x node. These directories acquired their
@@ -29,7 +30,7 @@ chmod 2750 "$root/var/lib/neproto/update"
 # recursively staging the standalone Next.js payload.
 find "$package_dir/web" -type d -exec chmod 2755 {} +
 
-systemd-run --quiet --wait --pipe --collect --service-type=exec \
+if ! systemd-run --quiet --wait --pipe --collect --service-type=exec \
   --unit "$unit" \
   --property=RestrictSUIDSGID=true \
   --property=NoNewPrivileges=true \
@@ -37,7 +38,11 @@ systemd-run --quiet --wait --pipe --collect --service-type=exec \
   "$package_dir/install.sh" --root "$root" --mode bare-metal \
   --domain vpn.example.com --addresses 8.8.8.8 \
   --web-domain admin.example.com --web-port 3100 \
-  --non-interactive --skip-start
+  --non-interactive --skip-start 2>&1 | tee "$log"; then
+  annotation=$(tail -n 20 "$log" | tr '\r\n' '  ' | sed 's/%/%25/g' | cut -c1-4000)
+  printf '::error title=Legacy updater sandbox failed::%s\n' "$annotation"
+  exit 1
+fi
 
 [[ -s $root/opt/neproto/web/.next/BUILD_ID ]]
 [[ -d $root/opt/neproto/web/node_modules ]]

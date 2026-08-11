@@ -197,3 +197,27 @@ func TestReleaseLifecycleRunsLegacyUpdaterSandbox(t *testing.T) {
 		t.Fatal("release lifecycle does not exercise the legacy RestrictSUIDSGID updater sandbox")
 	}
 }
+
+func TestInstallerPreservesExistingSetgidDirectoryOwnership(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	installer, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	script := string(installer)
+	if !strings.Contains(script, `ensure_owner_group 0 "$service_gid" "$etc_neproto/geodata"`) {
+		t.Fatal("installer must preserve an already-correct geodata directory owner and group")
+	}
+	if !strings.Contains(script, `ensure_owner_group 0 "$service_gid" "$update_dir"`) {
+		t.Fatal("installer must preserve an already-correct updater directory owner and group")
+	}
+	if strings.Contains(script, `chown -R root:"$service_gid" "$etc_neproto/geodata"`) ||
+		strings.Contains(script, `chown root:"$service_gid" "$update_dir"`) {
+		t.Fatal("unconditional chown would clear inherited SGID under the legacy sandbox")
+	}
+}
