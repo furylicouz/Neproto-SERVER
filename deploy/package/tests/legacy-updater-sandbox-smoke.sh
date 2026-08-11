@@ -16,12 +16,18 @@ command -v systemd-run >/dev/null || {
   exit 1
 }
 
-root=$(mktemp -d)
-log=$(mktemp)
-fakebin=$(mktemp -d)
+temporary_root=${NEPROTO_TEST_TMPDIR:-/var/tmp}
+[[ -d $temporary_root && -w $temporary_root ]] || {
+  printf 'ERROR: test temporary root is not writable: %s\n' "$temporary_root" >&2
+  exit 1
+}
+workspace=$(mktemp -d "$temporary_root/neproto-legacy-updater-smoke.XXXXXX")
+root=$workspace/root
+log=$workspace/install.log
+fakebin=$workspace/fakebin
+install -d -m 0755 "$root" "$fakebin"
 unit="neproto-legacy-updater-smoke-$$"
-trap 'rm -rf -- "$root" "$fakebin"; rm -f -- "$log"' EXIT
-chmod 0755 "$root"
+trap 'rm -rf -- "$workspace"' EXIT
 
 # Exercise the production GeoIP/GeoSite downloader without depending on the
 # network. The fake curl writes deterministic payloads and valid checksums;
