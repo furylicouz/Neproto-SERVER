@@ -57,8 +57,7 @@ jobs:
 
       - name: Verify standalone web payload
         run: |
-          stage=$(mktemp -d /var/tmp/neproto-ci-update.XXXXXX)
-          trap 'rm -rf -- "$stage"' EXIT
+          stage=$(mktemp -d)
           mkdir -p "$stage/web/.next/static"
           cp -a neproto-web/.next/standalone/. "$stage/web/"
           cp -a neproto-web/.next/static/. "$stage/web/.next/static/"
@@ -121,7 +120,8 @@ jobs:
       - name: Verify complete candidate update lifecycle
         run: |
           version=$(tr -d '[:space:]' < VERSION)
-          stage=$(mktemp -d)
+          stage=$(mktemp -d /var/tmp/neproto-ci-update.XXXXXX)
+          trap 'rm -rf -- "$stage"' EXIT
           legacy=np2-0.5.6
           legacy_name="neproto-server-bundle-$legacy.tar.gz"
           curl --fail --location --proto '=https' --tlsv1.2 \
