@@ -120,7 +120,7 @@ jobs:
       - name: Verify complete candidate update lifecycle
         run: |
           version=$(tr -d '[:space:]' < VERSION)
-          stage=$(mktemp -d /var/tmp/neproto-ci-update.XXXXXX)
+          stage=$(mktemp -d /var/lib/neproto-ci-update.XXXXXX)
           trap 'rm -rf -- "$stage"' EXIT
           legacy=np2-0.5.6
           legacy_name="neproto-server-bundle-$legacy.tar.gz"

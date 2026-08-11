@@ -16,7 +16,7 @@ command -v systemd-run >/dev/null || {
   exit 1
 }
 
-temporary_root=${NEPROTO_TEST_TMPDIR:-/var/tmp}
+temporary_root=${NEPROTO_TEST_TMPDIR:-/var/lib}
 [[ -d $temporary_root && -w $temporary_root ]] || {
   printf 'ERROR: test temporary root is not writable: %s\n' "$temporary_root" >&2
   exit 1
