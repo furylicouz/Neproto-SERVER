@@ -1,6 +1,21 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource-variable/lora";
+@import "@fontsource-variable/merriweather";
+@import "@fontsource-variable/noto-sans";
+@import "@fontsource-variable/noto-serif";
+@import "@fontsource-variable/nunito-sans";
+@import "@fontsource-variable/outfit";
+@import "@fontsource-variable/playfair-display";
+@import "@fontsource-variable/public-sans";
+@import "@fontsource-variable/raleway";
+@import "@fontsource-variable/roboto";
+@import "@fontsource-variable/roboto-slab";
 
 /* Theme preset styles: these override CSS variables based on the selected data-theme-preset */
 @import "../styles/presets/brutalist.css";
@@ -87,6 +102,22 @@ These serve as the fallback; there is no separate default.css file. */
   --sidebar-ring: oklch(0.708 0 0);
 
   /* fonts */
+  --font-geist: var(--font-geist-sans);
+  --font-inter: "Inter Variable";
+  --font-noto-sans: "Noto Sans Variable";
+  --font-nunito-sans: "Nunito Sans Variable";
+  --font-figtree: "Figtree Variable";
+  --font-roboto: "Roboto Variable";
+  --font-raleway: "Raleway Variable";
+  --font-dm-sans: "DM Sans Variable";
+  --font-public-sans: "Public Sans Variable";
+  --font-outfit: "Outfit Variable";
+  --font-jetbrains-mono: "JetBrains Mono Variable";
+  --font-noto-serif: "Noto Serif Variable";
+  --font-roboto-slab: "Roboto Slab Variable";
+  --font-merriweather: "Merriweather Variable";
+  --font-lora: "Lora Variable";
+  --font-playfair-display: "Playfair Display Variable";
   --font-sans: var(--font-geist);
   --font-mono: var(--font-geist-mono);
   --background: oklch(1 0 0);
