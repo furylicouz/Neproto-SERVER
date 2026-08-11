@@ -390,9 +390,14 @@ fi
 
 info 'installing verified GeoIP and GeoSite routing data'
 if [[ ${NEPROTO_TEST_MODE:-} == 1 ]]; then
-  : >"$etc_neproto/geodata/geoip.dat"
-  : >"$etc_neproto/geodata/geosite.dat"
-  chmod 0640 "$etc_neproto/geodata/geoip.dat" "$etc_neproto/geodata/geosite.dat"
+  if [[ ${NEPROTO_GEODATA_TEST_DOWNLOAD:-0} == 1 ]]; then
+    "$lib_dir/update-geodata" "$etc_neproto/geodata"
+  else
+    NEPROTO_GEODATA_PREPARE_ONLY=1 "$lib_dir/update-geodata" "$etc_neproto/geodata"
+    : >"$etc_neproto/geodata/geoip.dat"
+    : >"$etc_neproto/geodata/geosite.dat"
+    chmod 0640 "$etc_neproto/geodata/geoip.dat" "$etc_neproto/geodata/geosite.dat"
+  fi
 else
   "$lib_dir/update-geodata" "$etc_neproto/geodata"
 fi

@@ -75,8 +75,18 @@ jobs:
       - name: Run isolated installation lifecycle
         run: |
           mkdir -p /tmp/neproto-release
+          legacy=np2-0.5.6
+          legacy_name="neproto-server-bundle-$legacy.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "https://github.com/furylicouz/Neproto-SERVER/releases/download/$legacy/$legacy_name" \
+            --output "/tmp/neproto-release/$legacy_name"
+          printf '%s  %s\n' \
+            bd8f82907d2a3862b528a35c1f39a639cc1bc54cbd2557284bf9ef8e62ae8504 \
+            "/tmp/neproto-release/$legacy_name" | sha256sum --check --status
+          tar -xzf "/tmp/neproto-release/$legacy_name" -C /tmp/neproto-release
           tar -xzf "dist/neproto-server-bundle-$GITHUB_REF_NAME.tar.gz" -C /tmp/neproto-release
-          sudo "/tmp/neproto-release/neproto-server-bundle-$GITHUB_REF_NAME/tests/legacy-updater-sandbox-smoke.sh"
+          sudo "/tmp/neproto-release/neproto-server-bundle-$GITHUB_REF_NAME/tests/legacy-updater-sandbox-smoke.sh" \
+            "/tmp/neproto-release/neproto-server-bundle-$legacy"
           sudo "/tmp/neproto-release/neproto-server-bundle-$GITHUB_REF_NAME/tests/install-smoke.sh" amd64 "$GITHUB_REF_NAME"
 
       - uses: actions/download-artifact@v8

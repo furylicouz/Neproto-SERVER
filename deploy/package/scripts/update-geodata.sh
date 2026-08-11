@@ -6,6 +6,15 @@ target=${1:-/etc/neproto/geodata}
   printf 'geodata target must be absolute\n' >&2
   exit 2
 }
+[[ ! -L $target ]] || {
+  printf 'geodata target must not be a symlink\n' >&2
+  exit 2
+}
+prepare_only=${NEPROTO_GEODATA_PREPARE_ONLY:-0}
+if [[ $prepare_only == 1 && ${NEPROTO_TEST_MODE:-} != 1 ]]; then
+  printf 'prepare-only geodata mode is restricted to isolated tests\n' >&2
+  exit 2
+fi
 
 geoip_url=https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
 geoip_sum_url=https://github.com/v2fly/geoip/releases/latest/download/geoip.dat.sha256sum
@@ -35,7 +44,11 @@ download_verified() {
   mv -f -- "$destination.tmp" "$destination"
 }
 
-install -d -m 0750 "$target"
+[[ -d $target ]] || install -d -m 0750 "$target"
+if [[ $prepare_only == 1 ]]; then
+  printf 'NP/2 geodata directory prepared: %s\n' "$target"
+  exit 0
+fi
 download_verified geoip.dat "$geoip_url" "$geoip_sum_url" "$target/geoip.dat"
 download_verified dlc.dat "$geosite_url" "$geosite_sum_url" "$target/geosite.dat"
 printf 'NP/2 geodata updated: %s\n' "$target"

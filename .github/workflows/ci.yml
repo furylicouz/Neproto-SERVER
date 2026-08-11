@@ -93,3 +93,52 @@ jobs:
           $setup = Get-Item "dist/windows/NeProto-Setup-$version-x64.exe"
           & $setup.FullName /verify
           if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
+
+  verify-server-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: neproto-web/package-lock.json
+
+      - name: Build unpublished server candidate
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          epoch=$(git log -1 --format=%ct)
+          SOURCE_DATE_EPOCH="$epoch" deploy/build-server-bundle.sh "$version" dist
+
+      - name: Verify complete candidate update lifecycle
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          stage=$(mktemp -d)
+          legacy=np2-0.5.6
+          legacy_name="neproto-server-bundle-$legacy.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "https://github.com/furylicouz/Neproto-SERVER/releases/download/$legacy/$legacy_name" \
+            --output "$stage/$legacy_name"
+          printf '%s  %s\n' \
+            bd8f82907d2a3862b528a35c1f39a639cc1bc54cbd2557284bf9ef8e62ae8504 \
+            "$stage/$legacy_name" | sha256sum --check --status
+          tar -xzf "$stage/$legacy_name" -C "$stage"
+          tar -xzf "dist/neproto-server-bundle-$version.tar.gz" -C "$stage"
+          sudo "$stage/neproto-server-bundle-$version/tests/legacy-updater-sandbox-smoke.sh" \
+            "$stage/neproto-server-bundle-$legacy"
+          sudo "$stage/neproto-server-bundle-$version/tests/install-smoke.sh" amd64 "$version"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: neproto-server-candidate-${{ github.sha }}
+          path: |
+            dist/neproto-server-bundle-*.tar.gz
+            dist/neproto-server-bundle-*.tar.gz.sha256
+          if-no-files-found: error

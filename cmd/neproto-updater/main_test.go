@@ -225,3 +225,33 @@ func TestInstallerPreservesExistingSetgidDirectoryOwnership(t *testing.T) {
 		t.Fatal("unconditional chown would clear inherited SGID under the legacy sandbox")
 	}
 }
+
+func TestGeodataUpdaterDoesNotChmodExistingSetgidDirectory(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	updater, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "scripts", "update-geodata.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	installer, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	script := string(updater)
+	if !strings.Contains(script, `[[ -d $target ]] || install -d -m 0750 "$target"`) {
+		t.Fatal("geodata updater must leave an existing setgid target directory unchanged")
+	}
+	if strings.Contains(script, "\ninstall -d -m 0750 \"$target\"\n") {
+		t.Fatal("unconditional install -d would chmod the existing geodata directory")
+	}
+	if !strings.Contains(string(installer), `NEPROTO_GEODATA_PREPARE_ONLY=1 "$lib_dir/update-geodata" "$etc_neproto/geodata"`) {
+		t.Fatal("isolated installer lifecycle must exercise production geodata directory preparation")
+	}
+	if !strings.Contains(string(installer), `NEPROTO_GEODATA_TEST_DOWNLOAD`) {
+		t.Fatal("legacy updater smoke must be able to exercise verified geodata installation")
+	}
+}
