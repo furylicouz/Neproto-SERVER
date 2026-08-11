@@ -122,7 +122,7 @@ func TestManagedUpdateDoesNotRepeatExistingSetgidChmod(t *testing.T) {
 	}
 }
 
-func TestWebStageDropsInheritedSetgidBeforeCopy(t *testing.T) {
+func TestWebStageDropsInheritedSetgidBeforeExtraction(t *testing.T) {
 	_, sourceFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate updater test source")
@@ -136,14 +136,14 @@ func TestWebStageDropsInheritedSetgidBeforeCopy(t *testing.T) {
 	script := string(installer)
 	stageCreated := strings.Index(script, `web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")`)
 	stageNormalized := strings.Index(script, `chmod 0700 "$web_stage"`)
-	stageCopied := strings.Index(script, `cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"`)
-	if stageCreated < 0 || stageNormalized < 0 || stageCopied < 0 ||
-		stageCreated >= stageNormalized || stageNormalized >= stageCopied {
-		t.Fatal("web staging must remove inherited SGID before recursive payload copy")
+	stageExtracted := strings.Index(script, `tar --no-same-owner --no-same-permissions -C "$web_stage" -xf -`)
+	if stageCreated < 0 || stageNormalized < 0 || stageExtracted < 0 ||
+		stageCreated >= stageNormalized || stageNormalized >= stageExtracted {
+		t.Fatal("web staging must remove inherited SGID before payload extraction")
 	}
 }
 
-func TestWebPayloadSourceDropsInheritedSetgidBeforeCopy(t *testing.T) {
+func TestWebPayloadArchiveDropsInheritedSetgidWithoutMutatingSource(t *testing.T) {
 	_, sourceFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate updater test source")
@@ -155,10 +155,14 @@ func TestWebPayloadSourceDropsInheritedSetgidBeforeCopy(t *testing.T) {
 	}
 
 	script := string(installer)
-	sourceNormalized := strings.Index(script, `find "$script_dir/web" -type d -exec chmod 0755 {} +`)
-	stageCopied := strings.Index(script, `cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"`)
-	if sourceNormalized < 0 || stageCopied < 0 || sourceNormalized >= stageCopied {
-		t.Fatal("extracted web source must drop inherited SGID before recursive copy")
+	archiveNormalized := strings.Index(script, `tar -C "$script_dir/web" --mode='a-s,u+rwX,go+rX,go-w' -cf - .`)
+	stageExtracted := strings.Index(script, `tar --no-same-owner --no-same-permissions -C "$web_stage" -xf -`)
+	if archiveNormalized < 0 || stageExtracted < 0 || archiveNormalized >= stageExtracted {
+		t.Fatal("web staging archive must remove inherited SGID before extraction")
+	}
+	if strings.Contains(script, `find "$script_dir/web" -type d -exec chmod`) ||
+		strings.Contains(script, `cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/."`) {
+		t.Fatal("legacy web staging must not mutate or copy source directory modes")
 	}
 }
 

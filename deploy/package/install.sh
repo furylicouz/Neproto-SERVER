@@ -189,7 +189,7 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 && ${NEPROTO_SELF_UPDATE:-0} != 1 ]]; then
   fi
 elif [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
   info 'validating dependencies already installed on this managed node'
-  required_commands=(certbot curl getent install jq openssl qrencode systemctl)
+  required_commands=(certbot curl getent install jq openssl qrencode systemctl tar)
   [[ $mode != docker ]] || required_commands+=(docker)
   for command_name in "${required_commands[@]}"; do
     command -v "$command_name" >/dev/null 2>&1 || die "managed update requires installed command: $command_name"
@@ -318,16 +318,16 @@ else
   service_gid=65532
 fi
 
-# Legacy updaters extract the release below a setgid state directory. Strip
-# that inherited bit from the disposable source tree before cp observes its
-# directory modes under RestrictSUIDSGID.
-find "$script_dir/web" -type d -exec chmod 0755 {} +
 web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")
 # Some managed nodes have SGID on /opt/neproto. The legacy updater sandbox
-# rejects creating SGID directories, so remove any inherited bit before cp
-# creates the standalone Next.js directory tree.
+# rejects creating SGID directories, so remove any inherited bit before the
+# standalone Next.js directory tree is created.
 chmod 0700 "$web_stage"
-if ! cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"; then
+# Legacy updaters extract below a setgid state directory. Do not chmod or copy
+# those source directory modes inside RestrictSUIDSGID: stream a normalized
+# archive instead, so the staging tree is created without any setid bits.
+if ! tar -C "$script_dir/web" --mode='a-s,u+rwX,go+rX,go-w' -cf - . | \
+  tar --no-same-owner --no-same-permissions -C "$web_stage" -xf -; then
   die 'cannot stage NeProto Web payload'
 fi
 find "$web_stage" -type d -exec chmod 0755 {} +
