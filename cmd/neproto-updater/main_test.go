@@ -142,3 +142,58 @@ func TestWebStageDropsInheritedSetgidBeforeCopy(t *testing.T) {
 		t.Fatal("web staging must remove inherited SGID before recursive payload copy")
 	}
 }
+
+func TestWebPayloadSourceDropsInheritedSetgidBeforeCopy(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	installer, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	script := string(installer)
+	sourceNormalized := strings.Index(script, `find "$script_dir/web" -type d -exec chmod 0755 {} +`)
+	stageCopied := strings.Index(script, `cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"`)
+	if sourceNormalized < 0 || stageCopied < 0 || sourceNormalized >= stageCopied {
+		t.Fatal("extracted web source must drop inherited SGID before recursive copy")
+	}
+}
+
+func TestUpdaterWorkDirectoryDropsInheritedSetgid(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	engine, err := os.ReadFile(filepath.Join(repositoryRoot, "internal", "selfupdate", "engine.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	source := string(engine)
+	workCreated := strings.Index(source, `os.MkdirTemp(engine.store.Directory, ".work-*")`)
+	workNormalized := strings.Index(source, `os.Chmod(workDirectory, 0o700)`)
+	bundleExtracted := strings.Index(source, `ExtractBundle(archiveFile, workDirectory, release.Tag)`)
+	if workCreated < 0 || workNormalized < 0 || bundleExtracted < 0 ||
+		workCreated >= workNormalized || workNormalized >= bundleExtracted {
+		t.Fatal("updater work directory must drop inherited SGID before extraction")
+	}
+}
+
+func TestReleaseLifecycleRunsLegacyUpdaterSandbox(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	workflow, err := os.ReadFile(filepath.Join(repositoryRoot, ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(workflow), `tests/legacy-updater-sandbox-smoke.sh`) {
+		t.Fatal("release lifecycle does not exercise the legacy RestrictSUIDSGID updater sandbox")
+	}
+}

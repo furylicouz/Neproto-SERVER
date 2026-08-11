@@ -308,6 +308,10 @@ else
   service_gid=65532
 fi
 
+# Legacy updaters extract the release below a setgid state directory. Strip
+# that inherited bit from the disposable source tree before cp observes its
+# directory modes under RestrictSUIDSGID.
+find "$script_dir/web" -type d -exec chmod 0755 {} +
 web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")
 # Some managed nodes have SGID on /opt/neproto. The legacy updater sandbox
 # rejects creating SGID directories, so remove any inherited bit before cp

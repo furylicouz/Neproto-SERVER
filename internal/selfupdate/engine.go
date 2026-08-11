@@ -147,6 +147,10 @@ func (engine *Engine) Apply(ctx context.Context) (Status, error) {
 	if err != nil {
 		return engine.fail(status, "storage_failed", "Cannot prepare update storage", err)
 	}
+	if err := os.Chmod(workDirectory, 0o700); err != nil {
+		_ = os.RemoveAll(workDirectory)
+		return engine.fail(status, "storage_failed", "Cannot secure update storage", err)
+	}
 	defer os.RemoveAll(workDirectory)
 
 	status.State = "downloading"
