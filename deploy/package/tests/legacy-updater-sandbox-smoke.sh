@@ -89,6 +89,19 @@ if ! systemd-run --quiet --wait --pipe --collect --service-type=exec \
   --unit "$unit" \
   --property=RestrictSUIDSGID=true \
   --property=NoNewPrivileges=true \
+  --property=PrivateTmp=true \
+  --property=PrivateDevices=true \
+  --property=ProtectHome=true \
+  --property=ProtectKernelTunables=true \
+  --property=ProtectKernelModules=true \
+  --property=ProtectKernelLogs=true \
+  --property=ProtectControlGroups=true \
+  --property=LockPersonality=true \
+  --property=RestrictRealtime=true \
+  --property=RestrictNamespaces=true \
+  --property=RemoveIPC=true \
+  --property='RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' \
+  --property=SystemCallArchitectures=native \
   /usr/bin/env PATH="$fakebin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
   NEPROTO_TEST_MODE=1 NEPROTO_GEODATA_TEST_DOWNLOAD=1 \
   "$package_dir/install.sh" --root "$root" --mode bare-metal \

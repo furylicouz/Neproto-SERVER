@@ -21,7 +21,12 @@ geoip_sum_url=https://github.com/v2fly/geoip/releases/latest/download/geoip.dat.
 geosite_url=https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
 geosite_sum_url=https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat.sha256sum
 
-temporary=$(mktemp -d)
+temporary_root=${NEPROTO_TMPDIR:-/var/tmp}
+[[ $temporary_root == /* && -d $temporary_root && ! -L $temporary_root ]] || {
+  printf 'invalid geodata temporary directory: %s\n' "$temporary_root" >&2
+  exit 2
+}
+temporary=$(mktemp -d "$temporary_root/neproto-geodata.XXXXXX")
 trap 'rm -rf -- "$temporary"' EXIT
 
 download_verified() {

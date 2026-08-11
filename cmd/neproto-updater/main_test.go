@@ -255,3 +255,23 @@ func TestGeodataUpdaterDoesNotChmodExistingSetgidDirectory(t *testing.T) {
 		t.Fatal("legacy updater smoke must be able to exercise verified geodata installation")
 	}
 }
+
+func TestGeodataUpdaterUsesDiskBackedTemporaryStorage(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	updater, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "scripts", "update-geodata.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(updater)
+	if !strings.Contains(script, `temporary_root=${NEPROTO_TMPDIR:-/var/tmp}`) ||
+		!strings.Contains(script, `mktemp -d "$temporary_root/neproto-geodata.XXXXXX"`) {
+		t.Fatal("geodata downloads must avoid capacity-limited RAM-backed /tmp")
+	}
+	if strings.Contains(script, `temporary=$(mktemp -d)`) {
+		t.Fatal("unqualified mktemp would stage production geodata in /tmp")
+	}
+}
