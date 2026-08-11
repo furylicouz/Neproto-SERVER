@@ -309,6 +309,10 @@ else
 fi
 
 web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")
+# Some managed nodes have SGID on /opt/neproto. The legacy updater sandbox
+# rejects creating SGID directories, so remove any inherited bit before cp
+# creates the standalone Next.js directory tree.
+chmod 0700 "$web_stage"
 if ! cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"; then
   die 'cannot stage NeProto Web payload'
 fi

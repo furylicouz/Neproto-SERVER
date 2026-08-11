@@ -121,3 +121,24 @@ func TestManagedUpdateDoesNotRepeatExistingSetgidChmod(t *testing.T) {
 		}
 	}
 }
+
+func TestWebStageDropsInheritedSetgidBeforeCopy(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate updater test source")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	installer, err := os.ReadFile(filepath.Join(repositoryRoot, "deploy", "package", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	script := string(installer)
+	stageCreated := strings.Index(script, `web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")`)
+	stageNormalized := strings.Index(script, `chmod 0700 "$web_stage"`)
+	stageCopied := strings.Index(script, `cp -R --no-preserve=ownership,mode,timestamps -- "$script_dir/web/." "$web_stage/"`)
+	if stageCreated < 0 || stageNormalized < 0 || stageCopied < 0 ||
+		stageCreated >= stageNormalized || stageNormalized >= stageCopied {
+		t.Fatal("web staging must remove inherited SGID before recursive payload copy")
+	}
+}
