@@ -162,6 +162,8 @@ func clientConnectorForRun(
 		return adaptive, nil
 	case config.CarrierPolicyUDPFirst:
 		return adaptive, nil
+	case config.CarrierPolicyHTTP3Only:
+		return adaptive, nil
 	default:
 		return nil, config.ErrInvalidConfig
 	}
@@ -171,8 +173,15 @@ func clientConnectorForRun(
 // a local application adapter. Mobile packet tunnels use the returned
 // multiplexer directly.
 func ConnectClient(ctx context.Context, clientConfig config.Client) (*session.Authenticated, error) {
-	authenticated, _, err := connectClient(ctx, clientConfig, ProbeAuto)
+	authenticated, _, err := connectClient(ctx, clientConfig, primaryClientProbeMode(clientConfig))
 	return authenticated, err
+}
+
+func primaryClientProbeMode(clientConfig config.Client) ProbeMode {
+	if clientConfig.CarrierPolicy == config.CarrierPolicyHTTP3Only {
+		return ProbeHTTP3
+	}
+	return ProbeAuto
 }
 
 // ConnectClientHTTPSFirst establishes the same authenticated NP/2 session as
@@ -201,11 +210,16 @@ type clientSessionDial func(
 func connectClientHTTPSFirst(
 	ctx context.Context, clientConfig config.Client, dial clientSessionDial,
 ) (*session.Authenticated, error) {
-	modes := []ProbeMode{ProbeHTTPS}
-	if clientConfig.HTTP3Configured() {
+	modes := make([]ProbeMode, 0, 3)
+	if clientConfig.CarrierPolicy == config.CarrierPolicyHTTP3Only {
 		modes = append(modes, ProbeHTTP3)
+	} else {
+		modes = append(modes, ProbeHTTPS)
+		if clientConfig.HTTP3Configured() {
+			modes = append(modes, ProbeHTTP3)
+		}
+		modes = append(modes, ProbeWebRTC)
 	}
-	modes = append(modes, ProbeWebRTC)
 
 	failures := make([]error, 0, len(modes))
 	for _, mode := range modes {
@@ -228,7 +242,9 @@ func connectClientDatagramPreferred(
 	if clientConfig.HTTP3Configured() {
 		modes = append(modes, ProbeHTTP3)
 	}
-	modes = append(modes, ProbeWebRTC)
+	if clientConfig.CarrierPolicy != config.CarrierPolicyHTTP3Only {
+		modes = append(modes, ProbeWebRTC)
+	}
 	failures := make([]error, 0, len(modes))
 	for _, mode := range modes {
 		authenticated, _, err := dial(ctx, clientConfig, mode)

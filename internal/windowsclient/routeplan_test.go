@@ -2,6 +2,21 @@ package windowsclient
 
 import "testing"
 
+func TestBuildEndpointRoutePlanContainsNoTunnelSideEffects(t *testing.T) {
+	plan, err := BuildEndpointRoutePlan([]EndpointRoute{{
+		Address: "37.252.23.223", InterfaceIndex: 6, NextHop: "10.0.0.1",
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Apply) != 1 || plan.Apply[0].Kind != RouteCommandEndpointExclusion {
+		t.Fatalf("unexpected endpoint plan: %#v", plan.Apply)
+	}
+	if len(plan.Rollback) != 1 || plan.Rollback[0].Kind != RouteCommandEndpointExclusion || plan.Rollback[0].Add {
+		t.Fatalf("unexpected endpoint rollback: %#v", plan.Rollback)
+	}
+}
+
 func TestBuildRoutePlanExcludesEndpointsBeforeTunnelRoutes(t *testing.T) {
 	plan, err := BuildRoutePlan("NeProto", 42, []EndpointRoute{
 		{Address: "104.171.136.10", InterfaceIndex: 7, NextHop: "192.168.1.1"},
@@ -10,7 +25,7 @@ func TestBuildRoutePlanExcludesEndpointsBeforeTunnelRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan.Apply) < 6 || plan.Apply[0].Kind != RouteCommandConfigureAdapter {
+	if len(plan.Apply) < 6 || plan.Apply[0].Kind != RouteCommandEndpointExclusion {
 		t.Fatalf("unexpected apply plan: %#v", plan.Apply)
 	}
 	firstTunnel := -1

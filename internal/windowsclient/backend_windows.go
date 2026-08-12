@@ -13,6 +13,7 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/core/device"
 	"github.com/xjasonlyu/tun2socks/v2/core/device/tun"
 
+	"neproto.local/chameleon/internal/config"
 	"neproto.local/chameleon/mobile/np2mobile"
 )
 
@@ -30,11 +31,13 @@ type WindowsBackend struct {
 	recoveryErr error
 	cleanupDone chan struct{}
 	cleanupErr  error
+	startNP2    func(string, string) error
 }
 
 type windowsRouteManager interface {
 	Recover(context.Context) error
-	Apply(context.Context, string, int, []string) error
+	PrepareEndpoints(context.Context, []string) error
+	ActivateTunnel(context.Context, string, int) error
 	Cleanup(context.Context) error
 }
 
@@ -47,7 +50,7 @@ func NewWindowsBackendWithStartupRecovery(routes *WindowsRouteManager, recoveryE
 }
 
 func newWindowsBackend(routes windowsRouteManager, recoveryErr error) *WindowsBackend {
-	return &WindowsBackend{routes: routes, recoveryErr: recoveryErr}
+	return &WindowsBackend{routes: routes, recoveryErr: recoveryErr, startNP2: np2mobile.Start}
 }
 
 func (*WindowsBackend) SetRoutes(raw []byte) error {
@@ -84,8 +87,31 @@ func (b *WindowsBackend) Connect(ctx context.Context, profile []byte, secret str
 	if err := ctx.Err(); err != nil {
 		return BackendStatus{}, err
 	}
+	loaded, err := config.ParseMobileClientBytes(profile, secret)
+	if err != nil {
+		return BackendStatus{}, err
+	}
+	addresses := make([]string, 0, len(loaded.ServerAddresses))
+	for _, address := range loaded.ServerAddresses {
+		addresses = append(addresses, address.String())
+	}
+	cleanupPrepared := func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		err := b.routes.Cleanup(cleanupContext)
+		cancel()
+		if err != nil {
+			b.mu.Lock()
+			b.recoveryErr = err
+			b.mu.Unlock()
+		}
+	}
+	if err := b.routes.PrepareEndpoints(ctx, addresses); err != nil {
+		cleanupPrepared()
+		return BackendStatus{}, err
+	}
 	np2Started := time.Now()
-	if err := np2mobile.Start(string(profile), secret); err != nil {
+	if err := b.startNP2(string(profile), secret); err != nil {
+		cleanupPrepared()
 		return BackendStatus{}, err
 	}
 	np2Duration := time.Since(np2Started)
@@ -99,8 +125,8 @@ func (b *WindowsBackend) Connect(ctx context.Context, profile []byte, secret str
 			endpoint.Close()
 		}
 	}
-	addresses := splitAddresses(np2mobile.ServerAddresses())
-	if len(addresses) == 0 {
+	connectedAddresses := splitAddresses(np2mobile.ServerAddresses())
+	if len(connectedAddresses) == 0 {
 		fail(nil, false)
 		return BackendStatus{}, errors.New("NP/2 carrier returned no route exclusions")
 	}
@@ -118,7 +144,7 @@ func (b *WindowsBackend) Connect(ctx context.Context, profile []byte, secret str
 		fail(endpoint, false)
 		return BackendStatus{}, err
 	}
-	if err := b.routes.Apply(ctx, windowsAdapterName, interfaceIndex, addresses); err != nil {
+	if err := b.routes.ActivateTunnel(ctx, windowsAdapterName, interfaceIndex); err != nil {
 		fail(endpoint, false)
 		return BackendStatus{}, err
 	}

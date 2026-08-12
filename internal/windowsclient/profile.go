@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"neproto.local/chameleon/internal/config"
 	"neproto.local/chameleon/internal/onboarding"
 )
 
@@ -67,10 +68,10 @@ func ImportURI(uri, deviceID string) (Profile, []byte, string, error) {
 }
 
 func profileFromOnboarding(source onboarding.Profile, deviceID string) (Profile, []byte, string, error) {
-	parallel := source.MaxParallelCarriers
-	if parallel == 0 {
-		parallel = 3
-	}
+	// Windows temporarily runs one HTTP/3 carrier end-to-end. The other route
+	// fields stay persisted for forward compatibility, but are not eligible for
+	// initial selection, fallback, pool warming, or migration in this policy.
+	parallel := 1
 	id := profileIDFor(source.CredentialID, source.ServerIdentity)
 	profile := Profile{
 		ID: id, CredentialID: source.CredentialID,
@@ -87,7 +88,7 @@ func profileFromOnboarding(source onboarding.Profile, deviceID string) (Profile,
 		ServerAddresses: append([]string(nil), source.ServerAddresses...), SecretFile: "dpapi",
 		HTTPSURL:           "wss://" + source.ServerIdentity + source.HTTPSPath,
 		WebRTCSignalingURL: "https://" + source.ServerIdentity + source.WebRTCPath,
-		Profile:            "web", CarrierPolicy: "performance", MaxCoverOverheadPercent: 30,
+		Profile:            "web", CarrierPolicy: string(config.CarrierPolicyHTTP3Only), MaxCoverOverheadPercent: 30,
 		InitialWindowBytes: 2_097_152, MaxStreams: 128, MaxParallelCarriers: parallel,
 		RequireDatagrams: source.RequireDatagrams, EnableConstellation: source.EnableConstellation,
 		EnableForwardSecrecy: source.EnableForwardSecrecy, WebRTCTimeout: "5s", HTTPSTimeout: "10s",

@@ -21,6 +21,32 @@ func (r *recordingPowerShellRunner) Run(_ context.Context, script string) ([]byt
 	return append([]byte(nil), r.output...), nil
 }
 
+type failingApplyPowerShellRunner struct {
+	calls              int
+	cancel             context.CancelFunc
+	rollbackErr        error
+	rollbackContextErr error
+}
+
+func (r *failingApplyPowerShellRunner) Run(ctx context.Context, _ string) ([]byte, error) {
+	r.calls++
+	switch r.calls {
+	case 1:
+		return []byte(`[{"class":"MSFT_NetRoute","interface_index":6,"next_hop":"10.0.0.1","hardware_interface":true,"status":"Up","interface_alias":"Ethernet"}]`), nil
+	case 2:
+		if r.cancel != nil {
+			r.cancel()
+		}
+		return nil, errors.New("apply failed")
+	default:
+		r.rollbackContextErr = ctx.Err()
+		if r.rollbackContextErr != nil {
+			return nil, r.rollbackContextErr
+		}
+		return nil, r.rollbackErr
+	}
+}
+
 func TestApplyRunsDiscoveryAndOnePowerShellBatch(t *testing.T) {
 	runner := &recordingPowerShellRunner{output: []byte(`[{"class":"MSFT_NetRoute","interface_index":7,"next_hop":"192.168.1.1","hardware_interface":true,"status":"Up","interface_alias":"Ethernet"}]`)}
 	manager := &WindowsRouteManager{directory: t.TempDir(), runner: runner}
@@ -28,10 +54,10 @@ func TestApplyRunsDiscoveryAndOnePowerShellBatch(t *testing.T) {
 	if err := manager.Apply(context.Background(), "NeProto", 42, []string{"104.171.136.10"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(runner.scripts) != 2 {
-		t.Fatalf("PowerShell processes=%d, want one discovery and one apply batch", len(runner.scripts))
+	if len(runner.scripts) != 3 {
+		t.Fatalf("PowerShell processes=%d, want discovery, endpoint preparation, and tunnel activation", len(runner.scripts))
 	}
-	apply := runner.scripts[1]
+	apply := runner.scripts[1] + runner.scripts[2]
 	for _, required := range []string{"New-NetIPAddress", "New-NetRoute", "0.0.0.0/1", "128.0.0.0/1"} {
 		if !strings.Contains(apply, required) {
 			t.Fatalf("apply script lacks %q: %s", required, apply)
@@ -39,6 +65,68 @@ func TestApplyRunsDiscoveryAndOnePowerShellBatch(t *testing.T) {
 	}
 	if strings.Contains(apply, "Remove-NetRoute") || strings.Contains(apply, "Remove-NetIPAddress") {
 		t.Fatalf("clean route plan repeats expensive rollback work during apply: %s", apply)
+	}
+}
+
+func TestPrepareEndpointsRunsBeforeTunnelActivation(t *testing.T) {
+	runner := &recordingPowerShellRunner{output: []byte(`[{"class":"MSFT_NetRoute","interface_index":6,"next_hop":"10.0.0.1","hardware_interface":true,"status":"Up","interface_alias":"Ethernet"}]`)}
+	manager := &WindowsRouteManager{directory: t.TempDir(), runner: runner}
+
+	if err := manager.PrepareEndpoints(context.Background(), []string{"37.252.23.223"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 2 {
+		t.Fatalf("PowerShell processes=%d, want discovery and endpoint apply", len(runner.scripts))
+	}
+	prepared := runner.scripts[1]
+	if !strings.Contains(prepared, "37.252.23.223/32") || strings.Contains(prepared, "0.0.0.0/1") || strings.Contains(prepared, "New-NetIPAddress") {
+		t.Fatalf("unsafe endpoint preparation: %s", prepared)
+	}
+
+	if err := manager.ActivateTunnel(context.Background(), "NeProto", 42); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.scripts) != 3 {
+		t.Fatalf("PowerShell processes=%d, want one tunnel activation", len(runner.scripts))
+	}
+	activated := runner.scripts[2]
+	for _, required := range []string{"New-NetIPAddress", "0.0.0.0/1", "128.0.0.0/1"} {
+		if !strings.Contains(activated, required) {
+			t.Fatalf("tunnel activation lacks %q: %s", required, activated)
+		}
+	}
+}
+
+func TestPrepareEndpointsRollsBackWithFreshContextAfterCallerCancellation(t *testing.T) {
+	directory := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	runner := &failingApplyPowerShellRunner{cancel: cancel}
+	manager := &WindowsRouteManager{directory: directory, runner: runner}
+
+	if err := manager.PrepareEndpoints(ctx, []string{"37.252.23.223"}); err == nil {
+		t.Fatal("expected endpoint apply failure")
+	}
+	if runner.calls != 3 {
+		t.Fatalf("PowerShell processes=%d, want discovery, failed apply, and rollback", runner.calls)
+	}
+	if runner.rollbackContextErr != nil {
+		t.Fatalf("rollback inherited canceled caller context: %v", runner.rollbackContextErr)
+	}
+	if _, err := os.Stat(filepath.Join(directory, routeJournalFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("journal remains after successful rollback: %v", err)
+	}
+}
+
+func TestPrepareEndpointsRetainsJournalWhenRollbackFails(t *testing.T) {
+	directory := t.TempDir()
+	runner := &failingApplyPowerShellRunner{rollbackErr: errors.New("rollback failed")}
+	manager := &WindowsRouteManager{directory: directory, runner: runner}
+
+	if err := manager.PrepareEndpoints(context.Background(), []string{"37.252.23.223"}); err == nil {
+		t.Fatal("expected endpoint apply failure")
+	}
+	if _, err := os.Stat(filepath.Join(directory, routeJournalFileName)); err != nil {
+		t.Fatalf("recovery journal missing after failed rollback: %v", err)
 	}
 }
 

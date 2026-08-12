@@ -327,6 +327,11 @@ func TestMobileConnectDeadlineCoversSequentialCarrierFallbacks(t *testing.T) {
 	if got, want := mobileConnectDeadline(clientConfig), 26*time.Second; got != want {
 		t.Fatalf("HTTP/3 deadline=%s, want %s", got, want)
 	}
+	clientConfig.CarrierPolicy = config.CarrierPolicyHTTP3Only
+	if got, want := mobileConnectDeadline(clientConfig), 11*time.Second; got != want {
+		t.Fatalf("HTTP/3-only deadline=%s, want %s", got, want)
+	}
+	clientConfig.CarrierPolicy = config.CarrierPolicyPerformance
 	clientConfig.HTTP3URL = ""
 	clientConfig.HTTP3Timeout.Duration = 0
 	if got, want := mobileConnectDeadline(clientConfig), 18*time.Second; got != want {

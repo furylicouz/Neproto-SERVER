@@ -143,6 +143,75 @@ func TestConnectClientDatagramPreferredFallsBackToWebRTCWithoutHTTPS(t *testing.
 	}
 }
 
+func TestConnectClientDatagramPreferredDoesNotFallbackFromHTTP3Only(t *testing.T) {
+	var modes []ProbeMode
+	_, err := connectClientDatagramPreferred(context.Background(), config.Client{
+		CarrierPolicy: config.CarrierPolicy("http3-only"),
+		HTTP3URL:      "https://vpn.example.test/http3",
+	}, func(
+		_ context.Context, _ config.Client, mode ProbeMode,
+	) (*session.Authenticated, hybrid.Result, error) {
+		modes = append(modes, mode)
+		return nil, hybrid.Result{}, errors.New("HTTP/3 unavailable")
+	})
+	if err == nil {
+		t.Fatal("HTTP/3-only connector unexpectedly succeeded")
+	}
+	if !reflect.DeepEqual(modes, []ProbeMode{ProbeHTTP3}) {
+		t.Fatalf("HTTP/3-only carrier attempts=%v", modes)
+	}
+}
+
+func TestConnectClientHTTPSFirstUsesOnlyHTTP3ForHTTP3OnlyPolicy(t *testing.T) {
+	want := &session.Authenticated{}
+	var modes []ProbeMode
+	got, err := connectClientHTTPSFirst(context.Background(), config.Client{
+		CarrierPolicy: config.CarrierPolicyHTTP3Only,
+		HTTP3URL:      "https://vpn.example.test/http3",
+	}, func(
+		_ context.Context, _ config.Client, mode ProbeMode,
+	) (*session.Authenticated, hybrid.Result, error) {
+		modes = append(modes, mode)
+		return want, hybrid.Result{}, nil
+	})
+	if err != nil || got != want {
+		t.Fatalf("HTTP/3-only compatibility connector result=%p error=%v", got, err)
+	}
+	if !reflect.DeepEqual(modes, []ProbeMode{ProbeHTTP3}) {
+		t.Fatalf("HTTP/3-only compatibility attempts=%v", modes)
+	}
+}
+
+func TestClientConnectorForRunAcceptsHTTP3Only(t *testing.T) {
+	want := &session.Authenticated{}
+	calls := 0
+	selected, err := clientConnectorForRun(config.Client{CarrierPolicy: config.CarrierPolicyHTTP3Only},
+		func(context.Context, config.Client) (*session.Authenticated, error) {
+			return nil, errors.New("unexpected compatibility connector")
+		},
+		func(context.Context, config.Client) (*session.Authenticated, error) {
+			calls++
+			return want, nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := selected(context.Background(), config.Client{})
+	if err != nil || got != want || calls != 1 {
+		t.Fatalf("HTTP/3-only run connector result=%p error=%v calls=%d", got, err, calls)
+	}
+}
+
+func TestPrimaryClientProbeModeUsesOnlyHTTP3ForHTTP3OnlyPolicy(t *testing.T) {
+	if got := primaryClientProbeMode(config.Client{CarrierPolicy: config.CarrierPolicyHTTP3Only}); got != ProbeHTTP3 {
+		t.Fatalf("HTTP/3-only primary mode=%v", got)
+	}
+	if got := primaryClientProbeMode(config.Client{CarrierPolicy: config.CarrierPolicyPerformance}); got != ProbeAuto {
+		t.Fatalf("adaptive primary mode=%v", got)
+	}
+}
+
 func TestConnectClientForRunUsesAdaptiveDatagramPolicyByDefault(t *testing.T) {
 	want := &session.Authenticated{}
 	performanceCalls := 0

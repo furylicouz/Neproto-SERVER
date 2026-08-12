@@ -16,10 +16,14 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf16"
 )
 
-const routeJournalFileName = "active-routes.json"
+const (
+	routeJournalFileName       = "active-routes.json"
+	failedApplyRollbackTimeout = 10 * time.Second
+)
 
 const powerShellPreamble = "$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';"
 
@@ -174,6 +178,21 @@ func (m *WindowsRouteManager) RecoverForStartup(ctx context.Context) error {
 }
 
 func (m *WindowsRouteManager) Apply(ctx context.Context, adapterName string, adapterIndex int, addresses []string) error {
+	if err := m.PrepareEndpoints(ctx, addresses); err != nil {
+		return err
+	}
+	if err := m.ActivateTunnel(ctx, adapterName, adapterIndex); err != nil {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), failedApplyRollbackTimeout)
+		cleanupErr := m.Cleanup(cleanupContext)
+		cancel()
+		return errors.Join(err, cleanupErr)
+	}
+	return nil
+}
+
+// PrepareEndpoints installs only the physical-uplink host routes needed for
+// the carrier handshake. It deliberately runs before Wintun exists.
+func (m *WindowsRouteManager) PrepareEndpoints(ctx context.Context, addresses []string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.active != nil {
@@ -187,7 +206,7 @@ func (m *WindowsRouteManager) Apply(ctx context.Context, adapterName string, ada
 		}
 		endpoints = append(endpoints, route)
 	}
-	plan, err := BuildRoutePlan(adapterName, adapterIndex, endpoints)
+	plan, err := BuildEndpointRoutePlan(endpoints)
 	if err != nil {
 		return err
 	}
@@ -200,12 +219,63 @@ func (m *WindowsRouteManager) Apply(ctx context.Context, adapterName string, ada
 		return err
 	}
 	if _, err := m.runner.Run(ctx, script); err != nil {
-		_ = m.rollbackLocked(ctx, plan)
-		_ = os.Remove(filepath.Join(m.directory, routeJournalFileName))
-		return err
+		return m.rollbackFailedApplyLocked(plan, err)
 	}
 	m.active = &plan
 	return nil
+}
+
+// ActivateTunnel extends the prepared endpoint transaction with adapter and
+// default routes after the NP/2 carrier has authenticated.
+func (m *WindowsRouteManager) ActivateTunnel(ctx context.Context, adapterName string, adapterIndex int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.active == nil || len(m.active.Apply) == 0 {
+		return ErrInvalidRoutePlan
+	}
+	for _, command := range m.active.Apply {
+		if command.Kind != RouteCommandEndpointExclusion {
+			return ErrControllerBusy
+		}
+	}
+	tunnel, err := buildTunnelRoutePlan(adapterName, adapterIndex)
+	if err != nil {
+		return err
+	}
+	combined := combineRoutePlans(*m.active, tunnel)
+	// Journal the complete rollback before applying tunnel side effects. The
+	// rollback commands are idempotent if a crash happens before all apply
+	// commands finish.
+	if err := m.writeJournalLocked(combined); err != nil {
+		return err
+	}
+	script, err := applyPlanScript(tunnel)
+	if err != nil {
+		return err
+	}
+	if _, err := m.runner.Run(ctx, script); err != nil {
+		return m.rollbackFailedApplyLocked(combined, err)
+	}
+	m.active = &combined
+	return nil
+}
+
+func (m *WindowsRouteManager) rollbackFailedApplyLocked(plan RoutePlan, applyErr error) error {
+	rollbackContext, cancel := context.WithTimeout(context.Background(), failedApplyRollbackTimeout)
+	rollbackErr := m.rollbackLocked(rollbackContext, plan)
+	cancel()
+	if rollbackErr != nil {
+		// Keep both the in-memory plan and the durable journal so the backend or
+		// startup recovery can retry after a partial PowerShell transaction.
+		m.active = &plan
+		return errors.Join(applyErr, fmt.Errorf("rollback Windows route plan: %w", rollbackErr))
+	}
+	m.active = nil
+	journal := filepath.Join(m.directory, routeJournalFileName)
+	if err := os.Remove(journal); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(applyErr, fmt.Errorf("remove Windows route journal: %w", err))
+	}
+	return applyErr
 }
 
 func (m *WindowsRouteManager) Cleanup(ctx context.Context) error {

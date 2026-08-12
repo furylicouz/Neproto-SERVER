@@ -40,10 +40,22 @@ type RoutePlan struct {
 var adapterNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$`)
 
 func BuildRoutePlan(adapterName string, adapterIndex int, endpoints []EndpointRoute) (RoutePlan, error) {
-	if !adapterNamePattern.MatchString(adapterName) || adapterIndex <= 0 || len(endpoints) == 0 || len(endpoints) > 16 {
+	endpointPlan, err := BuildEndpointRoutePlan(endpoints)
+	if err != nil {
 		return RoutePlan{}, ErrInvalidRoutePlan
 	}
-	plan := RoutePlan{Apply: []RouteCommand{{Kind: RouteCommandConfigureAdapter, Add: true, AdapterName: adapterName, InterfaceIndex: adapterIndex}}}
+	tunnelPlan, err := buildTunnelRoutePlan(adapterName, adapterIndex)
+	if err != nil {
+		return RoutePlan{}, ErrInvalidRoutePlan
+	}
+	return combineRoutePlans(endpointPlan, tunnelPlan), nil
+}
+
+func BuildEndpointRoutePlan(endpoints []EndpointRoute) (RoutePlan, error) {
+	if len(endpoints) == 0 || len(endpoints) > 16 {
+		return RoutePlan{}, ErrInvalidRoutePlan
+	}
+	plan := RoutePlan{}
 	seen := make(map[string]struct{}, len(endpoints))
 	for _, endpoint := range endpoints {
 		address, err := netip.ParseAddr(endpoint.Address)
@@ -69,6 +81,22 @@ func BuildRoutePlan(adapterName string, adapterIndex int, endpoints []EndpointRo
 			NextHop: nextHop.String(),
 		})
 	}
+	if len(plan.Apply) == 0 {
+		return RoutePlan{}, ErrInvalidRoutePlan
+	}
+	for index := len(plan.Apply) - 1; index >= 0; index-- {
+		command := plan.Apply[index]
+		command.Add = false
+		plan.Rollback = append(plan.Rollback, command)
+	}
+	return plan, nil
+}
+
+func buildTunnelRoutePlan(adapterName string, adapterIndex int) (RoutePlan, error) {
+	if !adapterNamePattern.MatchString(adapterName) || adapterIndex <= 0 {
+		return RoutePlan{}, ErrInvalidRoutePlan
+	}
+	plan := RoutePlan{Apply: []RouteCommand{{Kind: RouteCommandConfigureAdapter, Add: true, AdapterName: adapterName, InterfaceIndex: adapterIndex}}}
 	for _, route := range []struct {
 		family               int
 		destination, nextHop string
@@ -85,4 +113,11 @@ func BuildRoutePlan(adapterName string, adapterIndex int, endpoints []EndpointRo
 		plan.Rollback = append(plan.Rollback, command)
 	}
 	return plan, nil
+}
+
+func combineRoutePlans(first, second RoutePlan) RoutePlan {
+	return RoutePlan{
+		Apply:    append(append([]RouteCommand(nil), first.Apply...), second.Apply...),
+		Rollback: append(append([]RouteCommand(nil), second.Rollback...), first.Rollback...),
+	}
 }

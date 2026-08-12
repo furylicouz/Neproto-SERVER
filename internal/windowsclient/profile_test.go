@@ -46,8 +46,14 @@ func TestImportURIProducesDirectNP2Configuration(t *testing.T) {
 	if client.ServerIdentity != "vpn.example.com" || len(client.ServerAddresses) != 1 || client.ServerAddresses[0] != netip.MustParseAddr("1.1.1.1") {
 		t.Fatalf("unexpected client: %+v", client)
 	}
-	if client.SOCKSListen != "127.0.0.1:0" || client.MaxParallelCarriers != 3 || !client.EnableConstellation {
+	if client.SOCKSListen != "127.0.0.1:0" || client.MaxParallelCarriers != 1 || !client.EnableConstellation {
 		t.Fatalf("not a direct constellation profile: %+v", client)
+	}
+	if client.CarrierPolicy != config.CarrierPolicyHTTP3Only {
+		t.Fatalf("Windows diagnostic carrier policy=%q, want http3-only", client.CarrierPolicy)
+	}
+	if client.MaxParallelCarriers != 1 {
+		t.Fatalf("Windows diagnostic carrier pool=%d, want one HTTP/3 session", client.MaxParallelCarriers)
 	}
 	if client.Profile != "web" {
 		t.Fatalf("generated client configuration is not automatic: %q", client.Profile)

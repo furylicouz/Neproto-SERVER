@@ -832,6 +832,9 @@ func (r *np2Runtime) attachContinuity(
 }
 
 func mobileConnectDeadline(clientConfig config.Client) time.Duration {
+	if clientConfig.CarrierPolicy == config.CarrierPolicyHTTP3Only {
+		return clientConfig.HTTP3Timeout.Duration + 3*time.Second
+	}
 	deadline := clientConfig.HTTPSTimeout.Duration + clientConfig.WebRTCTimeout.Duration
 	if clientConfig.HTTP3Configured() {
 		deadline += clientConfig.HTTP3Timeout.Duration

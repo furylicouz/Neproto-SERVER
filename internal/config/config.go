@@ -63,6 +63,9 @@ type CarrierPolicy string
 const (
 	CarrierPolicyPerformance CarrierPolicy = "performance"
 	CarrierPolicyUDPFirst    CarrierPolicy = "udp-first"
+	// CarrierPolicyHTTP3Only is a bounded diagnostic policy. It intentionally
+	// disables carrier racing and fallback without removing server transports.
+	CarrierPolicyHTTP3Only CarrierPolicy = "http3-only"
 )
 
 type Client struct {
@@ -438,7 +441,8 @@ func scanUniqueJSONValue(decoder *json.Decoder) error {
 
 func validateClient(config Client) error {
 	if !validIdentity(config.ServerIdentity) || config.ProfileID() == 0 ||
-		(config.CarrierPolicy != CarrierPolicyPerformance && config.CarrierPolicy != CarrierPolicyUDPFirst) ||
+		(config.CarrierPolicy != CarrierPolicyPerformance && config.CarrierPolicy != CarrierPolicyUDPFirst &&
+			config.CarrierPolicy != CarrierPolicyHTTP3Only) ||
 		len(config.ServerAddresses) > 8 || !validServerAddresses(config.ServerAddresses) ||
 		config.MaxCoverOverheadPercent > 100 ||
 		config.InitialWindowBytes < 16*1024 || config.InitialWindowBytes > session.MaxInitialWindow ||
@@ -462,6 +466,9 @@ func validateClient(config Client) error {
 		return ErrInvalidConfig
 	}
 	if !config.HTTP3Configured() {
+		if config.CarrierPolicy == CarrierPolicyHTTP3Only {
+			return ErrInvalidConfig
+		}
 		if config.HTTP3Timeout.Duration != 0 {
 			return ErrInvalidConfig
 		}

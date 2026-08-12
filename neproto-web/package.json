@@ -1,6 +1,6 @@
 {
   "name": "neproto-web",
-  "version": "0.5.15",
+  "version": "0.5.17",
   "private": true,
   "scripts": {
     "dev": "next dev",
