@@ -1,7 +1,8 @@
 [Unit]
 Description=NeProto NP/2 server
 Wants=network-online.target
-After=network-online.target
+Requires=neproto-udp-buffers.service
+After=network-online.target neproto-udp-buffers.service
 
 [Service]
 Type=simple

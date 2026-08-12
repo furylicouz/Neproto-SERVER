@@ -1,0 +1,31 @@
+[Unit]
+Description=Apply NeProto QUIC and WebRTC UDP socket buffer ceilings
+Before=neproto-server.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/sysctl -p /etc/sysctl.d/90-neproto-udp.conf
+RemainAfterExit=yes
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+# This fixed oneshot is the only unit allowed to apply the two root-owned
+# NeProto UDP ceilings. ProtectKernelTunables cannot be enabled here.
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_SYS_ADMIN
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

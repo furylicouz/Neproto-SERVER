@@ -71,6 +71,10 @@ test_mode() {
   [[ -s $root/etc/sysctl.d/99-neproto-performance.conf ]]
   grep -qx 'net.core.default_qdisc=fq' "$root/etc/sysctl.d/99-neproto-performance.conf"
   grep -qx 'net.ipv4.tcp_congestion_control=bbr' "$root/etc/sysctl.d/99-neproto-performance.conf"
+  [[ -s $root/etc/sysctl.d/90-neproto-udp.conf ]]
+  grep -qx 'net.core.rmem_max=7500000' "$root/etc/sysctl.d/90-neproto-udp.conf"
+  grep -qx 'net.core.wmem_max=7500000' "$root/etc/sysctl.d/90-neproto-udp.conf"
+  [[ -s $root/etc/systemd/system/neproto-udp-buffers.service ]]
   grep -q '"require_datagrams": false' "$state"
   [[ -L $root/usr/local/bin/np && $(readlink "$root/usr/local/bin/np") == neprotoctl ]]
   [[ -s $root/etc/profile.d/neproto-console.sh ]]
@@ -167,6 +171,8 @@ test_mode() {
     grep -q 'NoNewPrivileges=true' "$root/etc/systemd/system/neproto-server.service"
     grep -q '^AmbientCapabilities=CAP_NET_BIND_SERVICE$' "$root/etc/systemd/system/neproto-server.service"
     grep -q '^CapabilityBoundingSet=CAP_NET_BIND_SERVICE$' "$root/etc/systemd/system/neproto-server.service"
+    grep -q '^Requires=neproto-udp-buffers.service$' "$root/etc/systemd/system/neproto-server.service"
+    grep -q '^After=.*neproto-udp-buffers.service' "$root/etc/systemd/system/neproto-server.service"
     grep -q '^ReadWritePaths=/etc/neproto/users/active /etc/neproto/geodata /var/lib/neproto/usage$' "$root/etc/systemd/system/neproto-server.service"
   fi
 

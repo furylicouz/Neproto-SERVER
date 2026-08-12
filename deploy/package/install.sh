@@ -189,7 +189,7 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 && ${NEPROTO_SELF_UPDATE:-0} != 1 ]]; then
   fi
 elif [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
   info 'validating dependencies already installed on this managed node'
-  required_commands=(certbot curl getent install jq openssl qrencode systemctl tar)
+  required_commands=(certbot curl getent install jq openssl qrencode sysctl systemctl tar)
   [[ $mode != docker ]] || required_commands+=(docker)
   for command_name in "${required_commands[@]}"; do
     command -v "$command_name" >/dev/null 2>&1 || die "managed update requires installed command: $command_name"
@@ -352,6 +352,7 @@ install -m 0644 "$script_dir/systemd/neproto-update.path" "$systemd_dir/neproto-
 install -m 0644 "$script_dir/systemd/neproto-update-check.service" "$systemd_dir/neproto-update-check.service"
 install -m 0644 "$script_dir/systemd/neproto-update-check.path" "$systemd_dir/neproto-update-check.path"
 install -m 0644 "$script_dir/systemd/neproto-update-check.timer" "$systemd_dir/neproto-update-check.timer"
+install -m 0644 "$script_dir/systemd/neproto-udp-buffers.service" "$systemd_dir/neproto-udp-buffers.service"
 web_previous=$opt_neproto/.web.previous
 rm -rf -- "$web_previous"
 [[ ! -d $web_dir ]] || mv -- "$web_dir" "$web_previous"
@@ -367,6 +368,7 @@ fi
 chmod 0644 "$etc_neproto/geodata-schedule"
 install -m 0644 "$script_dir/site/index.html" "$site_dir/index.html"
 install -m 0644 "$script_dir/performance/neproto-bbr.conf" "$modules_load_dir/neproto-bbr.conf"
+install -m 0644 "$script_dir/performance/90-neproto-udp.conf" "$sysctl_dir/90-neproto-udp.conf"
 install -m 0644 "$script_dir/performance/99-neproto-performance.conf" "$sysctl_dir/99-neproto-performance.conf"
 # Keep a root-only self-contained bundle so the master can provision future
 # cluster nodes without requiring a workstation or another download.
@@ -703,13 +705,13 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
     "$lib_dir/node" --check "$web_dir/server.js"
     "$bin_dir/caddy" validate --config "$etc_caddy/Caddyfile" --adapter caddyfile
     systemctl daemon-reload
-    systemctl enable neproto-control.service neproto-server.service neproto-web.service caddy.service
+    systemctl enable neproto-udp-buffers.service neproto-control.service neproto-server.service neproto-web.service caddy.service
     info 'starting services'
-    $skip_start || systemctl restart neproto-control.service neproto-server.service neproto-web.service caddy.service
+    $skip_start || systemctl restart neproto-udp-buffers.service neproto-control.service neproto-server.service neproto-web.service caddy.service
   else
     systemctl daemon-reload
-    systemctl enable neproto-control.service
-    $skip_start || systemctl restart neproto-control.service
+    systemctl enable neproto-udp-buffers.service neproto-control.service
+    $skip_start || systemctl restart neproto-udp-buffers.service neproto-control.service
     (cd "$opt_neproto" && docker compose config >/dev/null && docker compose build)
     info 'starting services'
     $skip_start || (cd "$opt_neproto" && docker compose up -d)

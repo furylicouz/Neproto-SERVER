@@ -124,10 +124,16 @@ On supported Linux kernels it loads `tcp_bbr` and installs
 `/etc/sysctl.d/99-neproto-performance.conf` with BBR plus `fq` queueing for the
 outer HTTPS carrier. If BBR is unavailable, the installer removes those two
 host-tuning files and retains the operating system TCP defaults instead of
-leaving a broken boot-time sysctl setting. Verify the active values with:
+leaving a broken boot-time sysctl setting. Independently of BBR, the installer
+uses `/etc/sysctl.d/90-neproto-udp.conf` and
+`neproto-udp-buffers.service` to permit the multi-megabyte receive and send
+buffers required by QUIC/WebTransport and WebRTC before `neproto-server`
+starts. The host-wide default socket sizes remain unchanged. Verify the active
+values with:
 
 ```sh
-sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc
+sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc \
+  net.core.rmem_max net.core.wmem_max
 ```
 
 The remaining manual sections are for auditing and disaster recovery.
