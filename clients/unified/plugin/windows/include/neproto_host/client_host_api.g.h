@@ -63,6 +63,28 @@ enum class HostPlatform {
   kIos = 2
 };
 
+enum class ProfileOrigin {
+  kUnknown = 0,
+  kImported = 1,
+  kCluster = 2
+};
+
+enum class TunnelState {
+  kUnknown = 0,
+  kDisconnected = 1,
+  kConnecting = 2,
+  kConnected = 3,
+  kReconnecting = 4,
+  kDisconnecting = 5,
+  kFailed = 6
+};
+
+enum class CarrierKind {
+  kUnknown = 0,
+  kNone = 1,
+  kHttp3WebTransport = 2
+};
+
 
 // Generated class from Pigeon that represents data sent in messages.
 class HostApiVersion {
@@ -150,6 +172,297 @@ class HostCapabilities {
 };
 
 
+// Generated class from Pigeon that represents data sent in messages.
+class ProfileSummary {
+ public:
+  // Constructs an object setting all fields.
+  explicit ProfileSummary(
+    const std::string& id,
+    const std::string& display_name,
+    const std::string& server_identity,
+    const std::string& host,
+    bool selected,
+    bool has_credential,
+    const ProfileOrigin& origin,
+    bool catalog_managed,
+    int64_t updated_at_unix_ms);
+
+  const std::string& id() const;
+  void set_id(std::string_view value_arg);
+
+  const std::string& display_name() const;
+  void set_display_name(std::string_view value_arg);
+
+  const std::string& server_identity() const;
+  void set_server_identity(std::string_view value_arg);
+
+  const std::string& host() const;
+  void set_host(std::string_view value_arg);
+
+  bool selected() const;
+  void set_selected(bool value_arg);
+
+  bool has_credential() const;
+  void set_has_credential(bool value_arg);
+
+  const ProfileOrigin& origin() const;
+  void set_origin(const ProfileOrigin& value_arg);
+
+  bool catalog_managed() const;
+  void set_catalog_managed(bool value_arg);
+
+  int64_t updated_at_unix_ms() const;
+  void set_updated_at_unix_ms(int64_t value_arg);
+
+  bool operator==(const ProfileSummary& other) const;
+  bool operator!=(const ProfileSummary& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const ProfileSummary& obj);
+ private:
+  static ProfileSummary FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class PigeonInternalCodecSerializer;
+  std::string id_;
+  std::string display_name_;
+  std::string server_identity_;
+  std::string host_;
+  bool selected_;
+  bool has_credential_;
+  ProfileOrigin origin_;
+  bool catalog_managed_;
+  int64_t updated_at_unix_ms_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class ImportProfileRequest {
+ public:
+  // Constructs an object setting all fields.
+  explicit ImportProfileRequest(
+    const std::string& onboarding_value,
+    const std::string& operation_id);
+
+  const std::string& onboarding_value() const;
+  void set_onboarding_value(std::string_view value_arg);
+
+  const std::string& operation_id() const;
+  void set_operation_id(std::string_view value_arg);
+
+  bool operator==(const ImportProfileRequest& other) const;
+  bool operator!=(const ImportProfileRequest& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const ImportProfileRequest& obj);
+ private:
+  static ImportProfileRequest FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class PigeonInternalCodecSerializer;
+  std::string onboarding_value_;
+  std::string operation_id_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class SelectProfileRequest {
+ public:
+  // Constructs an object setting all fields.
+  explicit SelectProfileRequest(
+    const std::string& profile_id,
+    const std::string& operation_id);
+
+  const std::string& profile_id() const;
+  void set_profile_id(std::string_view value_arg);
+
+  const std::string& operation_id() const;
+  void set_operation_id(std::string_view value_arg);
+
+  bool operator==(const SelectProfileRequest& other) const;
+  bool operator!=(const SelectProfileRequest& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const SelectProfileRequest& obj);
+ private:
+  static SelectProfileRequest FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class PigeonInternalCodecSerializer;
+  std::string profile_id_;
+  std::string operation_id_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class RemoveProfileRequest {
+ public:
+  // Constructs an object setting all fields.
+  explicit RemoveProfileRequest(
+    const std::string& profile_id,
+    bool force,
+    const std::string& operation_id);
+
+  const std::string& profile_id() const;
+  void set_profile_id(std::string_view value_arg);
+
+  bool force() const;
+  void set_force(bool value_arg);
+
+  const std::string& operation_id() const;
+  void set_operation_id(std::string_view value_arg);
+
+  bool operator==(const RemoveProfileRequest& other) const;
+  bool operator!=(const RemoveProfileRequest& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const RemoveProfileRequest& obj);
+ private:
+  static RemoveProfileRequest FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class PigeonInternalCodecSerializer;
+  std::string profile_id_;
+  bool force_;
+  std::string operation_id_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class ConnectRequest {
+ public:
+  // Constructs an object setting all fields.
+  explicit ConnectRequest(
+    const std::string& profile_id,
+    const std::string& operation_id);
+
+  const std::string& profile_id() const;
+  void set_profile_id(std::string_view value_arg);
+
+  const std::string& operation_id() const;
+  void set_operation_id(std::string_view value_arg);
+
+  bool operator==(const ConnectRequest& other) const;
+  bool operator!=(const ConnectRequest& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const ConnectRequest& obj);
+ private:
+  static ConnectRequest FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class PigeonInternalCodecSerializer;
+  std::string profile_id_;
+  std::string operation_id_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class DisconnectRequest {
+ public:
+  // Constructs an object setting all fields.
+  explicit DisconnectRequest(const std::string& operation_id);
+
+  const std::string& operation_id() const;
+  void set_operation_id(std::string_view value_arg);
+
+  bool operator==(const DisconnectRequest& other) const;
+  bool operator!=(const DisconnectRequest& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const DisconnectRequest& obj);
+ private:
+  static DisconnectRequest FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class PigeonInternalCodecSerializer;
+  std::string operation_id_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class TunnelStatus {
+ public:
+  // Constructs an object setting all non-nullable fields.
+  explicit TunnelStatus(
+    const TunnelState& state,
+    const CarrierKind& carrier,
+    int64_t connected_at_unix_ms,
+    int64_t upload_bytes_per_second,
+    int64_t download_bytes_per_second,
+    int64_t upload_total_bytes,
+    int64_t download_total_bytes,
+    int64_t sequence);
+
+  // Constructs an object setting all fields.
+  explicit TunnelStatus(
+    const TunnelState& state,
+    const std::string* profile_id,
+    const CarrierKind& carrier,
+    int64_t connected_at_unix_ms,
+    int64_t upload_bytes_per_second,
+    int64_t download_bytes_per_second,
+    int64_t upload_total_bytes,
+    int64_t download_total_bytes,
+    int64_t sequence);
+
+  const TunnelState& state() const;
+  void set_state(const TunnelState& value_arg);
+
+  const std::string* profile_id() const;
+  void set_profile_id(const std::string_view* value_arg);
+  void set_profile_id(std::string_view value_arg);
+
+  const CarrierKind& carrier() const;
+  void set_carrier(const CarrierKind& value_arg);
+
+  int64_t connected_at_unix_ms() const;
+  void set_connected_at_unix_ms(int64_t value_arg);
+
+  int64_t upload_bytes_per_second() const;
+  void set_upload_bytes_per_second(int64_t value_arg);
+
+  int64_t download_bytes_per_second() const;
+  void set_download_bytes_per_second(int64_t value_arg);
+
+  int64_t upload_total_bytes() const;
+  void set_upload_total_bytes(int64_t value_arg);
+
+  int64_t download_total_bytes() const;
+  void set_download_total_bytes(int64_t value_arg);
+
+  int64_t sequence() const;
+  void set_sequence(int64_t value_arg);
+
+  bool operator==(const TunnelStatus& other) const;
+  bool operator!=(const TunnelStatus& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const TunnelStatus& obj);
+ private:
+  static TunnelStatus FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class PigeonInternalCodecSerializer;
+  TunnelState state_;
+  std::optional<std::string> profile_id_;
+  CarrierKind carrier_;
+  int64_t connected_at_unix_ms_;
+  int64_t upload_bytes_per_second_;
+  int64_t download_bytes_per_second_;
+  int64_t upload_total_bytes_;
+  int64_t download_total_bytes_;
+  int64_t sequence_;
+};
+
+
 class PigeonInternalCodecSerializer : public ::flutter::StandardCodecSerializer {
  public:
   PigeonInternalCodecSerializer();
@@ -176,6 +489,23 @@ class ClientHostApi {
   virtual void GetCapabilities(
     const HostApiVersion& requested_version,
     std::function<void(ErrorOr<HostCapabilities> reply)> result) = 0;
+  virtual void ListProfiles(std::function<void(ErrorOr<::flutter::EncodableList> reply)> result) = 0;
+  virtual void ImportProfile(
+    const ImportProfileRequest& request,
+    std::function<void(ErrorOr<ProfileSummary> reply)> result) = 0;
+  virtual void SelectProfile(
+    const SelectProfileRequest& request,
+    std::function<void(ErrorOr<ProfileSummary> reply)> result) = 0;
+  virtual void RemoveProfile(
+    const RemoveProfileRequest& request,
+    std::function<void(std::optional<FlutterError> reply)> result) = 0;
+  virtual void Connect(
+    const ConnectRequest& request,
+    std::function<void(ErrorOr<TunnelStatus> reply)> result) = 0;
+  virtual void Disconnect(
+    const DisconnectRequest& request,
+    std::function<void(ErrorOr<TunnelStatus> reply)> result) = 0;
+  virtual void GetStatus(std::function<void(ErrorOr<TunnelStatus> reply)> result) = 0;
 
   // The codec used by ClientHostApi.
   static const ::flutter::StandardMessageCodec& GetCodec();

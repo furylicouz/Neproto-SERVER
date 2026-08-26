@@ -103,6 +103,28 @@ enum HostPlatform {
   ios,
 }
 
+enum ProfileOrigin {
+  unknown,
+  imported,
+  cluster,
+}
+
+enum TunnelState {
+  unknown,
+  disconnected,
+  connecting,
+  connected,
+  reconnecting,
+  disconnecting,
+  failed,
+}
+
+enum CarrierKind {
+  unknown,
+  none,
+  http3WebTransport,
+}
+
 class HostApiVersion {
   HostApiVersion({
     required this.major,
@@ -223,6 +245,426 @@ class HostCapabilities {
   }
 }
 
+class ProfileSummary {
+  ProfileSummary({
+    required this.id,
+    required this.displayName,
+    required this.serverIdentity,
+    required this.host,
+    required this.selected,
+    required this.hasCredential,
+    required this.origin,
+    required this.catalogManaged,
+    required this.updatedAtUnixMs,
+  });
+
+  String id;
+
+  String displayName;
+
+  String serverIdentity;
+
+  String host;
+
+  bool selected;
+
+  bool hasCredential;
+
+  ProfileOrigin origin;
+
+  bool catalogManaged;
+
+  int updatedAtUnixMs;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      displayName,
+      serverIdentity,
+      host,
+      selected,
+      hasCredential,
+      origin,
+      catalogManaged,
+      updatedAtUnixMs,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static ProfileSummary decode(Object result) {
+    result as List<Object?>;
+    return ProfileSummary(
+      id: result[0]! as String,
+      displayName: result[1]! as String,
+      serverIdentity: result[2]! as String,
+      host: result[3]! as String,
+      selected: result[4]! as bool,
+      hasCredential: result[5]! as bool,
+      origin: result[6]! as ProfileOrigin,
+      catalogManaged: result[7]! as bool,
+      updatedAtUnixMs: result[8]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ProfileSummary || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) && _deepEquals(displayName, other.displayName) && _deepEquals(serverIdentity, other.serverIdentity) && _deepEquals(host, other.host) && _deepEquals(selected, other.selected) && _deepEquals(hasCredential, other.hasCredential) && _deepEquals(origin, other.origin) && _deepEquals(catalogManaged, other.catalogManaged) && _deepEquals(updatedAtUnixMs, other.updatedAtUnixMs);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'ProfileSummary(id: $id, displayName: $displayName, serverIdentity: $serverIdentity, host: $host, selected: $selected, hasCredential: $hasCredential, origin: $origin, catalogManaged: $catalogManaged, updatedAtUnixMs: $updatedAtUnixMs)';
+  }
+}
+
+class ImportProfileRequest {
+  ImportProfileRequest({
+    required this.onboardingValue,
+    required this.operationId,
+  });
+
+  String onboardingValue;
+
+  String operationId;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      onboardingValue,
+      operationId,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static ImportProfileRequest decode(Object result) {
+    result as List<Object?>;
+    return ImportProfileRequest(
+      onboardingValue: result[0]! as String,
+      operationId: result[1]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ImportProfileRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(onboardingValue, other.onboardingValue) && _deepEquals(operationId, other.operationId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'ImportProfileRequest(onboardingValue: $onboardingValue, operationId: $operationId)';
+  }
+}
+
+class SelectProfileRequest {
+  SelectProfileRequest({
+    required this.profileId,
+    required this.operationId,
+  });
+
+  String profileId;
+
+  String operationId;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      profileId,
+      operationId,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SelectProfileRequest decode(Object result) {
+    result as List<Object?>;
+    return SelectProfileRequest(
+      profileId: result[0]! as String,
+      operationId: result[1]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SelectProfileRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(profileId, other.profileId) && _deepEquals(operationId, other.operationId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SelectProfileRequest(profileId: $profileId, operationId: $operationId)';
+  }
+}
+
+class RemoveProfileRequest {
+  RemoveProfileRequest({
+    required this.profileId,
+    required this.force,
+    required this.operationId,
+  });
+
+  String profileId;
+
+  bool force;
+
+  String operationId;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      profileId,
+      force,
+      operationId,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RemoveProfileRequest decode(Object result) {
+    result as List<Object?>;
+    return RemoveProfileRequest(
+      profileId: result[0]! as String,
+      force: result[1]! as bool,
+      operationId: result[2]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RemoveProfileRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(profileId, other.profileId) && _deepEquals(force, other.force) && _deepEquals(operationId, other.operationId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RemoveProfileRequest(profileId: $profileId, force: $force, operationId: $operationId)';
+  }
+}
+
+class ConnectRequest {
+  ConnectRequest({
+    required this.profileId,
+    required this.operationId,
+  });
+
+  String profileId;
+
+  String operationId;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      profileId,
+      operationId,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static ConnectRequest decode(Object result) {
+    result as List<Object?>;
+    return ConnectRequest(
+      profileId: result[0]! as String,
+      operationId: result[1]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ConnectRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(profileId, other.profileId) && _deepEquals(operationId, other.operationId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'ConnectRequest(profileId: $profileId, operationId: $operationId)';
+  }
+}
+
+class DisconnectRequest {
+  DisconnectRequest({
+    required this.operationId,
+  });
+
+  String operationId;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      operationId,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static DisconnectRequest decode(Object result) {
+    result as List<Object?>;
+    return DisconnectRequest(
+      operationId: result[0]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! DisconnectRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(operationId, other.operationId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'DisconnectRequest(operationId: $operationId)';
+  }
+}
+
+class TunnelStatus {
+  TunnelStatus({
+    required this.state,
+    this.profileId,
+    required this.carrier,
+    required this.connectedAtUnixMs,
+    required this.uploadBytesPerSecond,
+    required this.downloadBytesPerSecond,
+    required this.uploadTotalBytes,
+    required this.downloadTotalBytes,
+    required this.sequence,
+  });
+
+  TunnelState state;
+
+  String? profileId;
+
+  CarrierKind carrier;
+
+  int connectedAtUnixMs;
+
+  int uploadBytesPerSecond;
+
+  int downloadBytesPerSecond;
+
+  int uploadTotalBytes;
+
+  int downloadTotalBytes;
+
+  int sequence;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      state,
+      profileId,
+      carrier,
+      connectedAtUnixMs,
+      uploadBytesPerSecond,
+      downloadBytesPerSecond,
+      uploadTotalBytes,
+      downloadTotalBytes,
+      sequence,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TunnelStatus decode(Object result) {
+    result as List<Object?>;
+    return TunnelStatus(
+      state: result[0]! as TunnelState,
+      profileId: result[1] as String?,
+      carrier: result[2]! as CarrierKind,
+      connectedAtUnixMs: result[3]! as int,
+      uploadBytesPerSecond: result[4]! as int,
+      downloadBytesPerSecond: result[5]! as int,
+      uploadTotalBytes: result[6]! as int,
+      downloadTotalBytes: result[7]! as int,
+      sequence: result[8]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TunnelStatus || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(state, other.state) && _deepEquals(profileId, other.profileId) && _deepEquals(carrier, other.carrier) && _deepEquals(connectedAtUnixMs, other.connectedAtUnixMs) && _deepEquals(uploadBytesPerSecond, other.uploadBytesPerSecond) && _deepEquals(downloadBytesPerSecond, other.downloadBytesPerSecond) && _deepEquals(uploadTotalBytes, other.uploadTotalBytes) && _deepEquals(downloadTotalBytes, other.downloadTotalBytes) && _deepEquals(sequence, other.sequence);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TunnelStatus(state: $state, profileId: $profileId, carrier: $carrier, connectedAtUnixMs: $connectedAtUnixMs, uploadBytesPerSecond: $uploadBytesPerSecond, downloadBytesPerSecond: $downloadBytesPerSecond, uploadTotalBytes: $uploadTotalBytes, downloadTotalBytes: $downloadTotalBytes, sequence: $sequence)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -234,11 +676,41 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is HostPlatform) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is HostApiVersion) {
+    }    else if (value is ProfileOrigin) {
       buffer.putUint8(130);
+      writeValue(buffer, value.index);
+    }    else if (value is TunnelState) {
+      buffer.putUint8(131);
+      writeValue(buffer, value.index);
+    }    else if (value is CarrierKind) {
+      buffer.putUint8(132);
+      writeValue(buffer, value.index);
+    }    else if (value is HostApiVersion) {
+      buffer.putUint8(133);
       writeValue(buffer, value.encode());
     }    else if (value is HostCapabilities) {
-      buffer.putUint8(131);
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
+    }    else if (value is ProfileSummary) {
+      buffer.putUint8(135);
+      writeValue(buffer, value.encode());
+    }    else if (value is ImportProfileRequest) {
+      buffer.putUint8(136);
+      writeValue(buffer, value.encode());
+    }    else if (value is SelectProfileRequest) {
+      buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is RemoveProfileRequest) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    }    else if (value is ConnectRequest) {
+      buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    }    else if (value is DisconnectRequest) {
+      buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    }    else if (value is TunnelStatus) {
+      buffer.putUint8(141);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -252,9 +724,32 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : HostPlatform.values[value];
       case 130:
-        return HostApiVersion.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : ProfileOrigin.values[value];
       case 131:
+        final value = readValue(buffer) as int?;
+        return value == null ? null : TunnelState.values[value];
+      case 132:
+        final value = readValue(buffer) as int?;
+        return value == null ? null : CarrierKind.values[value];
+      case 133:
+        return HostApiVersion.decode(readValue(buffer)!);
+      case 134:
         return HostCapabilities.decode(readValue(buffer)!);
+      case 135:
+        return ProfileSummary.decode(readValue(buffer)!);
+      case 136:
+        return ImportProfileRequest.decode(readValue(buffer)!);
+      case 137:
+        return SelectProfileRequest.decode(readValue(buffer)!);
+      case 138:
+        return RemoveProfileRequest.decode(readValue(buffer)!);
+      case 139:
+        return ConnectRequest.decode(readValue(buffer)!);
+      case 140:
+        return DisconnectRequest.decode(readValue(buffer)!);
+      case 141:
+        return TunnelStatus.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -291,5 +786,137 @@ class ClientHostApi {
     )
     ;
     return pigeonVar_replyValue! as HostCapabilities;
+  }
+
+  Future<List<ProfileSummary>> listProfiles() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.listProfiles$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<ProfileSummary>();
+  }
+
+  Future<ProfileSummary> importProfile(ImportProfileRequest request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.importProfile$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as ProfileSummary;
+  }
+
+  Future<ProfileSummary> selectProfile(SelectProfileRequest request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.selectProfile$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as ProfileSummary;
+  }
+
+  Future<void> removeProfile(RemoveProfileRequest request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.removeProfile$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<TunnelStatus> connect(ConnectRequest request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.connect$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as TunnelStatus;
+  }
+
+  Future<TunnelStatus> disconnect(DisconnectRequest request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.disconnect$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as TunnelStatus;
+  }
+
+  Future<TunnelStatus> getStatus() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.getStatus$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as TunnelStatus;
   }
 }

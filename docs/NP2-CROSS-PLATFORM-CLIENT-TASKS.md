@@ -60,6 +60,8 @@ Dart/Swift/C++ outputs, one contract test.
 
 ### Task A3 — Define profiles and lifecycle contract
 
+**Status:** ✅ Completed on the implementation branch.
+
 **Acceptance criteria:**
 
 - Profile import/list/select/remove and connect/disconnect/status are typed.

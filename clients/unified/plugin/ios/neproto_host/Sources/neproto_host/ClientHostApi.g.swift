@@ -190,6 +190,28 @@ enum HostPlatform: Int, CaseIterable {
   case ios = 2
 }
 
+enum ProfileOrigin: Int, CaseIterable {
+  case unknown = 0
+  case imported = 1
+  case cluster = 2
+}
+
+enum TunnelState: Int, CaseIterable {
+  case unknown = 0
+  case disconnected = 1
+  case connecting = 2
+  case connected = 3
+  case reconnecting = 4
+  case disconnecting = 5
+  case failed = 6
+}
+
+enum CarrierKind: Int, CaseIterable {
+  case unknown = 0
+  case none = 1
+  case http3WebTransport = 2
+}
+
 /// Generated class from Pigeon that represents data sent in messages.
 struct HostApiVersion: Hashable, CustomStringConvertible {
   var major: Int64
@@ -290,6 +312,356 @@ struct HostCapabilities: Hashable, CustomStringConvertible {
   }
 }
 
+/// Generated class from Pigeon that represents data sent in messages.
+struct ProfileSummary: Hashable, CustomStringConvertible {
+  var id: String
+  var displayName: String
+  var serverIdentity: String
+  var host: String
+  var selected: Bool
+  var hasCredential: Bool
+  var origin: ProfileOrigin
+  var catalogManaged: Bool
+  var updatedAtUnixMs: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> ProfileSummary? {
+    let id = pigeonVar_list[0] as! String
+    let displayName = pigeonVar_list[1] as! String
+    let serverIdentity = pigeonVar_list[2] as! String
+    let host = pigeonVar_list[3] as! String
+    let selected = pigeonVar_list[4] as! Bool
+    let hasCredential = pigeonVar_list[5] as! Bool
+    let origin = pigeonVar_list[6] as! ProfileOrigin
+    let catalogManaged = pigeonVar_list[7] as! Bool
+    let updatedAtUnixMs = pigeonVar_list[8] as! Int64
+
+    return ProfileSummary(
+      id: id,
+      displayName: displayName,
+      serverIdentity: serverIdentity,
+      host: host,
+      selected: selected,
+      hasCredential: hasCredential,
+      origin: origin,
+      catalogManaged: catalogManaged,
+      updatedAtUnixMs: updatedAtUnixMs
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      id,
+      displayName,
+      serverIdentity,
+      host,
+      selected,
+      hasCredential,
+      origin,
+      catalogManaged,
+      updatedAtUnixMs,
+    ]
+  }
+  static func == (lhs: ProfileSummary, rhs: ProfileSummary) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return ClientHostApiPigeonInternal.deepEquals(lhs.id, rhs.id) && ClientHostApiPigeonInternal.deepEquals(lhs.displayName, rhs.displayName) && ClientHostApiPigeonInternal.deepEquals(lhs.serverIdentity, rhs.serverIdentity) && ClientHostApiPigeonInternal.deepEquals(lhs.host, rhs.host) && ClientHostApiPigeonInternal.deepEquals(lhs.selected, rhs.selected) && ClientHostApiPigeonInternal.deepEquals(lhs.hasCredential, rhs.hasCredential) && ClientHostApiPigeonInternal.deepEquals(lhs.origin, rhs.origin) && ClientHostApiPigeonInternal.deepEquals(lhs.catalogManaged, rhs.catalogManaged) && ClientHostApiPigeonInternal.deepEquals(lhs.updatedAtUnixMs, rhs.updatedAtUnixMs)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("ProfileSummary")
+    ClientHostApiPigeonInternal.deepHash(value: id, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: displayName, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: serverIdentity, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: host, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: selected, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: hasCredential, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: origin, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: catalogManaged, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: updatedAtUnixMs, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "ProfileSummary(id: \(String(describing: id)), displayName: \(String(describing: displayName)), serverIdentity: \(String(describing: serverIdentity)), host: \(String(describing: host)), selected: \(String(describing: selected)), hasCredential: \(String(describing: hasCredential)), origin: \(String(describing: origin)), catalogManaged: \(String(describing: catalogManaged)), updatedAtUnixMs: \(String(describing: updatedAtUnixMs)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct ImportProfileRequest: Hashable, CustomStringConvertible {
+  var onboardingValue: String
+  var operationId: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> ImportProfileRequest? {
+    let onboardingValue = pigeonVar_list[0] as! String
+    let operationId = pigeonVar_list[1] as! String
+
+    return ImportProfileRequest(
+      onboardingValue: onboardingValue,
+      operationId: operationId
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      onboardingValue,
+      operationId,
+    ]
+  }
+  static func == (lhs: ImportProfileRequest, rhs: ImportProfileRequest) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return ClientHostApiPigeonInternal.deepEquals(lhs.onboardingValue, rhs.onboardingValue) && ClientHostApiPigeonInternal.deepEquals(lhs.operationId, rhs.operationId)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("ImportProfileRequest")
+    ClientHostApiPigeonInternal.deepHash(value: onboardingValue, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: operationId, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "ImportProfileRequest(onboardingValue: \(String(describing: onboardingValue)), operationId: \(String(describing: operationId)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct SelectProfileRequest: Hashable, CustomStringConvertible {
+  var profileId: String
+  var operationId: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> SelectProfileRequest? {
+    let profileId = pigeonVar_list[0] as! String
+    let operationId = pigeonVar_list[1] as! String
+
+    return SelectProfileRequest(
+      profileId: profileId,
+      operationId: operationId
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      profileId,
+      operationId,
+    ]
+  }
+  static func == (lhs: SelectProfileRequest, rhs: SelectProfileRequest) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return ClientHostApiPigeonInternal.deepEquals(lhs.profileId, rhs.profileId) && ClientHostApiPigeonInternal.deepEquals(lhs.operationId, rhs.operationId)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("SelectProfileRequest")
+    ClientHostApiPigeonInternal.deepHash(value: profileId, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: operationId, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "SelectProfileRequest(profileId: \(String(describing: profileId)), operationId: \(String(describing: operationId)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct RemoveProfileRequest: Hashable, CustomStringConvertible {
+  var profileId: String
+  var force: Bool
+  var operationId: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> RemoveProfileRequest? {
+    let profileId = pigeonVar_list[0] as! String
+    let force = pigeonVar_list[1] as! Bool
+    let operationId = pigeonVar_list[2] as! String
+
+    return RemoveProfileRequest(
+      profileId: profileId,
+      force: force,
+      operationId: operationId
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      profileId,
+      force,
+      operationId,
+    ]
+  }
+  static func == (lhs: RemoveProfileRequest, rhs: RemoveProfileRequest) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return ClientHostApiPigeonInternal.deepEquals(lhs.profileId, rhs.profileId) && ClientHostApiPigeonInternal.deepEquals(lhs.force, rhs.force) && ClientHostApiPigeonInternal.deepEquals(lhs.operationId, rhs.operationId)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("RemoveProfileRequest")
+    ClientHostApiPigeonInternal.deepHash(value: profileId, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: force, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: operationId, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "RemoveProfileRequest(profileId: \(String(describing: profileId)), force: \(String(describing: force)), operationId: \(String(describing: operationId)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct ConnectRequest: Hashable, CustomStringConvertible {
+  var profileId: String
+  var operationId: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> ConnectRequest? {
+    let profileId = pigeonVar_list[0] as! String
+    let operationId = pigeonVar_list[1] as! String
+
+    return ConnectRequest(
+      profileId: profileId,
+      operationId: operationId
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      profileId,
+      operationId,
+    ]
+  }
+  static func == (lhs: ConnectRequest, rhs: ConnectRequest) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return ClientHostApiPigeonInternal.deepEquals(lhs.profileId, rhs.profileId) && ClientHostApiPigeonInternal.deepEquals(lhs.operationId, rhs.operationId)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("ConnectRequest")
+    ClientHostApiPigeonInternal.deepHash(value: profileId, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: operationId, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "ConnectRequest(profileId: \(String(describing: profileId)), operationId: \(String(describing: operationId)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct DisconnectRequest: Hashable, CustomStringConvertible {
+  var operationId: String
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> DisconnectRequest? {
+    let operationId = pigeonVar_list[0] as! String
+
+    return DisconnectRequest(
+      operationId: operationId
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      operationId
+    ]
+  }
+  static func == (lhs: DisconnectRequest, rhs: DisconnectRequest) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return ClientHostApiPigeonInternal.deepEquals(lhs.operationId, rhs.operationId)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("DisconnectRequest")
+    ClientHostApiPigeonInternal.deepHash(value: operationId, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "DisconnectRequest(operationId: \(String(describing: operationId)))"
+  }
+}
+
+/// Generated class from Pigeon that represents data sent in messages.
+struct TunnelStatus: Hashable, CustomStringConvertible {
+  var state: TunnelState
+  var profileId: String? = nil
+  var carrier: CarrierKind
+  var connectedAtUnixMs: Int64
+  var uploadBytesPerSecond: Int64
+  var downloadBytesPerSecond: Int64
+  var uploadTotalBytes: Int64
+  var downloadTotalBytes: Int64
+  var sequence: Int64
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> TunnelStatus? {
+    let state = pigeonVar_list[0] as! TunnelState
+    let profileId: String? = nilOrValue(pigeonVar_list[1])
+    let carrier = pigeonVar_list[2] as! CarrierKind
+    let connectedAtUnixMs = pigeonVar_list[3] as! Int64
+    let uploadBytesPerSecond = pigeonVar_list[4] as! Int64
+    let downloadBytesPerSecond = pigeonVar_list[5] as! Int64
+    let uploadTotalBytes = pigeonVar_list[6] as! Int64
+    let downloadTotalBytes = pigeonVar_list[7] as! Int64
+    let sequence = pigeonVar_list[8] as! Int64
+
+    return TunnelStatus(
+      state: state,
+      profileId: profileId,
+      carrier: carrier,
+      connectedAtUnixMs: connectedAtUnixMs,
+      uploadBytesPerSecond: uploadBytesPerSecond,
+      downloadBytesPerSecond: downloadBytesPerSecond,
+      uploadTotalBytes: uploadTotalBytes,
+      downloadTotalBytes: downloadTotalBytes,
+      sequence: sequence
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      state,
+      profileId,
+      carrier,
+      connectedAtUnixMs,
+      uploadBytesPerSecond,
+      downloadBytesPerSecond,
+      uploadTotalBytes,
+      downloadTotalBytes,
+      sequence,
+    ]
+  }
+  static func == (lhs: TunnelStatus, rhs: TunnelStatus) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return ClientHostApiPigeonInternal.deepEquals(lhs.state, rhs.state) && ClientHostApiPigeonInternal.deepEquals(lhs.profileId, rhs.profileId) && ClientHostApiPigeonInternal.deepEquals(lhs.carrier, rhs.carrier) && ClientHostApiPigeonInternal.deepEquals(lhs.connectedAtUnixMs, rhs.connectedAtUnixMs) && ClientHostApiPigeonInternal.deepEquals(lhs.uploadBytesPerSecond, rhs.uploadBytesPerSecond) && ClientHostApiPigeonInternal.deepEquals(lhs.downloadBytesPerSecond, rhs.downloadBytesPerSecond) && ClientHostApiPigeonInternal.deepEquals(lhs.uploadTotalBytes, rhs.uploadTotalBytes) && ClientHostApiPigeonInternal.deepEquals(lhs.downloadTotalBytes, rhs.downloadTotalBytes) && ClientHostApiPigeonInternal.deepEquals(lhs.sequence, rhs.sequence)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("TunnelStatus")
+    ClientHostApiPigeonInternal.deepHash(value: state, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: profileId, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: carrier, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: connectedAtUnixMs, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: uploadBytesPerSecond, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: downloadBytesPerSecond, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: uploadTotalBytes, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: downloadTotalBytes, hasher: &hasher)
+    ClientHostApiPigeonInternal.deepHash(value: sequence, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "TunnelStatus(state: \(String(describing: state)), profileId: \(String(describing: profileId)), carrier: \(String(describing: carrier)), connectedAtUnixMs: \(String(describing: connectedAtUnixMs)), uploadBytesPerSecond: \(String(describing: uploadBytesPerSecond)), downloadBytesPerSecond: \(String(describing: downloadBytesPerSecond)), uploadTotalBytes: \(String(describing: uploadTotalBytes)), downloadTotalBytes: \(String(describing: downloadTotalBytes)), sequence: \(String(describing: sequence)))"
+  }
+}
+
 private class ClientHostApiPigeonCodecReader: FlutterStandardReader {
   override func readValue(ofType type: UInt8) -> Any? {
     switch type {
@@ -300,9 +672,41 @@ private class ClientHostApiPigeonCodecReader: FlutterStandardReader {
       }
       return nil
     case 130:
-      return HostApiVersion.fromList(self.readValue() as! [Any?])
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return ProfileOrigin(rawValue: enumResultAsInt)
+      }
+      return nil
     case 131:
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return TunnelState(rawValue: enumResultAsInt)
+      }
+      return nil
+    case 132:
+      let enumResultAsInt: Int? = nilOrValue(self.readValue() as! Int?)
+      if let enumResultAsInt = enumResultAsInt {
+        return CarrierKind(rawValue: enumResultAsInt)
+      }
+      return nil
+    case 133:
+      return HostApiVersion.fromList(self.readValue() as! [Any?])
+    case 134:
       return HostCapabilities.fromList(self.readValue() as! [Any?])
+    case 135:
+      return ProfileSummary.fromList(self.readValue() as! [Any?])
+    case 136:
+      return ImportProfileRequest.fromList(self.readValue() as! [Any?])
+    case 137:
+      return SelectProfileRequest.fromList(self.readValue() as! [Any?])
+    case 138:
+      return RemoveProfileRequest.fromList(self.readValue() as! [Any?])
+    case 139:
+      return ConnectRequest.fromList(self.readValue() as! [Any?])
+    case 140:
+      return DisconnectRequest.fromList(self.readValue() as! [Any?])
+    case 141:
+      return TunnelStatus.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
     }
@@ -314,11 +718,41 @@ private class ClientHostApiPigeonCodecWriter: FlutterStandardWriter {
     if let value = value as? HostPlatform {
       super.writeByte(129)
       super.writeValue(value.rawValue)
-    } else if let value = value as? HostApiVersion {
+    } else if let value = value as? ProfileOrigin {
       super.writeByte(130)
+      super.writeValue(value.rawValue)
+    } else if let value = value as? TunnelState {
+      super.writeByte(131)
+      super.writeValue(value.rawValue)
+    } else if let value = value as? CarrierKind {
+      super.writeByte(132)
+      super.writeValue(value.rawValue)
+    } else if let value = value as? HostApiVersion {
+      super.writeByte(133)
       super.writeValue(value.toList())
     } else if let value = value as? HostCapabilities {
-      super.writeByte(131)
+      super.writeByte(134)
+      super.writeValue(value.toList())
+    } else if let value = value as? ProfileSummary {
+      super.writeByte(135)
+      super.writeValue(value.toList())
+    } else if let value = value as? ImportProfileRequest {
+      super.writeByte(136)
+      super.writeValue(value.toList())
+    } else if let value = value as? SelectProfileRequest {
+      super.writeByte(137)
+      super.writeValue(value.toList())
+    } else if let value = value as? RemoveProfileRequest {
+      super.writeByte(138)
+      super.writeValue(value.toList())
+    } else if let value = value as? ConnectRequest {
+      super.writeByte(139)
+      super.writeValue(value.toList())
+    } else if let value = value as? DisconnectRequest {
+      super.writeByte(140)
+      super.writeValue(value.toList())
+    } else if let value = value as? TunnelStatus {
+      super.writeByte(141)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -344,6 +778,13 @@ class ClientHostApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol ClientHostApi {
   func getCapabilities(requestedVersion: HostApiVersion) async throws -> HostCapabilities
+  func listProfiles() async throws -> [ProfileSummary]
+  func importProfile(request: ImportProfileRequest) async throws -> ProfileSummary
+  func selectProfile(request: SelectProfileRequest) async throws -> ProfileSummary
+  func removeProfile(request: RemoveProfileRequest) async throws
+  func connect(request: ConnectRequest) async throws -> TunnelStatus
+  func disconnect(request: DisconnectRequest) async throws -> TunnelStatus
+  func getStatus() async throws -> TunnelStatus
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -368,6 +809,121 @@ class ClientHostApiSetup {
       }
     } else {
       getCapabilitiesChannel.setMessageHandler(nil)
+    }
+    let listProfilesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.neproto_host.ClientHostApi.listProfiles\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      listProfilesChannel.setMessageHandler { _, reply in
+        Task { @MainActor in
+          do {
+            let result = try await api.listProfiles()
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      listProfilesChannel.setMessageHandler(nil)
+    }
+    let importProfileChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.neproto_host.ClientHostApi.importProfile\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      importProfileChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! ImportProfileRequest
+        Task { @MainActor in
+          do {
+            let result = try await api.importProfile(request: requestArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      importProfileChannel.setMessageHandler(nil)
+    }
+    let selectProfileChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.neproto_host.ClientHostApi.selectProfile\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      selectProfileChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! SelectProfileRequest
+        Task { @MainActor in
+          do {
+            let result = try await api.selectProfile(request: requestArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      selectProfileChannel.setMessageHandler(nil)
+    }
+    let removeProfileChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.neproto_host.ClientHostApi.removeProfile\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      removeProfileChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! RemoveProfileRequest
+        Task { @MainActor in
+          do {
+            try await api.removeProfile(request: requestArg)
+            reply(wrapResult(nil))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      removeProfileChannel.setMessageHandler(nil)
+    }
+    let connectChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.neproto_host.ClientHostApi.connect\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      connectChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! ConnectRequest
+        Task { @MainActor in
+          do {
+            let result = try await api.connect(request: requestArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      connectChannel.setMessageHandler(nil)
+    }
+    let disconnectChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.neproto_host.ClientHostApi.disconnect\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      disconnectChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let requestArg = args[0] as! DisconnectRequest
+        Task { @MainActor in
+          do {
+            let result = try await api.disconnect(request: requestArg)
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      disconnectChannel.setMessageHandler(nil)
+    }
+    let getStatusChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.neproto_host.ClientHostApi.getStatus\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      getStatusChannel.setMessageHandler { _, reply in
+        Task { @MainActor in
+          do {
+            let result = try await api.getStatus()
+            reply(wrapResult(result))
+          } catch {
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      getStatusChannel.setMessageHandler(nil)
     }
   }
 }

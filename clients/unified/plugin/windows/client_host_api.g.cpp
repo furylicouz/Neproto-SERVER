@@ -545,6 +545,763 @@ size_t PigeonInternalDeepHash(const HostCapabilities& v) {
   return v.Hash();
 }
 
+// ProfileSummary
+
+ProfileSummary::ProfileSummary(
+  const std::string& id,
+  const std::string& display_name,
+  const std::string& server_identity,
+  const std::string& host,
+  bool selected,
+  bool has_credential,
+  const ProfileOrigin& origin,
+  bool catalog_managed,
+  int64_t updated_at_unix_ms)
+ : id_(id),
+    display_name_(display_name),
+    server_identity_(server_identity),
+    host_(host),
+    selected_(selected),
+    has_credential_(has_credential),
+    origin_(origin),
+    catalog_managed_(catalog_managed),
+    updated_at_unix_ms_(updated_at_unix_ms) {}
+
+const std::string& ProfileSummary::id() const {
+  return id_;
+}
+
+void ProfileSummary::set_id(std::string_view value_arg) {
+  id_ = value_arg;
+}
+
+
+const std::string& ProfileSummary::display_name() const {
+  return display_name_;
+}
+
+void ProfileSummary::set_display_name(std::string_view value_arg) {
+  display_name_ = value_arg;
+}
+
+
+const std::string& ProfileSummary::server_identity() const {
+  return server_identity_;
+}
+
+void ProfileSummary::set_server_identity(std::string_view value_arg) {
+  server_identity_ = value_arg;
+}
+
+
+const std::string& ProfileSummary::host() const {
+  return host_;
+}
+
+void ProfileSummary::set_host(std::string_view value_arg) {
+  host_ = value_arg;
+}
+
+
+bool ProfileSummary::selected() const {
+  return selected_;
+}
+
+void ProfileSummary::set_selected(bool value_arg) {
+  selected_ = value_arg;
+}
+
+
+bool ProfileSummary::has_credential() const {
+  return has_credential_;
+}
+
+void ProfileSummary::set_has_credential(bool value_arg) {
+  has_credential_ = value_arg;
+}
+
+
+const ProfileOrigin& ProfileSummary::origin() const {
+  return origin_;
+}
+
+void ProfileSummary::set_origin(const ProfileOrigin& value_arg) {
+  origin_ = value_arg;
+}
+
+
+bool ProfileSummary::catalog_managed() const {
+  return catalog_managed_;
+}
+
+void ProfileSummary::set_catalog_managed(bool value_arg) {
+  catalog_managed_ = value_arg;
+}
+
+
+int64_t ProfileSummary::updated_at_unix_ms() const {
+  return updated_at_unix_ms_;
+}
+
+void ProfileSummary::set_updated_at_unix_ms(int64_t value_arg) {
+  updated_at_unix_ms_ = value_arg;
+}
+
+
+EncodableList ProfileSummary::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(9);
+  list.push_back(EncodableValue(id_));
+  list.push_back(EncodableValue(display_name_));
+  list.push_back(EncodableValue(server_identity_));
+  list.push_back(EncodableValue(host_));
+  list.push_back(EncodableValue(selected_));
+  list.push_back(EncodableValue(has_credential_));
+  list.push_back(CustomEncodableValue(origin_));
+  list.push_back(EncodableValue(catalog_managed_));
+  list.push_back(EncodableValue(updated_at_unix_ms_));
+  return list;
+}
+
+ProfileSummary ProfileSummary::FromEncodableList(const EncodableList& list) {
+  ProfileSummary decoded(
+    std::get<std::string>(list[0]),
+    std::get<std::string>(list[1]),
+    std::get<std::string>(list[2]),
+    std::get<std::string>(list[3]),
+    std::get<bool>(list[4]),
+    std::get<bool>(list[5]),
+    std::any_cast<const ProfileOrigin&>(std::get<CustomEncodableValue>(list[6])),
+    std::get<bool>(list[7]),
+    std::get<int64_t>(list[8]));
+  return decoded;
+}
+
+bool ProfileSummary::operator==(const ProfileSummary& other) const {
+  return PigeonInternalDeepEquals(id_, other.id_) && PigeonInternalDeepEquals(display_name_, other.display_name_) && PigeonInternalDeepEquals(server_identity_, other.server_identity_) && PigeonInternalDeepEquals(host_, other.host_) && PigeonInternalDeepEquals(selected_, other.selected_) && PigeonInternalDeepEquals(has_credential_, other.has_credential_) && PigeonInternalDeepEquals(origin_, other.origin_) && PigeonInternalDeepEquals(catalog_managed_, other.catalog_managed_) && PigeonInternalDeepEquals(updated_at_unix_ms_, other.updated_at_unix_ms_);
+}
+
+bool ProfileSummary::operator!=(const ProfileSummary& other) const {
+  return !(*this == other);
+}
+
+size_t ProfileSummary::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(id_);
+  result = result * 31 + PigeonInternalDeepHash(display_name_);
+  result = result * 31 + PigeonInternalDeepHash(server_identity_);
+  result = result * 31 + PigeonInternalDeepHash(host_);
+  result = result * 31 + PigeonInternalDeepHash(selected_);
+  result = result * 31 + PigeonInternalDeepHash(has_credential_);
+  result = result * 31 + PigeonInternalDeepHash(origin_);
+  result = result * 31 + PigeonInternalDeepHash(catalog_managed_);
+  result = result * 31 + PigeonInternalDeepHash(updated_at_unix_ms_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const ProfileSummary& obj) {
+  os << "ProfileSummary(";
+  os << "id: ";
+  os << PigeonInternalToString(obj.id_);
+  os << ", display_name: ";
+  os << PigeonInternalToString(obj.display_name_);
+  os << ", server_identity: ";
+  os << PigeonInternalToString(obj.server_identity_);
+  os << ", host: ";
+  os << PigeonInternalToString(obj.host_);
+  os << ", selected: ";
+  os << PigeonInternalToString(obj.selected_);
+  os << ", has_credential: ";
+  os << PigeonInternalToString(obj.has_credential_);
+  os << ", origin: ";
+  os << PigeonInternalToString(obj.origin_);
+  os << ", catalog_managed: ";
+  os << PigeonInternalToString(obj.catalog_managed_);
+  os << ", updated_at_unix_ms: ";
+  os << PigeonInternalToString(obj.updated_at_unix_ms_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const ProfileSummary& v) {
+  return v.Hash();
+}
+
+// ImportProfileRequest
+
+ImportProfileRequest::ImportProfileRequest(
+  const std::string& onboarding_value,
+  const std::string& operation_id)
+ : onboarding_value_(onboarding_value),
+    operation_id_(operation_id) {}
+
+const std::string& ImportProfileRequest::onboarding_value() const {
+  return onboarding_value_;
+}
+
+void ImportProfileRequest::set_onboarding_value(std::string_view value_arg) {
+  onboarding_value_ = value_arg;
+}
+
+
+const std::string& ImportProfileRequest::operation_id() const {
+  return operation_id_;
+}
+
+void ImportProfileRequest::set_operation_id(std::string_view value_arg) {
+  operation_id_ = value_arg;
+}
+
+
+EncodableList ImportProfileRequest::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(2);
+  list.push_back(EncodableValue(onboarding_value_));
+  list.push_back(EncodableValue(operation_id_));
+  return list;
+}
+
+ImportProfileRequest ImportProfileRequest::FromEncodableList(const EncodableList& list) {
+  ImportProfileRequest decoded(
+    std::get<std::string>(list[0]),
+    std::get<std::string>(list[1]));
+  return decoded;
+}
+
+bool ImportProfileRequest::operator==(const ImportProfileRequest& other) const {
+  return PigeonInternalDeepEquals(onboarding_value_, other.onboarding_value_) && PigeonInternalDeepEquals(operation_id_, other.operation_id_);
+}
+
+bool ImportProfileRequest::operator!=(const ImportProfileRequest& other) const {
+  return !(*this == other);
+}
+
+size_t ImportProfileRequest::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(onboarding_value_);
+  result = result * 31 + PigeonInternalDeepHash(operation_id_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const ImportProfileRequest& obj) {
+  os << "ImportProfileRequest(";
+  os << "onboarding_value: ";
+  os << PigeonInternalToString(obj.onboarding_value_);
+  os << ", operation_id: ";
+  os << PigeonInternalToString(obj.operation_id_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const ImportProfileRequest& v) {
+  return v.Hash();
+}
+
+// SelectProfileRequest
+
+SelectProfileRequest::SelectProfileRequest(
+  const std::string& profile_id,
+  const std::string& operation_id)
+ : profile_id_(profile_id),
+    operation_id_(operation_id) {}
+
+const std::string& SelectProfileRequest::profile_id() const {
+  return profile_id_;
+}
+
+void SelectProfileRequest::set_profile_id(std::string_view value_arg) {
+  profile_id_ = value_arg;
+}
+
+
+const std::string& SelectProfileRequest::operation_id() const {
+  return operation_id_;
+}
+
+void SelectProfileRequest::set_operation_id(std::string_view value_arg) {
+  operation_id_ = value_arg;
+}
+
+
+EncodableList SelectProfileRequest::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(2);
+  list.push_back(EncodableValue(profile_id_));
+  list.push_back(EncodableValue(operation_id_));
+  return list;
+}
+
+SelectProfileRequest SelectProfileRequest::FromEncodableList(const EncodableList& list) {
+  SelectProfileRequest decoded(
+    std::get<std::string>(list[0]),
+    std::get<std::string>(list[1]));
+  return decoded;
+}
+
+bool SelectProfileRequest::operator==(const SelectProfileRequest& other) const {
+  return PigeonInternalDeepEquals(profile_id_, other.profile_id_) && PigeonInternalDeepEquals(operation_id_, other.operation_id_);
+}
+
+bool SelectProfileRequest::operator!=(const SelectProfileRequest& other) const {
+  return !(*this == other);
+}
+
+size_t SelectProfileRequest::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(profile_id_);
+  result = result * 31 + PigeonInternalDeepHash(operation_id_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const SelectProfileRequest& obj) {
+  os << "SelectProfileRequest(";
+  os << "profile_id: ";
+  os << PigeonInternalToString(obj.profile_id_);
+  os << ", operation_id: ";
+  os << PigeonInternalToString(obj.operation_id_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const SelectProfileRequest& v) {
+  return v.Hash();
+}
+
+// RemoveProfileRequest
+
+RemoveProfileRequest::RemoveProfileRequest(
+  const std::string& profile_id,
+  bool force,
+  const std::string& operation_id)
+ : profile_id_(profile_id),
+    force_(force),
+    operation_id_(operation_id) {}
+
+const std::string& RemoveProfileRequest::profile_id() const {
+  return profile_id_;
+}
+
+void RemoveProfileRequest::set_profile_id(std::string_view value_arg) {
+  profile_id_ = value_arg;
+}
+
+
+bool RemoveProfileRequest::force() const {
+  return force_;
+}
+
+void RemoveProfileRequest::set_force(bool value_arg) {
+  force_ = value_arg;
+}
+
+
+const std::string& RemoveProfileRequest::operation_id() const {
+  return operation_id_;
+}
+
+void RemoveProfileRequest::set_operation_id(std::string_view value_arg) {
+  operation_id_ = value_arg;
+}
+
+
+EncodableList RemoveProfileRequest::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(3);
+  list.push_back(EncodableValue(profile_id_));
+  list.push_back(EncodableValue(force_));
+  list.push_back(EncodableValue(operation_id_));
+  return list;
+}
+
+RemoveProfileRequest RemoveProfileRequest::FromEncodableList(const EncodableList& list) {
+  RemoveProfileRequest decoded(
+    std::get<std::string>(list[0]),
+    std::get<bool>(list[1]),
+    std::get<std::string>(list[2]));
+  return decoded;
+}
+
+bool RemoveProfileRequest::operator==(const RemoveProfileRequest& other) const {
+  return PigeonInternalDeepEquals(profile_id_, other.profile_id_) && PigeonInternalDeepEquals(force_, other.force_) && PigeonInternalDeepEquals(operation_id_, other.operation_id_);
+}
+
+bool RemoveProfileRequest::operator!=(const RemoveProfileRequest& other) const {
+  return !(*this == other);
+}
+
+size_t RemoveProfileRequest::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(profile_id_);
+  result = result * 31 + PigeonInternalDeepHash(force_);
+  result = result * 31 + PigeonInternalDeepHash(operation_id_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const RemoveProfileRequest& obj) {
+  os << "RemoveProfileRequest(";
+  os << "profile_id: ";
+  os << PigeonInternalToString(obj.profile_id_);
+  os << ", force: ";
+  os << PigeonInternalToString(obj.force_);
+  os << ", operation_id: ";
+  os << PigeonInternalToString(obj.operation_id_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const RemoveProfileRequest& v) {
+  return v.Hash();
+}
+
+// ConnectRequest
+
+ConnectRequest::ConnectRequest(
+  const std::string& profile_id,
+  const std::string& operation_id)
+ : profile_id_(profile_id),
+    operation_id_(operation_id) {}
+
+const std::string& ConnectRequest::profile_id() const {
+  return profile_id_;
+}
+
+void ConnectRequest::set_profile_id(std::string_view value_arg) {
+  profile_id_ = value_arg;
+}
+
+
+const std::string& ConnectRequest::operation_id() const {
+  return operation_id_;
+}
+
+void ConnectRequest::set_operation_id(std::string_view value_arg) {
+  operation_id_ = value_arg;
+}
+
+
+EncodableList ConnectRequest::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(2);
+  list.push_back(EncodableValue(profile_id_));
+  list.push_back(EncodableValue(operation_id_));
+  return list;
+}
+
+ConnectRequest ConnectRequest::FromEncodableList(const EncodableList& list) {
+  ConnectRequest decoded(
+    std::get<std::string>(list[0]),
+    std::get<std::string>(list[1]));
+  return decoded;
+}
+
+bool ConnectRequest::operator==(const ConnectRequest& other) const {
+  return PigeonInternalDeepEquals(profile_id_, other.profile_id_) && PigeonInternalDeepEquals(operation_id_, other.operation_id_);
+}
+
+bool ConnectRequest::operator!=(const ConnectRequest& other) const {
+  return !(*this == other);
+}
+
+size_t ConnectRequest::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(profile_id_);
+  result = result * 31 + PigeonInternalDeepHash(operation_id_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const ConnectRequest& obj) {
+  os << "ConnectRequest(";
+  os << "profile_id: ";
+  os << PigeonInternalToString(obj.profile_id_);
+  os << ", operation_id: ";
+  os << PigeonInternalToString(obj.operation_id_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const ConnectRequest& v) {
+  return v.Hash();
+}
+
+// DisconnectRequest
+
+DisconnectRequest::DisconnectRequest(const std::string& operation_id)
+ : operation_id_(operation_id) {}
+
+const std::string& DisconnectRequest::operation_id() const {
+  return operation_id_;
+}
+
+void DisconnectRequest::set_operation_id(std::string_view value_arg) {
+  operation_id_ = value_arg;
+}
+
+
+EncodableList DisconnectRequest::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(1);
+  list.push_back(EncodableValue(operation_id_));
+  return list;
+}
+
+DisconnectRequest DisconnectRequest::FromEncodableList(const EncodableList& list) {
+  DisconnectRequest decoded(
+    std::get<std::string>(list[0]));
+  return decoded;
+}
+
+bool DisconnectRequest::operator==(const DisconnectRequest& other) const {
+  return PigeonInternalDeepEquals(operation_id_, other.operation_id_);
+}
+
+bool DisconnectRequest::operator!=(const DisconnectRequest& other) const {
+  return !(*this == other);
+}
+
+size_t DisconnectRequest::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(operation_id_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const DisconnectRequest& obj) {
+  os << "DisconnectRequest(";
+  os << "operation_id: ";
+  os << PigeonInternalToString(obj.operation_id_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const DisconnectRequest& v) {
+  return v.Hash();
+}
+
+// TunnelStatus
+
+TunnelStatus::TunnelStatus(
+  const TunnelState& state,
+  const CarrierKind& carrier,
+  int64_t connected_at_unix_ms,
+  int64_t upload_bytes_per_second,
+  int64_t download_bytes_per_second,
+  int64_t upload_total_bytes,
+  int64_t download_total_bytes,
+  int64_t sequence)
+ : state_(state),
+    carrier_(carrier),
+    connected_at_unix_ms_(connected_at_unix_ms),
+    upload_bytes_per_second_(upload_bytes_per_second),
+    download_bytes_per_second_(download_bytes_per_second),
+    upload_total_bytes_(upload_total_bytes),
+    download_total_bytes_(download_total_bytes),
+    sequence_(sequence) {}
+
+TunnelStatus::TunnelStatus(
+  const TunnelState& state,
+  const std::string* profile_id,
+  const CarrierKind& carrier,
+  int64_t connected_at_unix_ms,
+  int64_t upload_bytes_per_second,
+  int64_t download_bytes_per_second,
+  int64_t upload_total_bytes,
+  int64_t download_total_bytes,
+  int64_t sequence)
+ : state_(state),
+    profile_id_(profile_id ? std::optional<std::string>(*profile_id) : std::nullopt),
+    carrier_(carrier),
+    connected_at_unix_ms_(connected_at_unix_ms),
+    upload_bytes_per_second_(upload_bytes_per_second),
+    download_bytes_per_second_(download_bytes_per_second),
+    upload_total_bytes_(upload_total_bytes),
+    download_total_bytes_(download_total_bytes),
+    sequence_(sequence) {}
+
+const TunnelState& TunnelStatus::state() const {
+  return state_;
+}
+
+void TunnelStatus::set_state(const TunnelState& value_arg) {
+  state_ = value_arg;
+}
+
+
+const std::string* TunnelStatus::profile_id() const {
+  return profile_id_ ? &(*profile_id_) : nullptr;
+}
+
+void TunnelStatus::set_profile_id(const std::string_view* value_arg) {
+  profile_id_ = value_arg ? std::optional<std::string>(*value_arg) : std::nullopt;
+}
+
+void TunnelStatus::set_profile_id(std::string_view value_arg) {
+  profile_id_ = value_arg;
+}
+
+
+const CarrierKind& TunnelStatus::carrier() const {
+  return carrier_;
+}
+
+void TunnelStatus::set_carrier(const CarrierKind& value_arg) {
+  carrier_ = value_arg;
+}
+
+
+int64_t TunnelStatus::connected_at_unix_ms() const {
+  return connected_at_unix_ms_;
+}
+
+void TunnelStatus::set_connected_at_unix_ms(int64_t value_arg) {
+  connected_at_unix_ms_ = value_arg;
+}
+
+
+int64_t TunnelStatus::upload_bytes_per_second() const {
+  return upload_bytes_per_second_;
+}
+
+void TunnelStatus::set_upload_bytes_per_second(int64_t value_arg) {
+  upload_bytes_per_second_ = value_arg;
+}
+
+
+int64_t TunnelStatus::download_bytes_per_second() const {
+  return download_bytes_per_second_;
+}
+
+void TunnelStatus::set_download_bytes_per_second(int64_t value_arg) {
+  download_bytes_per_second_ = value_arg;
+}
+
+
+int64_t TunnelStatus::upload_total_bytes() const {
+  return upload_total_bytes_;
+}
+
+void TunnelStatus::set_upload_total_bytes(int64_t value_arg) {
+  upload_total_bytes_ = value_arg;
+}
+
+
+int64_t TunnelStatus::download_total_bytes() const {
+  return download_total_bytes_;
+}
+
+void TunnelStatus::set_download_total_bytes(int64_t value_arg) {
+  download_total_bytes_ = value_arg;
+}
+
+
+int64_t TunnelStatus::sequence() const {
+  return sequence_;
+}
+
+void TunnelStatus::set_sequence(int64_t value_arg) {
+  sequence_ = value_arg;
+}
+
+
+EncodableList TunnelStatus::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(9);
+  list.push_back(CustomEncodableValue(state_));
+  list.push_back(profile_id_ ? EncodableValue(*profile_id_) : EncodableValue());
+  list.push_back(CustomEncodableValue(carrier_));
+  list.push_back(EncodableValue(connected_at_unix_ms_));
+  list.push_back(EncodableValue(upload_bytes_per_second_));
+  list.push_back(EncodableValue(download_bytes_per_second_));
+  list.push_back(EncodableValue(upload_total_bytes_));
+  list.push_back(EncodableValue(download_total_bytes_));
+  list.push_back(EncodableValue(sequence_));
+  return list;
+}
+
+TunnelStatus TunnelStatus::FromEncodableList(const EncodableList& list) {
+  TunnelStatus decoded(
+    std::any_cast<const TunnelState&>(std::get<CustomEncodableValue>(list[0])),
+    std::any_cast<const CarrierKind&>(std::get<CustomEncodableValue>(list[2])),
+    std::get<int64_t>(list[3]),
+    std::get<int64_t>(list[4]),
+    std::get<int64_t>(list[5]),
+    std::get<int64_t>(list[6]),
+    std::get<int64_t>(list[7]),
+    std::get<int64_t>(list[8]));
+  auto& encodable_profile_id = list[1];
+  if (!encodable_profile_id.IsNull()) {
+    decoded.set_profile_id(std::get<std::string>(encodable_profile_id));
+  }
+  return decoded;
+}
+
+bool TunnelStatus::operator==(const TunnelStatus& other) const {
+  return PigeonInternalDeepEquals(state_, other.state_) && PigeonInternalDeepEquals(profile_id_, other.profile_id_) && PigeonInternalDeepEquals(carrier_, other.carrier_) && PigeonInternalDeepEquals(connected_at_unix_ms_, other.connected_at_unix_ms_) && PigeonInternalDeepEquals(upload_bytes_per_second_, other.upload_bytes_per_second_) && PigeonInternalDeepEquals(download_bytes_per_second_, other.download_bytes_per_second_) && PigeonInternalDeepEquals(upload_total_bytes_, other.upload_total_bytes_) && PigeonInternalDeepEquals(download_total_bytes_, other.download_total_bytes_) && PigeonInternalDeepEquals(sequence_, other.sequence_);
+}
+
+bool TunnelStatus::operator!=(const TunnelStatus& other) const {
+  return !(*this == other);
+}
+
+size_t TunnelStatus::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(state_);
+  result = result * 31 + PigeonInternalDeepHash(profile_id_);
+  result = result * 31 + PigeonInternalDeepHash(carrier_);
+  result = result * 31 + PigeonInternalDeepHash(connected_at_unix_ms_);
+  result = result * 31 + PigeonInternalDeepHash(upload_bytes_per_second_);
+  result = result * 31 + PigeonInternalDeepHash(download_bytes_per_second_);
+  result = result * 31 + PigeonInternalDeepHash(upload_total_bytes_);
+  result = result * 31 + PigeonInternalDeepHash(download_total_bytes_);
+  result = result * 31 + PigeonInternalDeepHash(sequence_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const TunnelStatus& obj) {
+  os << "TunnelStatus(";
+  os << "state: ";
+  os << PigeonInternalToString(obj.state_);
+  os << ", profile_id: ";
+  if (obj.profile_id_) {
+    os << PigeonInternalToString(*obj.profile_id_);
+  }
+  else {
+    os << "null";
+  }
+  os << ", carrier: ";
+  os << PigeonInternalToString(obj.carrier_);
+  os << ", connected_at_unix_ms: ";
+  os << PigeonInternalToString(obj.connected_at_unix_ms_);
+  os << ", upload_bytes_per_second: ";
+  os << PigeonInternalToString(obj.upload_bytes_per_second_);
+  os << ", download_bytes_per_second: ";
+  os << PigeonInternalToString(obj.download_bytes_per_second_);
+  os << ", upload_total_bytes: ";
+  os << PigeonInternalToString(obj.upload_total_bytes_);
+  os << ", download_total_bytes: ";
+  os << PigeonInternalToString(obj.download_total_bytes_);
+  os << ", sequence: ";
+  os << PigeonInternalToString(obj.sequence_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const TunnelStatus& v) {
+  return v.Hash();
+}
+
 
 PigeonInternalCodecSerializer::PigeonInternalCodecSerializer() {}
 
@@ -558,10 +1315,46 @@ EncodableValue PigeonInternalCodecSerializer::ReadValueOfType(
         return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<HostPlatform>(enum_arg_value));
       }
     case 130: {
-        return CustomEncodableValue(HostApiVersion::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        const auto& encodable_enum_arg = ReadValue(stream);
+        const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<ProfileOrigin>(enum_arg_value));
       }
     case 131: {
+        const auto& encodable_enum_arg = ReadValue(stream);
+        const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<TunnelState>(enum_arg_value));
+      }
+    case 132: {
+        const auto& encodable_enum_arg = ReadValue(stream);
+        const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<CarrierKind>(enum_arg_value));
+      }
+    case 133: {
+        return CustomEncodableValue(HostApiVersion::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 134: {
         return CustomEncodableValue(HostCapabilities::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 135: {
+        return CustomEncodableValue(ProfileSummary::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 136: {
+        return CustomEncodableValue(ImportProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 137: {
+        return CustomEncodableValue(SelectProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 138: {
+        return CustomEncodableValue(RemoveProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 139: {
+        return CustomEncodableValue(ConnectRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 140: {
+        return CustomEncodableValue(DisconnectRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 141: {
+        return CustomEncodableValue(TunnelStatus::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     default:
       return ::flutter::StandardCodecSerializer::ReadValueOfType(type, stream);
@@ -577,14 +1370,64 @@ void PigeonInternalCodecSerializer::WriteValue(
       WriteValue(EncodableValue(static_cast<int>(std::any_cast<HostPlatform>(*custom_value))), stream);
       return;
     }
-    if (custom_value->type() == typeid(HostApiVersion)) {
+    if (custom_value->type() == typeid(ProfileOrigin)) {
       stream->WriteByte(130);
+      WriteValue(EncodableValue(static_cast<int>(std::any_cast<ProfileOrigin>(*custom_value))), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(TunnelState)) {
+      stream->WriteByte(131);
+      WriteValue(EncodableValue(static_cast<int>(std::any_cast<TunnelState>(*custom_value))), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(CarrierKind)) {
+      stream->WriteByte(132);
+      WriteValue(EncodableValue(static_cast<int>(std::any_cast<CarrierKind>(*custom_value))), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(HostApiVersion)) {
+      stream->WriteByte(133);
       WriteValue(EncodableValue(std::any_cast<HostApiVersion>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(HostCapabilities)) {
-      stream->WriteByte(131);
+      stream->WriteByte(134);
       WriteValue(EncodableValue(std::any_cast<HostCapabilities>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(ProfileSummary)) {
+      stream->WriteByte(135);
+      WriteValue(EncodableValue(std::any_cast<ProfileSummary>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(ImportProfileRequest)) {
+      stream->WriteByte(136);
+      WriteValue(EncodableValue(std::any_cast<ImportProfileRequest>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(SelectProfileRequest)) {
+      stream->WriteByte(137);
+      WriteValue(EncodableValue(std::any_cast<SelectProfileRequest>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(RemoveProfileRequest)) {
+      stream->WriteByte(138);
+      WriteValue(EncodableValue(std::any_cast<RemoveProfileRequest>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(ConnectRequest)) {
+      stream->WriteByte(139);
+      WriteValue(EncodableValue(std::any_cast<ConnectRequest>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(DisconnectRequest)) {
+      stream->WriteByte(140);
+      WriteValue(EncodableValue(std::any_cast<DisconnectRequest>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(TunnelStatus)) {
+      stream->WriteByte(141);
+      WriteValue(EncodableValue(std::any_cast<TunnelStatus>(*custom_value).ToEncodableList()), stream);
       return;
     }
   }
@@ -621,6 +1464,195 @@ void ClientHostApi::SetUp(
           }
           const auto& requested_version_arg = std::any_cast<const HostApiVersion&>(std::get<CustomEncodableValue>(encodable_requested_version_arg));
           api->GetCapabilities(requested_version_arg, [reply](ErrorOr<HostCapabilities>&& output) {
+            if (output.has_error()) {
+              reply(WrapError(output.error()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(CustomEncodableValue(std::move(output).TakeValue()));
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.listProfiles" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          api->ListProfiles([reply](ErrorOr<EncodableList>&& output) {
+            if (output.has_error()) {
+              reply(WrapError(output.error()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(EncodableValue(std::move(output).TakeValue()));
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.importProfile" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          const auto& args = std::get<EncodableList>(message);
+          const auto& encodable_request_arg = args.at(0);
+          if (encodable_request_arg.IsNull()) {
+            reply(WrapError("request_arg unexpectedly null."));
+            return;
+          }
+          const auto& request_arg = std::any_cast<const ImportProfileRequest&>(std::get<CustomEncodableValue>(encodable_request_arg));
+          api->ImportProfile(request_arg, [reply](ErrorOr<ProfileSummary>&& output) {
+            if (output.has_error()) {
+              reply(WrapError(output.error()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(CustomEncodableValue(std::move(output).TakeValue()));
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.selectProfile" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          const auto& args = std::get<EncodableList>(message);
+          const auto& encodable_request_arg = args.at(0);
+          if (encodable_request_arg.IsNull()) {
+            reply(WrapError("request_arg unexpectedly null."));
+            return;
+          }
+          const auto& request_arg = std::any_cast<const SelectProfileRequest&>(std::get<CustomEncodableValue>(encodable_request_arg));
+          api->SelectProfile(request_arg, [reply](ErrorOr<ProfileSummary>&& output) {
+            if (output.has_error()) {
+              reply(WrapError(output.error()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(CustomEncodableValue(std::move(output).TakeValue()));
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.removeProfile" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          const auto& args = std::get<EncodableList>(message);
+          const auto& encodable_request_arg = args.at(0);
+          if (encodable_request_arg.IsNull()) {
+            reply(WrapError("request_arg unexpectedly null."));
+            return;
+          }
+          const auto& request_arg = std::any_cast<const RemoveProfileRequest&>(std::get<CustomEncodableValue>(encodable_request_arg));
+          api->RemoveProfile(request_arg, [reply](std::optional<FlutterError>&& output) {
+            if (output.has_value()) {
+              reply(WrapError(output.value()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(EncodableValue());
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.connect" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          const auto& args = std::get<EncodableList>(message);
+          const auto& encodable_request_arg = args.at(0);
+          if (encodable_request_arg.IsNull()) {
+            reply(WrapError("request_arg unexpectedly null."));
+            return;
+          }
+          const auto& request_arg = std::any_cast<const ConnectRequest&>(std::get<CustomEncodableValue>(encodable_request_arg));
+          api->Connect(request_arg, [reply](ErrorOr<TunnelStatus>&& output) {
+            if (output.has_error()) {
+              reply(WrapError(output.error()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(CustomEncodableValue(std::move(output).TakeValue()));
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.disconnect" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          const auto& args = std::get<EncodableList>(message);
+          const auto& encodable_request_arg = args.at(0);
+          if (encodable_request_arg.IsNull()) {
+            reply(WrapError("request_arg unexpectedly null."));
+            return;
+          }
+          const auto& request_arg = std::any_cast<const DisconnectRequest&>(std::get<CustomEncodableValue>(encodable_request_arg));
+          api->Disconnect(request_arg, [reply](ErrorOr<TunnelStatus>&& output) {
+            if (output.has_error()) {
+              reply(WrapError(output.error()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(CustomEncodableValue(std::move(output).TakeValue()));
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.getStatus" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          api->GetStatus([reply](ErrorOr<TunnelStatus>&& output) {
             if (output.has_error()) {
               reply(WrapError(output.error()));
               return;
