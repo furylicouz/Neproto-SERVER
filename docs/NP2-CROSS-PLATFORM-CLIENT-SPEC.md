@@ -400,6 +400,9 @@ For the first candidate on both platforms:
 
 - configured carrier set contains one HTTP/3 WebTransport endpoint;
 - carrier pool target is one;
+- the candidate does not advertise `CapabilityConstellationContinuity`, even
+  when a migrated profile still stores `enable_constellation=true`; the stored
+  profile is not mutated, and Forward Secrecy remains independently enabled;
 - WebRTC and HTTPS connector functions are not constructed;
 - no stored compatibility route is dialed;
 - failure is reported with its HTTP/3 stage;
@@ -408,7 +411,10 @@ For the first candidate on both platforms:
 This temporarily differs from the existing adaptive iOS production behavior.
 The legacy iOS client remains unchanged until the replacement candidate is
 accepted. A later multi-carrier milestone requires a separate specification
-change and tests; it cannot enter as a compatibility fallback.
+change, an implemented Constellation control exchange and tests; it cannot
+enter as a compatibility fallback. Advertising the Constellation capability
+without sending its mandatory `ConstellationCreate` control message is a
+protocol error and must fail closed before release.
 
 ### 7.2 Network transition and reconnect
 

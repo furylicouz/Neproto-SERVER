@@ -39,7 +39,14 @@ func NewStrictHTTP3Connector(dependencies StrictHTTP3Dependencies) (Connector, e
 			clientConfig.HTTPSTimeout.Duration != 0 || clientConfig.WebRTCTimeout.Duration != 0 {
 			return nil, ErrStrictHTTP3Required
 		}
-		connection, err := dependencies.DialHTTP3(ctx, clientConfig)
+		// The first candidate owns one HTTP/3 session and does not yet implement
+		// the mandatory Constellation control exchange. Imported profiles may
+		// retain the additive flag for legacy clients, but advertising it here
+		// would make the server wait for a ConstellationCreate frame that this
+		// runtime cannot send. Work on a value copy so persistence is unchanged.
+		runtimeConfig := clientConfig
+		runtimeConfig.EnableConstellation = false
+		connection, err := dependencies.DialHTTP3(ctx, runtimeConfig)
 		if err != nil {
 			return nil, classifyHTTP3DialError(err)
 		}
@@ -49,7 +56,7 @@ func NewStrictHTTP3Connector(dependencies StrictHTTP3Dependencies) (Connector, e
 			}
 			return nil, ErrUnexpectedCarrier
 		}
-		runtime, err := dependencies.Authenticate(ctx, clientConfig, connection)
+		runtime, err := dependencies.Authenticate(ctx, runtimeConfig, connection)
 		if err != nil {
 			_ = connection.Close()
 			return nil, clienthost.WrapError(

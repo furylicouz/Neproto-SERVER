@@ -47,6 +47,46 @@ func TestStrictHTTP3ConnectorConstructsOnlyHTTP3(t *testing.T) {
 	}
 }
 
+func TestStrictHTTP3ConnectorOmitsUnimplementedConstellationCapability(t *testing.T) {
+	connection := &fakeCarrier{}
+	runtime := newFakeRuntime()
+	var dialConfig config.Client
+	var authenticationConfig config.Client
+	connector, err := NewStrictHTTP3Connector(StrictHTTP3Dependencies{
+		DialHTTP3: func(_ context.Context, candidate config.Client) (carrier.Carrier, error) {
+			dialConfig = candidate
+			return connection, nil
+		},
+		Authenticate: func(_ context.Context, candidate config.Client, _ carrier.Carrier) (Runtime, error) {
+			authenticationConfig = candidate
+			return runtime, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	candidate := strictHTTP3Config()
+	candidate.EnableConstellation = true
+	candidate.EnableForwardSecrecy = true
+	got, err := connector(context.Background(), candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != runtime {
+		t.Fatalf("runtime = %v", got)
+	}
+	if dialConfig.EnableConstellation || authenticationConfig.EnableConstellation {
+		t.Fatal("strict single-session core advertised unimplemented Constellation continuity")
+	}
+	if !dialConfig.EnableForwardSecrecy || !authenticationConfig.EnableForwardSecrecy {
+		t.Fatal("strict single-session core disabled independent Forward Secrecy")
+	}
+	if !candidate.EnableConstellation {
+		t.Fatal("connector mutated the imported profile configuration")
+	}
+}
+
 func TestNewProductionStrictHTTP3CoreConstructsWithoutDialing(t *testing.T) {
 	core, err := NewProductionStrictHTTP3Core()
 	if err != nil {
