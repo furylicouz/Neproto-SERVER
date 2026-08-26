@@ -21,6 +21,9 @@ Rules for every task:
 
 ### Task A1 — Pin and guard the unified toolchain
 
+**Status:** ✅ Completed in `f82de21` (Windows build-only toolchain guard;
+native compiler gates remain at their platform checkpoints).
+
 **Acceptance criteria:**
 
 - Flutter 3.44.7 and Pigeon 28.0.0 are pinned.
@@ -40,6 +43,8 @@ pwsh clients/unified/tool/verify-windows.ps1 -BuildOnly
 `.github/workflows/ci.yml`.
 
 ### Task A2 — Define Host API version and capabilities
+
+**Status:** ✅ Completed on the implementation branch.
 
 **Acceptance criteria:**
 

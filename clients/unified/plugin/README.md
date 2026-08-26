@@ -1,15 +1,15 @@
-# neproto_host
+# NeProto Host
 
-A new Flutter plugin project.
+Typed Flutter-to-native boundary for the NeProto Windows and iOS clients.
 
-## Getting Started
+The Pigeon source of truth is `pigeons/client_host_api.dart`. Regenerate the
+Dart, Swift and C++ bindings from the repository root with:
 
-This project is a starting point for a Flutter
-[plug-in package](https://flutter.dev/to/develop-plugins),
-a specialized package that includes platform-specific implementation code for
-Android and/or iOS.
+```powershell
+clients/unified/tool/generate-host-api.ps1
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Generated files are committed and must all come from Pigeon 28.0.0. Flutter
+never receives profile credentials, route tokens or raw packet data through
+this API.
 
