@@ -19,6 +19,8 @@ set(PLUGIN_NAME "neproto_host_plugin")
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
   "client_host_api.g.cpp"
+  "json_value.cpp"
+  "json_value.h"
   "neproto_host_plugin.cpp"
   "neproto_host_plugin.h"
   "pipe_client.cpp"
@@ -86,6 +88,7 @@ FetchContent_MakeAvailable(googletest)
 # directly into the test binary rather than using the DLL.
 add_executable(${TEST_RUNNER}
   test/neproto_host_plugin_test.cpp
+  test/json_value_test.cpp
   test/pipe_client_test.cpp
   ${PLUGIN_SOURCES}
 )

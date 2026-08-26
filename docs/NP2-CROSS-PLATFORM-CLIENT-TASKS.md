@@ -243,9 +243,10 @@ The produced executable is not launched locally.
 
 ### Task C1 — Implement bounded Windows plugin IPC
 
-**Status:** 🔄 In progress. The injectable RAII named-pipe transport and
-service-free framing tests are implemented with 1.5-second connect, 12-second
-request and 256-KiB bounds. Pigeon method/result mapping and Windows release
+**Status:** 🔄 In progress. The injectable RAII named-pipe transport,
+service-free framing tests and strict bounded JSON codec are implemented with
+1.5-second connect, 12-second request and 256-KiB bounds. Portable local C++17
+compile/smoke checks pass. Pigeon method/result mapping and Windows release
 compilation remain.
 
 **Acceptance criteria:**
