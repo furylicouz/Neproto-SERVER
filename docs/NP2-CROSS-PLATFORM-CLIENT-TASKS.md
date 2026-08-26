@@ -88,6 +88,10 @@ Dart/Swift/C++ outputs, one contract test.
 
 ### Task A5 — Add stable Go host status/errors
 
+**Status:** ✅ Completed on the implementation branch. Focused tests and vet
+pass locally; the race run is deferred to CI because this Windows toolchain has
+CGO disabled.
+
 **Acceptance criteria:**
 
 - Go types represent Host API states, stages and redacted errors.
