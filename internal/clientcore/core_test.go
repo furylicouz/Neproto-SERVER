@@ -152,6 +152,8 @@ type fakeRuntime struct {
 	closed     chan struct{}
 	closeOnce  sync.Once
 	closeCalls atomic.Int64
+	probeCalls atomic.Int64
+	probeErr   error
 }
 
 func newFakeRuntime() *fakeRuntime {
@@ -162,6 +164,11 @@ func newFakeRuntime() *fakeRuntime {
 }
 
 func (r *fakeRuntime) Carrier() clienthost.Carrier { return r.carrier }
+
+func (r *fakeRuntime) Probe(context.Context) error {
+	r.probeCalls.Add(1)
+	return r.probeErr
+}
 
 func (r *fakeRuntime) Wait(ctx context.Context) error {
 	select {

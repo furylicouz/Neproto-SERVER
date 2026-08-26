@@ -17,6 +17,8 @@ var (
 	ErrInvalidOptions    = errors.New("invalid client core options")
 	ErrClosed            = errors.New("client core is closed")
 	ErrAlreadyActive     = errors.New("client core is already active")
+	ErrNotConnected      = errors.New("client core is not connected")
+	ErrReconnectActive   = errors.New("client core reconnect is already active")
 	ErrNoRuntime         = errors.New("client connector returned no runtime")
 	ErrUnexpectedCarrier = errors.New("client connector returned a non-HTTP/3 runtime")
 )
@@ -36,8 +38,9 @@ type Runtime interface {
 type Connector func(context.Context, config.Client) (Runtime, error)
 
 type Options struct {
-	Connect Connector
-	Now     func() time.Time
+	Connect   Connector
+	Now       func() time.Time
+	Reconnect ReconnectPolicy
 }
 
 type ConnectRequest struct {
@@ -50,9 +53,10 @@ type ConnectRequest struct {
 // Closing it is terminal and idempotent. Reconnection within that lifetime is
 // same-carrier work and does not construct a different transport.
 type Core struct {
-	mu      sync.Mutex
-	connect Connector
-	now     func() time.Time
+	mu        sync.Mutex
+	connect   Connector
+	now       func() time.Time
+	reconnect ReconnectPolicy
 
 	rootContext context.Context
 	rootCancel  context.CancelFunc
@@ -66,6 +70,8 @@ type Core struct {
 
 	closeDone chan struct{}
 	closeErr  error
+	workers   sync.WaitGroup
+	request   ConnectRequest
 }
 
 func New(options Options) (*Core, error) {
@@ -75,10 +81,15 @@ func New(options Options) (*Core, error) {
 	if options.Now == nil {
 		options.Now = time.Now
 	}
+	reconnect, err := normalizeReconnectPolicy(options.Reconnect)
+	if err != nil {
+		return nil, err
+	}
 	rootContext, rootCancel := context.WithCancel(context.Background())
 	return &Core{
 		connect:     options.Connect,
 		now:         options.Now,
+		reconnect:   reconnect,
 		rootContext: rootContext,
 		rootCancel:  rootCancel,
 		snapshot: clienthost.Snapshot{
@@ -118,7 +129,9 @@ func (c *Core) Connect(ctx context.Context, request ConnectRequest) (clienthost.
 	c.snapshot.ConnectedAtUnixMS = 0
 	c.snapshot.LastError = nil
 	c.snapshot.Sequence++
+	c.workers.Add(1)
 	c.mu.Unlock()
+	defer c.workers.Done()
 
 	runtime, connectErr := c.connect(connectContext, request.Profile)
 	stopCallerCancellation()
@@ -150,6 +163,7 @@ func (c *Core) Connect(ctx context.Context, request ConnectRequest) (clienthost.
 	c.activeCancel = sessionCancel
 	c.activeDone = sessionDone
 	c.runtime = owned
+	c.request = request
 	c.snapshot.State = clienthost.StateConnected
 	c.snapshot.Carrier = clienthost.CarrierHTTP3WebTransport
 	c.snapshot.ConnectedAtUnixMS = c.now().UnixMilli()
@@ -157,9 +171,13 @@ func (c *Core) Connect(ctx context.Context, request ConnectRequest) (clienthost.
 	c.snapshot.Sequence++
 	result := c.snapshot
 	close(connectDone)
+	c.workers.Add(1)
 	c.mu.Unlock()
 
-	go c.monitor(generation, sessionContext, sessionDone, owned, request.OperationID)
+	go func() {
+		defer c.workers.Done()
+		c.monitor(generation, sessionContext, sessionDone, owned, request.OperationID)
+	}()
 	return result, nil
 }
 
@@ -195,7 +213,8 @@ func (c *Core) monitor(
 	closeErr := runtime.Close()
 
 	c.mu.Lock()
-	if !c.closed && c.generation == generation && c.runtime == runtime {
+	if !c.closed && c.generation == generation && c.runtime == runtime &&
+		c.snapshot.State != clienthost.StateReconnecting {
 		c.runtime = nil
 		c.activeCancel = nil
 		c.activeDone = nil
@@ -275,11 +294,13 @@ func (c *Core) shutdown(cancel context.CancelFunc, done chan struct{}, runtime *
 	if done != nil {
 		<-done
 	}
+	c.workers.Wait()
 
 	c.mu.Lock()
 	c.runtime = nil
 	c.activeCancel = nil
 	c.activeDone = nil
+	c.request = ConnectRequest{}
 	c.snapshot.State = clienthost.StateDisconnected
 	c.snapshot.Carrier = clienthost.CarrierNone
 	c.snapshot.ConnectedAtUnixMS = 0

@@ -90,6 +90,13 @@ func (r *authenticatedRuntime) Wait(ctx context.Context) error {
 	return r.authenticated.Mux.Wait(ctx)
 }
 
+func (r *authenticatedRuntime) Probe(ctx context.Context) error {
+	if r == nil || r.authenticated == nil || r.authenticated.Mux == nil {
+		return ErrNoRuntime
+	}
+	return r.authenticated.Mux.Ping(ctx)
+}
+
 func (r *authenticatedRuntime) Close() error {
 	if r == nil || r.authenticated == nil || r.authenticated.Mux == nil {
 		return nil

@@ -138,6 +138,10 @@ dependencies; focused spies prove zero alternate-carrier calls.
 
 ### Task A8 — Add bounded same-carrier reconnect
 
+**Status:** ✅ Completed on the implementation branch. Authenticated probe,
+six strict-connector attempts, 30-second overall budget, capped full jitter and
+fail-closed exhaustion are covered by deterministic tests.
+
 **Acceptance criteria:**
 
 - Reconnect probes current session, then uses HTTP/3 only.
