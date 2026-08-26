@@ -165,7 +165,41 @@ func TestCloseReleasesSessionSlot(t *testing.T) {
 	}
 }
 
-func newCarrierPair(t *testing.T, maxSessions int) (*Server, *Conn, *Conn) {
+func BenchmarkCarrierReliableStream(b *testing.B) {
+	_, client, accepted := newCarrierPair(b, 1)
+	payload := bytes.Repeat([]byte{0xa5}, protocol.MaxCellPayloadSize)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	received := make(chan error, 1)
+	go func() {
+		for range b.N {
+			raw, err := accepted.Receive(ctx)
+			if err != nil {
+				received <- err
+				return
+			}
+			if len(raw) != len(payload) {
+				received <- errors.New("unexpected benchmark payload size")
+				return
+			}
+		}
+		received <- nil
+	}()
+	b.SetBytes(int64(len(payload)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		if err := client.Send(ctx, payload); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+	if err := <-received; err != nil {
+		b.Fatal(err)
+	}
+}
+
+func newCarrierPair(t testing.TB, maxSessions int) (*Server, *Conn, *Conn) {
 	t.Helper()
 	serverTLS, clientTLS := testTLSConfigs(t)
 	server, err := NewServer(ServerConfig{
@@ -237,7 +271,7 @@ func assertDatagramRoundTrip(t *testing.T, ctx context.Context, sender, receiver
 	}
 }
 
-func portOf(t *testing.T, address net.Addr) string {
+func portOf(t testing.TB, address net.Addr) string {
 	t.Helper()
 	_, port, err := net.SplitHostPort(address.String())
 	if err != nil {
@@ -246,7 +280,7 @@ func portOf(t *testing.T, address net.Addr) string {
 	return port
 }
 
-func testTLSConfigs(t *testing.T) (*tls.Config, *tls.Config) {
+func testTLSConfigs(t testing.TB) (*tls.Config, *tls.Config) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
