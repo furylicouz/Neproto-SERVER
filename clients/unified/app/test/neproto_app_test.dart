@@ -11,7 +11,11 @@ void main() {
     await tester.pumpWidget(NeprotoApp(host: host));
     await tester.pumpAndSettle();
 
-    expect(host.callOrder, <String>['getCapabilities', 'getStatus']);
+    expect(host.callOrder, <String>[
+      'getCapabilities',
+      'getStatus',
+      'listProfiles',
+    ]);
     expect(find.text('NeProto'), findsOneWidget);
     expect(find.text('Отключено'), findsNWidgets(2));
   });

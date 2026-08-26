@@ -13,6 +13,7 @@ final class ClientSessionState {
     required this.ready,
     required this.commandPending,
     required this.status,
+    this.profiles = const <ProfileSummary>[],
     this.capabilities,
     this.error,
   });
@@ -40,7 +41,17 @@ final class ClientSessionState {
   final bool commandPending;
   final HostCapabilities? capabilities;
   final TunnelStatus status;
+  final List<ProfileSummary> profiles;
   final HostError? error;
+
+  ProfileSummary? get selectedProfile {
+    for (final profile in profiles) {
+      if (profile.selected) {
+        return profile;
+      }
+    }
+    return null;
+  }
 
   ClientSessionState copyWith({
     bool? loading,
@@ -48,6 +59,7 @@ final class ClientSessionState {
     bool? commandPending,
     HostCapabilities? capabilities,
     TunnelStatus? status,
+    List<ProfileSummary>? profiles,
     HostError? error,
     bool clearError = false,
   }) {
@@ -57,6 +69,7 @@ final class ClientSessionState {
       commandPending: commandPending ?? this.commandPending,
       capabilities: capabilities ?? this.capabilities,
       status: status ?? this.status,
+      profiles: profiles ?? this.profiles,
       error: clearError ? null : error ?? this.error,
     );
   }
@@ -81,7 +94,7 @@ final class ClientSessionController extends ChangeNotifier {
             _state.status.state != TunnelState.failed)) {
       return;
     }
-    if (profileId.isEmpty || utf8.encode(profileId).length > 128) {
+    if (!_validProfileId(profileId)) {
       throw ArgumentError.value(profileId, 'profileId', 'invalid profile ID');
     }
     final operationId = _nextOperationId('connect');
@@ -110,6 +123,104 @@ final class ClientSessionController extends ChangeNotifier {
     try {
       _applyStatus(
         await _host.disconnect(DisconnectRequest(operationId: operationId)),
+      );
+    } catch (_) {
+      _setCommandError(operationId);
+    } finally {
+      _setState(_state.copyWith(commandPending: false));
+    }
+  }
+
+  Future<bool> importProfile(String onboardingValue) async {
+    if (!_state.ready || _state.commandPending) {
+      return false;
+    }
+    try {
+      HostInputValidator.validateOnboardingValue(onboardingValue);
+    } on ArgumentError {
+      _setProfileValidationError('import-invalid');
+      return false;
+    }
+    final operationId = _nextOperationId('import');
+    _setState(_state.copyWith(commandPending: true, clearError: true));
+    try {
+      final imported = await _host.importProfile(
+        ImportProfileRequest(
+          onboardingValue: onboardingValue,
+          operationId: operationId,
+        ),
+      );
+      _setState(
+        _state.copyWith(
+          profiles: List<ProfileSummary>.unmodifiable(<ProfileSummary>[
+            ..._state.profiles.where((item) => item.id != imported.id),
+            imported,
+          ]),
+        ),
+      );
+      return true;
+    } catch (_) {
+      _setCommandError(operationId);
+      return false;
+    } finally {
+      _setState(_state.copyWith(commandPending: false));
+    }
+  }
+
+  Future<void> selectProfile(String profileId) async {
+    if (!_state.ready || _state.commandPending || !_validProfileId(profileId)) {
+      return;
+    }
+    final operationId = _nextOperationId('select');
+    _setState(_state.copyWith(commandPending: true, clearError: true));
+    try {
+      final selected = await _host.selectProfile(
+        SelectProfileRequest(profileId: profileId, operationId: operationId),
+      );
+      _setState(
+        _state.copyWith(
+          profiles: List<ProfileSummary>.unmodifiable(
+            _state.profiles.map(
+              (item) => _copyProfile(
+                item.id == selected.id ? selected : item,
+                selected: item.id == selected.id,
+              ),
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      _setCommandError(operationId);
+    } finally {
+      _setState(_state.copyWith(commandPending: false));
+    }
+  }
+
+  Future<void> removeProfile(String profileId) async {
+    if (!_state.ready || _state.commandPending || !_validProfileId(profileId)) {
+      return;
+    }
+    if (_state.status.profileId == profileId &&
+        _state.status.state != TunnelState.disconnected &&
+        _state.status.state != TunnelState.failed) {
+      return;
+    }
+    final operationId = _nextOperationId('remove');
+    _setState(_state.copyWith(commandPending: true, clearError: true));
+    try {
+      await _host.removeProfile(
+        RemoveProfileRequest(
+          profileId: profileId,
+          force: false,
+          operationId: operationId,
+        ),
+      );
+      _setState(
+        _state.copyWith(
+          profiles: List<ProfileSummary>.unmodifiable(
+            _state.profiles.where((item) => item.id != profileId),
+          ),
+        ),
       );
     } catch (_) {
       _setCommandError(operationId);
@@ -153,7 +264,15 @@ final class ClientSessionController extends ChangeNotifier {
       }
       _setState(_state.copyWith(capabilities: capabilities));
       _applyStatus(await _host.getStatus());
-      _setState(_state.copyWith(loading: false, ready: true, clearError: true));
+      final profiles = await _host.listProfiles();
+      _setState(
+        _state.copyWith(
+          loading: false,
+          ready: true,
+          profiles: List<ProfileSummary>.unmodifiable(profiles),
+          clearError: true,
+        ),
+      );
     } catch (_) {
       _setState(
         _state.copyWith(
@@ -212,6 +331,20 @@ final class ClientSessionController extends ChangeNotifier {
     );
   }
 
+  void _setProfileValidationError(String operationId) {
+    _setState(
+      _state.copyWith(
+        error: HostError(
+          code: HostErrorCode.invalidProfile,
+          stage: ErrorStage.profileValidation,
+          message: 'Profile import value is invalid.',
+          retryable: false,
+          operationId: operationId,
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     if (_disposed) {
@@ -231,5 +364,25 @@ HostError _unsupportedHostError() {
     message: 'Host API version is unsupported.',
     retryable: false,
     operationId: 'startup',
+  );
+}
+
+bool _validProfileId(String value) {
+  return value.isNotEmpty &&
+      value == value.trim() &&
+      utf8.encode(value).length <= 128;
+}
+
+ProfileSummary _copyProfile(ProfileSummary source, {required bool selected}) {
+  return ProfileSummary(
+    id: source.id,
+    displayName: source.displayName,
+    serverIdentity: source.serverIdentity,
+    host: source.host,
+    selected: selected,
+    hasCredential: source.hasCredential,
+    origin: source.origin,
+    catalogManaged: source.catalogManaged,
+    updatedAtUnixMs: source.updatedAtUnixMs,
   );
 }

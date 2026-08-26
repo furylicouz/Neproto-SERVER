@@ -7,6 +7,7 @@ import 'application/client_session_controller.dart';
 import 'design/app_theme.dart';
 import 'host/client_host.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/profiles/profiles_screen.dart';
 
 final class NeprotoApp extends StatefulWidget {
   const NeprotoApp({required this.host, super.key});
@@ -19,6 +20,7 @@ final class NeprotoApp extends StatefulWidget {
 
 final class _NeprotoAppState extends State<NeprotoApp> {
   late final ClientSessionController _controller;
+  int _destination = 0;
 
   @override
   void initState() {
@@ -43,18 +45,53 @@ final class _NeprotoAppState extends State<NeprotoApp> {
         animation: _controller,
         builder: (context, _) {
           final state = _controller.state;
-          return HomeScreen(
-            state: state,
-            onPrimaryAction: () {
-              if (state.status.state == TunnelState.connected) {
-                return _controller.disconnect();
-              }
-              final profileId = state.status.profileId;
-              if (profileId == null) {
-                return Future<void>.value();
-              }
-              return _controller.connect(profileId);
-            },
+          return Scaffold(
+            body: IndexedStack(
+              index: _destination,
+              children: <Widget>[
+                HomeScreen(
+                  state: state,
+                  onPrimaryAction: () {
+                    if (state.status.state == TunnelState.connected) {
+                      return _controller.disconnect();
+                    }
+                    final profileId =
+                        state.selectedProfile?.id ?? state.status.profileId;
+                    if (profileId == null) {
+                      return Future<void>.value();
+                    }
+                    return _controller.connect(profileId);
+                  },
+                ),
+                ProfilesScreen(
+                  profiles: state.profiles,
+                  busy: state.commandPending,
+                  onSelect: _controller.selectProfile,
+                  onRemove: _controller.removeProfile,
+                  onImport: _controller.importProfile,
+                ),
+              ],
+            ),
+            bottomNavigationBar: NavigationBar(
+              selectedIndex: _destination,
+              onDestinationSelected: (value) {
+                setState(() {
+                  _destination = value;
+                });
+              },
+              destinations: const <NavigationDestination>[
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home),
+                  label: 'Главная',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.dns_outlined),
+                  selectedIcon: Icon(Icons.dns),
+                  label: 'Профили',
+                ),
+              ],
+            ),
           );
         },
       ),

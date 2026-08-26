@@ -192,6 +192,10 @@ pass controller/widget tests at 320, 768 and 1440 logical pixels.
 
 ### Task B3 — Implement profile lifecycle slice
 
+**Status:** ✅ Completed on the implementation branch. Existing native
+profiles load on startup; import/select/remove are typed and guarded, invalid
+onboarding fails before Host API, and Dart state never retains onboarding data.
+
 **Acceptance criteria:**
 
 - Existing profiles list/select/remove through Host API.

@@ -5,25 +5,34 @@ import 'package:neproto_host/neproto_host.dart';
 import 'client_host.dart';
 
 final class FakeClientHost implements ClientHost {
-  FakeClientHost({HostCapabilities? capabilities, TunnelStatus? status})
-    : capabilities =
-          capabilities ??
-          HostCapabilities(
-            apiVersion: HostApiVersion(major: 1, minor: 0),
-            platform: HostPlatform.windows,
-            appVersion: '0.1.0-fake',
-            hostVersion: '0.1.0-fake',
-            coreVersion: '0.1.0-fake',
-            supportsHttp3WebTransport: true,
-          ),
-      status = status ?? _disconnectedStatus();
+  FakeClientHost({
+    HostCapabilities? capabilities,
+    TunnelStatus? status,
+    List<ProfileSummary>? profiles,
+    this.onImport,
+  }) : capabilities =
+           capabilities ??
+           HostCapabilities(
+             apiVersion: HostApiVersion(major: 1, minor: 0),
+             platform: HostPlatform.windows,
+             appVersion: '0.1.0-fake',
+             hostVersion: '0.1.0-fake',
+             coreVersion: '0.1.0-fake',
+             supportsHttp3WebTransport: true,
+           ),
+       status = status ?? _disconnectedStatus(),
+       profiles = List<ProfileSummary>.of(profiles ?? <ProfileSummary>[]);
 
   final HostCapabilities capabilities;
+  final void Function(ImportProfileRequest request)? onImport;
   TunnelStatus status;
   final List<String> callOrder = <String>[];
-  final List<ProfileSummary> profiles = <ProfileSummary>[];
+  final List<ProfileSummary> profiles;
   final List<ConnectRequest> connectRequests = <ConnectRequest>[];
   final List<DisconnectRequest> disconnectRequests = <DisconnectRequest>[];
+  final List<SelectProfileRequest> selectRequests = <SelectProfileRequest>[];
+  final List<RemoveProfileRequest> removeRequests = <RemoveProfileRequest>[];
+  int importCalls = 0;
   final StreamController<TunnelStatus> _statusController =
       StreamController<TunnelStatus>.broadcast(sync: true);
   bool _disposed = false;
@@ -53,18 +62,52 @@ final class FakeClientHost implements ClientHost {
   }
 
   @override
-  Future<ProfileSummary> importProfile(ImportProfileRequest request) {
-    throw UnimplementedError('Fake import is added with the profile slice.');
+  Future<ProfileSummary> importProfile(ImportProfileRequest request) async {
+    callOrder.add('importProfile');
+    importCalls++;
+    onImport?.call(request);
+    for (var index = 0; index < profiles.length; index++) {
+      profiles[index] = _copyProfile(profiles[index], selected: false);
+    }
+    final imported = ProfileSummary(
+      id: 'imported-$importCalls',
+      displayName: 'Imported profile $importCalls',
+      serverIdentity: 'vpn.example.test',
+      host: 'vpn.example.test',
+      selected: true,
+      hasCredential: true,
+      origin: ProfileOrigin.imported,
+      catalogManaged: false,
+      updatedAtUnixMs: importCalls,
+    );
+    profiles.add(imported);
+    return imported;
   }
 
   @override
-  Future<ProfileSummary> selectProfile(SelectProfileRequest request) {
-    throw UnimplementedError('Fake selection is added with the profile slice.');
+  Future<ProfileSummary> selectProfile(SelectProfileRequest request) async {
+    callOrder.add('selectProfile');
+    selectRequests.add(request);
+    final selectedIndex = profiles.indexWhere(
+      (item) => item.id == request.profileId,
+    );
+    if (selectedIndex < 0) {
+      throw StateError('profile not found');
+    }
+    for (var index = 0; index < profiles.length; index++) {
+      profiles[index] = _copyProfile(
+        profiles[index],
+        selected: index == selectedIndex,
+      );
+    }
+    return profiles[selectedIndex];
   }
 
   @override
-  Future<void> removeProfile(RemoveProfileRequest request) {
-    throw UnimplementedError('Fake removal is added with the profile slice.');
+  Future<void> removeProfile(RemoveProfileRequest request) async {
+    callOrder.add('removeProfile');
+    removeRequests.add(request);
+    profiles.removeWhere((item) => item.id == request.profileId);
   }
 
   @override
@@ -152,5 +195,19 @@ TunnelStatus _copyStatus(
     downloadTotalBytes: source.downloadTotalBytes,
     sequence: source.sequence + 1,
     lastError: source.lastError,
+  );
+}
+
+ProfileSummary _copyProfile(ProfileSummary source, {required bool selected}) {
+  return ProfileSummary(
+    id: source.id,
+    displayName: source.displayName,
+    serverIdentity: source.serverIdentity,
+    host: source.host,
+    selected: selected,
+    hasCredential: source.hasCredential,
+    origin: source.origin,
+    catalogManaged: source.catalogManaged,
+    updatedAtUnixMs: source.updatedAtUnixMs,
   );
 }

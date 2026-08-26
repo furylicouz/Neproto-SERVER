@@ -22,8 +22,10 @@ final class TunnelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedProfileId =
+        state.selectedProfile?.id ?? state.status.profileId;
     final canConnect =
-        state.status.profileId != null &&
+        selectedProfileId != null &&
         (state.status.state == TunnelState.disconnected ||
             state.status.state == TunnelState.failed);
     final canDisconnect = state.status.state == TunnelState.connected;
@@ -53,7 +55,9 @@ final class TunnelCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
                       Text(
-                        state.status.profileId ?? 'Профиль не выбран',
+                        state.selectedProfile?.displayName ??
+                            state.status.profileId ??
+                            'Профиль не выбран',
                         style: Theme.of(context).textTheme.titleLarge,
                       ),
                       const Text(

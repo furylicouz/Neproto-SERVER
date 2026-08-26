@@ -23,7 +23,11 @@ void main() {
 
       await controller.start();
 
-      expect(host.callOrder, <String>['getCapabilities', 'getStatus']);
+      expect(host.callOrder, <String>[
+        'getCapabilities',
+        'getStatus',
+        'listProfiles',
+      ]);
       expect(controller.state.ready, isTrue);
       expect(controller.state.capabilities?.platform, HostPlatform.windows);
       expect(controller.state.status.sequence, 7);
