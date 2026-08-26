@@ -74,6 +74,8 @@ Dart/Swift/C++ outputs, one contract test.
 
 ### Task A4 — Define diagnostics and callback contract
 
+**Status:** ✅ Completed on the implementation branch.
+
 **Acceptance criteria:**
 
 - Stable error code/stage/retryability and bounded diagnostics are typed.

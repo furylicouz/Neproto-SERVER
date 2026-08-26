@@ -34,6 +34,16 @@ Object? _extractReplyValueOrThrow(
   return replyList.firstOrNull;
 }
 
+
+List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty = false}) {
+  if (empty) {
+    return <Object?>[];
+  }
+  if (error == null) {
+    return <Object?>[result];
+  }
+  return <Object?>[error.code, error.message, error.details];
+}
 bool _deepEquals(Object? a, Object? b) {
   if (identical(a, b)) {
     return true;
@@ -123,6 +133,46 @@ enum CarrierKind {
   unknown,
   none,
   http3WebTransport,
+}
+
+enum HostErrorCode {
+  unknown,
+  hostUnavailable,
+  unsupportedApiVersion,
+  invalidProfile,
+  credentialUnavailable,
+  noSafeUplink,
+  dnsFailed,
+  udpUnreachable,
+  tlsFailed,
+  http3Timeout,
+  np2AuthFailed,
+  tunSetupFailed,
+  cancelled,
+  internal,
+}
+
+enum ErrorStage {
+  unknown,
+  hostIpc,
+  hostNegotiation,
+  profileValidation,
+  credentialLoad,
+  dnsResolution,
+  endpointRoute,
+  quicHandshake,
+  tlsHandshake,
+  webTransportConnect,
+  np2Authentication,
+  tunSetup,
+  packetForwarding,
+}
+
+enum DiagnosticLevel {
+  unknown,
+  info,
+  warning,
+  error,
 }
 
 class HostApiVersion {
@@ -580,6 +630,71 @@ class DisconnectRequest {
   }
 }
 
+class HostError {
+  HostError({
+    required this.code,
+    required this.stage,
+    required this.message,
+    required this.retryable,
+    required this.operationId,
+  });
+
+  HostErrorCode code;
+
+  ErrorStage stage;
+
+  String message;
+
+  bool retryable;
+
+  String operationId;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      code,
+      stage,
+      message,
+      retryable,
+      operationId,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static HostError decode(Object result) {
+    result as List<Object?>;
+    return HostError(
+      code: result[0]! as HostErrorCode,
+      stage: result[1]! as ErrorStage,
+      message: result[2]! as String,
+      retryable: result[3]! as bool,
+      operationId: result[4]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! HostError || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(code, other.code) && _deepEquals(stage, other.stage) && _deepEquals(message, other.message) && _deepEquals(retryable, other.retryable) && _deepEquals(operationId, other.operationId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'HostError(code: $code, stage: $stage, message: $message, retryable: $retryable, operationId: $operationId)';
+  }
+}
+
 class TunnelStatus {
   TunnelStatus({
     required this.state,
@@ -591,6 +706,7 @@ class TunnelStatus {
     required this.uploadTotalBytes,
     required this.downloadTotalBytes,
     required this.sequence,
+    this.lastError,
   });
 
   TunnelState state;
@@ -611,6 +727,8 @@ class TunnelStatus {
 
   int sequence;
 
+  HostError? lastError;
+
   List<Object?> _toList() {
     return <Object?>[
       state,
@@ -622,6 +740,7 @@ class TunnelStatus {
       uploadTotalBytes,
       downloadTotalBytes,
       sequence,
+      lastError,
     ];
   }
 
@@ -640,6 +759,7 @@ class TunnelStatus {
       uploadTotalBytes: result[6]! as int,
       downloadTotalBytes: result[7]! as int,
       sequence: result[8]! as int,
+      lastError: result[9] as HostError?,
     );
   }
 
@@ -652,7 +772,7 @@ class TunnelStatus {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(state, other.state) && _deepEquals(profileId, other.profileId) && _deepEquals(carrier, other.carrier) && _deepEquals(connectedAtUnixMs, other.connectedAtUnixMs) && _deepEquals(uploadBytesPerSecond, other.uploadBytesPerSecond) && _deepEquals(downloadBytesPerSecond, other.downloadBytesPerSecond) && _deepEquals(uploadTotalBytes, other.uploadTotalBytes) && _deepEquals(downloadTotalBytes, other.downloadTotalBytes) && _deepEquals(sequence, other.sequence);
+    return _deepEquals(state, other.state) && _deepEquals(profileId, other.profileId) && _deepEquals(carrier, other.carrier) && _deepEquals(connectedAtUnixMs, other.connectedAtUnixMs) && _deepEquals(uploadBytesPerSecond, other.uploadBytesPerSecond) && _deepEquals(downloadBytesPerSecond, other.downloadBytesPerSecond) && _deepEquals(uploadTotalBytes, other.uploadTotalBytes) && _deepEquals(downloadTotalBytes, other.downloadTotalBytes) && _deepEquals(sequence, other.sequence) && _deepEquals(lastError, other.lastError);
   }
 
   @override
@@ -661,7 +781,202 @@ class TunnelStatus {
 
   @override
   String toString() {
-    return 'TunnelStatus(state: $state, profileId: $profileId, carrier: $carrier, connectedAtUnixMs: $connectedAtUnixMs, uploadBytesPerSecond: $uploadBytesPerSecond, downloadBytesPerSecond: $downloadBytesPerSecond, uploadTotalBytes: $uploadTotalBytes, downloadTotalBytes: $downloadTotalBytes, sequence: $sequence)';
+    return 'TunnelStatus(state: $state, profileId: $profileId, carrier: $carrier, connectedAtUnixMs: $connectedAtUnixMs, uploadBytesPerSecond: $uploadBytesPerSecond, downloadBytesPerSecond: $downloadBytesPerSecond, uploadTotalBytes: $uploadTotalBytes, downloadTotalBytes: $downloadTotalBytes, sequence: $sequence, lastError: $lastError)';
+  }
+}
+
+class DiagnosticsRequest {
+  DiagnosticsRequest({
+    required this.limit,
+  });
+
+  int limit;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      limit,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static DiagnosticsRequest decode(Object result) {
+    result as List<Object?>;
+    return DiagnosticsRequest(
+      limit: result[0]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! DiagnosticsRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(limit, other.limit);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'DiagnosticsRequest(limit: $limit)';
+  }
+}
+
+class DiagnosticEvent {
+  DiagnosticEvent({
+    required this.unixMs,
+    required this.level,
+    required this.stage,
+    this.code,
+    required this.message,
+    required this.operationId,
+    required this.sequence,
+  });
+
+  int unixMs;
+
+  DiagnosticLevel level;
+
+  ErrorStage stage;
+
+  HostErrorCode? code;
+
+  String message;
+
+  String operationId;
+
+  int sequence;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      unixMs,
+      level,
+      stage,
+      code,
+      message,
+      operationId,
+      sequence,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static DiagnosticEvent decode(Object result) {
+    result as List<Object?>;
+    return DiagnosticEvent(
+      unixMs: result[0]! as int,
+      level: result[1]! as DiagnosticLevel,
+      stage: result[2]! as ErrorStage,
+      code: result[3] as HostErrorCode?,
+      message: result[4]! as String,
+      operationId: result[5]! as String,
+      sequence: result[6]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! DiagnosticEvent || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(unixMs, other.unixMs) && _deepEquals(level, other.level) && _deepEquals(stage, other.stage) && _deepEquals(code, other.code) && _deepEquals(message, other.message) && _deepEquals(operationId, other.operationId) && _deepEquals(sequence, other.sequence);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'DiagnosticEvent(unixMs: $unixMs, level: $level, stage: $stage, code: $code, message: $message, operationId: $operationId, sequence: $sequence)';
+  }
+}
+
+class DiagnosticsSnapshot {
+  DiagnosticsSnapshot({
+    required this.appVersion,
+    required this.hostVersion,
+    required this.coreVersion,
+    required this.carrierPolicy,
+    required this.currentCarrier,
+    required this.reconnectCount,
+    required this.events,
+  });
+
+  String appVersion;
+
+  String hostVersion;
+
+  String coreVersion;
+
+  String carrierPolicy;
+
+  CarrierKind currentCarrier;
+
+  int reconnectCount;
+
+  List<DiagnosticEvent> events;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      appVersion,
+      hostVersion,
+      coreVersion,
+      carrierPolicy,
+      currentCarrier,
+      reconnectCount,
+      events,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static DiagnosticsSnapshot decode(Object result) {
+    result as List<Object?>;
+    return DiagnosticsSnapshot(
+      appVersion: result[0]! as String,
+      hostVersion: result[1]! as String,
+      coreVersion: result[2]! as String,
+      carrierPolicy: result[3]! as String,
+      currentCarrier: result[4]! as CarrierKind,
+      reconnectCount: result[5]! as int,
+      events: (result[6]! as List<Object?>).cast<DiagnosticEvent>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! DiagnosticsSnapshot || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(appVersion, other.appVersion) && _deepEquals(hostVersion, other.hostVersion) && _deepEquals(coreVersion, other.coreVersion) && _deepEquals(carrierPolicy, other.carrierPolicy) && _deepEquals(currentCarrier, other.currentCarrier) && _deepEquals(reconnectCount, other.reconnectCount) && _deepEquals(events, other.events);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'DiagnosticsSnapshot(appVersion: $appVersion, hostVersion: $hostVersion, coreVersion: $coreVersion, carrierPolicy: $carrierPolicy, currentCarrier: $currentCarrier, reconnectCount: $reconnectCount, events: $events)';
   }
 }
 
@@ -685,32 +1000,53 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is CarrierKind) {
       buffer.putUint8(132);
       writeValue(buffer, value.index);
-    }    else if (value is HostApiVersion) {
+    }    else if (value is HostErrorCode) {
       buffer.putUint8(133);
-      writeValue(buffer, value.encode());
-    }    else if (value is HostCapabilities) {
+      writeValue(buffer, value.index);
+    }    else if (value is ErrorStage) {
       buffer.putUint8(134);
-      writeValue(buffer, value.encode());
-    }    else if (value is ProfileSummary) {
+      writeValue(buffer, value.index);
+    }    else if (value is DiagnosticLevel) {
       buffer.putUint8(135);
-      writeValue(buffer, value.encode());
-    }    else if (value is ImportProfileRequest) {
+      writeValue(buffer, value.index);
+    }    else if (value is HostApiVersion) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is SelectProfileRequest) {
+    }    else if (value is HostCapabilities) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is RemoveProfileRequest) {
+    }    else if (value is ProfileSummary) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is ConnectRequest) {
+    }    else if (value is ImportProfileRequest) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is DisconnectRequest) {
+    }    else if (value is SelectProfileRequest) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is TunnelStatus) {
+    }    else if (value is RemoveProfileRequest) {
       buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    }    else if (value is ConnectRequest) {
+      buffer.putUint8(142);
+      writeValue(buffer, value.encode());
+    }    else if (value is DisconnectRequest) {
+      buffer.putUint8(143);
+      writeValue(buffer, value.encode());
+    }    else if (value is HostError) {
+      buffer.putUint8(144);
+      writeValue(buffer, value.encode());
+    }    else if (value is TunnelStatus) {
+      buffer.putUint8(145);
+      writeValue(buffer, value.encode());
+    }    else if (value is DiagnosticsRequest) {
+      buffer.putUint8(146);
+      writeValue(buffer, value.encode());
+    }    else if (value is DiagnosticEvent) {
+      buffer.putUint8(147);
+      writeValue(buffer, value.encode());
+    }    else if (value is DiagnosticsSnapshot) {
+      buffer.putUint8(148);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -733,23 +1069,40 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : CarrierKind.values[value];
       case 133:
-        return HostApiVersion.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : HostErrorCode.values[value];
       case 134:
-        return HostCapabilities.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : ErrorStage.values[value];
       case 135:
-        return ProfileSummary.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : DiagnosticLevel.values[value];
       case 136:
-        return ImportProfileRequest.decode(readValue(buffer)!);
+        return HostApiVersion.decode(readValue(buffer)!);
       case 137:
-        return SelectProfileRequest.decode(readValue(buffer)!);
+        return HostCapabilities.decode(readValue(buffer)!);
       case 138:
-        return RemoveProfileRequest.decode(readValue(buffer)!);
+        return ProfileSummary.decode(readValue(buffer)!);
       case 139:
-        return ConnectRequest.decode(readValue(buffer)!);
+        return ImportProfileRequest.decode(readValue(buffer)!);
       case 140:
-        return DisconnectRequest.decode(readValue(buffer)!);
+        return SelectProfileRequest.decode(readValue(buffer)!);
       case 141:
+        return RemoveProfileRequest.decode(readValue(buffer)!);
+      case 142:
+        return ConnectRequest.decode(readValue(buffer)!);
+      case 143:
+        return DisconnectRequest.decode(readValue(buffer)!);
+      case 144:
+        return HostError.decode(readValue(buffer)!);
+      case 145:
         return TunnelStatus.decode(readValue(buffer)!);
+      case 146:
+        return DiagnosticsRequest.decode(readValue(buffer)!);
+      case 147:
+        return DiagnosticEvent.decode(readValue(buffer)!);
+      case 148:
+        return DiagnosticsSnapshot.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -918,5 +1271,55 @@ class ClientHostApi {
     )
     ;
     return pigeonVar_replyValue! as TunnelStatus;
+  }
+
+  Future<DiagnosticsSnapshot> getDiagnostics(DiagnosticsRequest request) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.neproto_host.ClientHostApi.getDiagnostics$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[request]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as DiagnosticsSnapshot;
+  }
+}
+
+abstract class ClientHostFlutterApi {
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  void statusChanged(TunnelStatus status);
+
+  static void setUp(ClientHostFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
+    messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.neproto_host.ClientHostFlutterApi.statusChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final TunnelStatus arg_status = args[0]! as TunnelStatus;
+          try {
+            api.statusChanged(arg_status);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
   }
 }

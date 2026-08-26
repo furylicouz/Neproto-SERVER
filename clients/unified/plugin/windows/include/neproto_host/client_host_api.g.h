@@ -50,6 +50,7 @@ template<class T> class ErrorOr {
 
  private:
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   ErrorOr() = default;
   T TakeValue() && { return std::get<T>(std::move(v_)); }
 
@@ -85,6 +86,46 @@ enum class CarrierKind {
   kHttp3WebTransport = 2
 };
 
+enum class HostErrorCode {
+  kUnknown = 0,
+  kHostUnavailable = 1,
+  kUnsupportedApiVersion = 2,
+  kInvalidProfile = 3,
+  kCredentialUnavailable = 4,
+  kNoSafeUplink = 5,
+  kDnsFailed = 6,
+  kUdpUnreachable = 7,
+  kTlsFailed = 8,
+  kHttp3Timeout = 9,
+  kNp2AuthFailed = 10,
+  kTunSetupFailed = 11,
+  kCancelled = 12,
+  kInternal = 13
+};
+
+enum class ErrorStage {
+  kUnknown = 0,
+  kHostIpc = 1,
+  kHostNegotiation = 2,
+  kProfileValidation = 3,
+  kCredentialLoad = 4,
+  kDnsResolution = 5,
+  kEndpointRoute = 6,
+  kQuicHandshake = 7,
+  kTlsHandshake = 8,
+  kWebTransportConnect = 9,
+  kNp2Authentication = 10,
+  kTunSetup = 11,
+  kPacketForwarding = 12
+};
+
+enum class DiagnosticLevel {
+  kUnknown = 0,
+  kInfo = 1,
+  kWarning = 2,
+  kError = 3
+};
+
 
 // Generated class from Pigeon that represents data sent in messages.
 class HostApiVersion {
@@ -111,6 +152,7 @@ class HostApiVersion {
   ::flutter::EncodableList ToEncodableList() const;
   friend class HostCapabilities;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   int64_t major_;
   int64_t minor_;
@@ -162,6 +204,7 @@ class HostCapabilities {
   static HostCapabilities FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   std::unique_ptr<HostApiVersion> api_version_;
   HostPlatform platform_;
@@ -224,6 +267,7 @@ class ProfileSummary {
   static ProfileSummary FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   std::string id_;
   std::string display_name_;
@@ -261,6 +305,7 @@ class ImportProfileRequest {
   static ImportProfileRequest FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   std::string onboarding_value_;
   std::string operation_id_;
@@ -291,6 +336,7 @@ class SelectProfileRequest {
   static SelectProfileRequest FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   std::string profile_id_;
   std::string operation_id_;
@@ -325,6 +371,7 @@ class RemoveProfileRequest {
   static RemoveProfileRequest FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   std::string profile_id_;
   bool force_;
@@ -356,6 +403,7 @@ class ConnectRequest {
   static ConnectRequest FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   std::string profile_id_;
   std::string operation_id_;
@@ -381,7 +429,55 @@ class DisconnectRequest {
   static DisconnectRequest FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
+  std::string operation_id_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class HostError {
+ public:
+  // Constructs an object setting all fields.
+  explicit HostError(
+    const HostErrorCode& code,
+    const ErrorStage& stage,
+    const std::string& message,
+    bool retryable,
+    const std::string& operation_id);
+
+  const HostErrorCode& code() const;
+  void set_code(const HostErrorCode& value_arg);
+
+  const ErrorStage& stage() const;
+  void set_stage(const ErrorStage& value_arg);
+
+  const std::string& message() const;
+  void set_message(std::string_view value_arg);
+
+  bool retryable() const;
+  void set_retryable(bool value_arg);
+
+  const std::string& operation_id() const;
+  void set_operation_id(std::string_view value_arg);
+
+  bool operator==(const HostError& other) const;
+  bool operator!=(const HostError& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const HostError& obj);
+ private:
+  static HostError FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class TunnelStatus;
+  friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
+  friend class PigeonInternalCodecSerializer;
+  HostErrorCode code_;
+  ErrorStage stage_;
+  std::string message_;
+  bool retryable_;
   std::string operation_id_;
 };
 
@@ -410,8 +506,14 @@ class TunnelStatus {
     int64_t download_bytes_per_second,
     int64_t upload_total_bytes,
     int64_t download_total_bytes,
-    int64_t sequence);
+    int64_t sequence,
+    const HostError* last_error);
 
+  ~TunnelStatus() = default;
+  TunnelStatus(const TunnelStatus& other);
+  TunnelStatus& operator=(const TunnelStatus& other);
+  TunnelStatus(TunnelStatus&& other) = default;
+  TunnelStatus& operator=(TunnelStatus&& other) noexcept = default;
   const TunnelState& state() const;
   void set_state(const TunnelState& value_arg);
 
@@ -440,6 +542,10 @@ class TunnelStatus {
   int64_t sequence() const;
   void set_sequence(int64_t value_arg);
 
+  const HostError* last_error() const;
+  void set_last_error(const HostError* value_arg);
+  void set_last_error(const HostError& value_arg);
+
   bool operator==(const TunnelStatus& other) const;
   bool operator!=(const TunnelStatus& other) const;
   /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
@@ -450,6 +556,7 @@ class TunnelStatus {
   static TunnelStatus FromEncodableList(const ::flutter::EncodableList& list);
   ::flutter::EncodableList ToEncodableList() const;
   friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
   friend class PigeonInternalCodecSerializer;
   TunnelState state_;
   std::optional<std::string> profile_id_;
@@ -460,6 +567,154 @@ class TunnelStatus {
   int64_t upload_total_bytes_;
   int64_t download_total_bytes_;
   int64_t sequence_;
+  std::unique_ptr<HostError> last_error_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class DiagnosticsRequest {
+ public:
+  // Constructs an object setting all fields.
+  explicit DiagnosticsRequest(int64_t limit);
+
+  int64_t limit() const;
+  void set_limit(int64_t value_arg);
+
+  bool operator==(const DiagnosticsRequest& other) const;
+  bool operator!=(const DiagnosticsRequest& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const DiagnosticsRequest& obj);
+ private:
+  static DiagnosticsRequest FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
+  friend class PigeonInternalCodecSerializer;
+  int64_t limit_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class DiagnosticEvent {
+ public:
+  // Constructs an object setting all non-nullable fields.
+  explicit DiagnosticEvent(
+    int64_t unix_ms,
+    const DiagnosticLevel& level,
+    const ErrorStage& stage,
+    const std::string& message,
+    const std::string& operation_id,
+    int64_t sequence);
+
+  // Constructs an object setting all fields.
+  explicit DiagnosticEvent(
+    int64_t unix_ms,
+    const DiagnosticLevel& level,
+    const ErrorStage& stage,
+    const HostErrorCode* code,
+    const std::string& message,
+    const std::string& operation_id,
+    int64_t sequence);
+
+  int64_t unix_ms() const;
+  void set_unix_ms(int64_t value_arg);
+
+  const DiagnosticLevel& level() const;
+  void set_level(const DiagnosticLevel& value_arg);
+
+  const ErrorStage& stage() const;
+  void set_stage(const ErrorStage& value_arg);
+
+  const HostErrorCode* code() const;
+  void set_code(const HostErrorCode* value_arg);
+  void set_code(const HostErrorCode& value_arg);
+
+  const std::string& message() const;
+  void set_message(std::string_view value_arg);
+
+  const std::string& operation_id() const;
+  void set_operation_id(std::string_view value_arg);
+
+  int64_t sequence() const;
+  void set_sequence(int64_t value_arg);
+
+  bool operator==(const DiagnosticEvent& other) const;
+  bool operator!=(const DiagnosticEvent& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const DiagnosticEvent& obj);
+ private:
+  static DiagnosticEvent FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
+  friend class PigeonInternalCodecSerializer;
+  int64_t unix_ms_;
+  DiagnosticLevel level_;
+  ErrorStage stage_;
+  std::optional<HostErrorCode> code_;
+  std::string message_;
+  std::string operation_id_;
+  int64_t sequence_;
+};
+
+
+// Generated class from Pigeon that represents data sent in messages.
+class DiagnosticsSnapshot {
+ public:
+  // Constructs an object setting all fields.
+  explicit DiagnosticsSnapshot(
+    const std::string& app_version,
+    const std::string& host_version,
+    const std::string& core_version,
+    const std::string& carrier_policy,
+    const CarrierKind& current_carrier,
+    int64_t reconnect_count,
+    const ::flutter::EncodableList& events);
+
+  const std::string& app_version() const;
+  void set_app_version(std::string_view value_arg);
+
+  const std::string& host_version() const;
+  void set_host_version(std::string_view value_arg);
+
+  const std::string& core_version() const;
+  void set_core_version(std::string_view value_arg);
+
+  const std::string& carrier_policy() const;
+  void set_carrier_policy(std::string_view value_arg);
+
+  const CarrierKind& current_carrier() const;
+  void set_current_carrier(const CarrierKind& value_arg);
+
+  int64_t reconnect_count() const;
+  void set_reconnect_count(int64_t value_arg);
+
+  const ::flutter::EncodableList& events() const;
+  void set_events(const ::flutter::EncodableList& value_arg);
+
+  bool operator==(const DiagnosticsSnapshot& other) const;
+  bool operator!=(const DiagnosticsSnapshot& other) const;
+  /// Returns a hash code value for the object. This method is supported for the benefit of hash tables.
+  size_t Hash() const;
+  /// Stream output operator for formatted string representation.
+  friend std::ostream& operator<<(std::ostream& os, const DiagnosticsSnapshot& obj);
+ private:
+  static DiagnosticsSnapshot FromEncodableList(const ::flutter::EncodableList& list);
+  ::flutter::EncodableList ToEncodableList() const;
+  friend class ClientHostApi;
+  friend class ClientHostFlutterApi;
+  friend class PigeonInternalCodecSerializer;
+  std::string app_version_;
+  std::string host_version_;
+  std::string core_version_;
+  std::string carrier_policy_;
+  CarrierKind current_carrier_;
+  int64_t reconnect_count_;
+  ::flutter::EncodableList events_;
 };
 
 
@@ -506,6 +761,9 @@ class ClientHostApi {
     const DisconnectRequest& request,
     std::function<void(ErrorOr<TunnelStatus> reply)> result) = 0;
   virtual void GetStatus(std::function<void(ErrorOr<TunnelStatus> reply)> result) = 0;
+  virtual void GetDiagnostics(
+    const DiagnosticsRequest& request,
+    std::function<void(ErrorOr<DiagnosticsSnapshot> reply)> result) = 0;
 
   // The codec used by ClientHostApi.
   static const ::flutter::StandardMessageCodec& GetCodec();
@@ -522,5 +780,22 @@ class ClientHostApi {
  protected:
   ClientHostApi() = default;
 };
+// Generated class from Pigeon that represents Flutter messages that can be called from C++.
+class ClientHostFlutterApi {
+ public:
+  ClientHostFlutterApi(::flutter::BinaryMessenger* binary_messenger);
+  ClientHostFlutterApi(
+    ::flutter::BinaryMessenger* binary_messenger,
+    const std::string& message_channel_suffix);
+  static const ::flutter::StandardMessageCodec& GetCodec();
+  void StatusChanged(
+    const TunnelStatus& status,
+    std::function<void(void)>&& on_success,
+    std::function<void(const FlutterError&)>&& on_error);
+ private:
+  ::flutter::BinaryMessenger* binary_messenger_;
+  std::string message_channel_suffix_;
+};
+
 }  // namespace neproto_host
 #endif  // PIGEON_CLIENT_HOST_API_G_H_

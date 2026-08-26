@@ -1088,6 +1088,126 @@ size_t PigeonInternalDeepHash(const DisconnectRequest& v) {
   return v.Hash();
 }
 
+// HostError
+
+HostError::HostError(
+  const HostErrorCode& code,
+  const ErrorStage& stage,
+  const std::string& message,
+  bool retryable,
+  const std::string& operation_id)
+ : code_(code),
+    stage_(stage),
+    message_(message),
+    retryable_(retryable),
+    operation_id_(operation_id) {}
+
+const HostErrorCode& HostError::code() const {
+  return code_;
+}
+
+void HostError::set_code(const HostErrorCode& value_arg) {
+  code_ = value_arg;
+}
+
+
+const ErrorStage& HostError::stage() const {
+  return stage_;
+}
+
+void HostError::set_stage(const ErrorStage& value_arg) {
+  stage_ = value_arg;
+}
+
+
+const std::string& HostError::message() const {
+  return message_;
+}
+
+void HostError::set_message(std::string_view value_arg) {
+  message_ = value_arg;
+}
+
+
+bool HostError::retryable() const {
+  return retryable_;
+}
+
+void HostError::set_retryable(bool value_arg) {
+  retryable_ = value_arg;
+}
+
+
+const std::string& HostError::operation_id() const {
+  return operation_id_;
+}
+
+void HostError::set_operation_id(std::string_view value_arg) {
+  operation_id_ = value_arg;
+}
+
+
+EncodableList HostError::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(5);
+  list.push_back(CustomEncodableValue(code_));
+  list.push_back(CustomEncodableValue(stage_));
+  list.push_back(EncodableValue(message_));
+  list.push_back(EncodableValue(retryable_));
+  list.push_back(EncodableValue(operation_id_));
+  return list;
+}
+
+HostError HostError::FromEncodableList(const EncodableList& list) {
+  HostError decoded(
+    std::any_cast<const HostErrorCode&>(std::get<CustomEncodableValue>(list[0])),
+    std::any_cast<const ErrorStage&>(std::get<CustomEncodableValue>(list[1])),
+    std::get<std::string>(list[2]),
+    std::get<bool>(list[3]),
+    std::get<std::string>(list[4]));
+  return decoded;
+}
+
+bool HostError::operator==(const HostError& other) const {
+  return PigeonInternalDeepEquals(code_, other.code_) && PigeonInternalDeepEquals(stage_, other.stage_) && PigeonInternalDeepEquals(message_, other.message_) && PigeonInternalDeepEquals(retryable_, other.retryable_) && PigeonInternalDeepEquals(operation_id_, other.operation_id_);
+}
+
+bool HostError::operator!=(const HostError& other) const {
+  return !(*this == other);
+}
+
+size_t HostError::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(code_);
+  result = result * 31 + PigeonInternalDeepHash(stage_);
+  result = result * 31 + PigeonInternalDeepHash(message_);
+  result = result * 31 + PigeonInternalDeepHash(retryable_);
+  result = result * 31 + PigeonInternalDeepHash(operation_id_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const HostError& obj) {
+  os << "HostError(";
+  os << "code: ";
+  os << PigeonInternalToString(obj.code_);
+  os << ", stage: ";
+  os << PigeonInternalToString(obj.stage_);
+  os << ", message: ";
+  os << PigeonInternalToString(obj.message_);
+  os << ", retryable: ";
+  os << PigeonInternalToString(obj.retryable_);
+  os << ", operation_id: ";
+  os << PigeonInternalToString(obj.operation_id_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const HostError& v) {
+  return v.Hash();
+}
+
 // TunnelStatus
 
 TunnelStatus::TunnelStatus(
@@ -1117,7 +1237,8 @@ TunnelStatus::TunnelStatus(
   int64_t download_bytes_per_second,
   int64_t upload_total_bytes,
   int64_t download_total_bytes,
-  int64_t sequence)
+  int64_t sequence,
+  const HostError* last_error)
  : state_(state),
     profile_id_(profile_id ? std::optional<std::string>(*profile_id) : std::nullopt),
     carrier_(carrier),
@@ -1126,7 +1247,34 @@ TunnelStatus::TunnelStatus(
     download_bytes_per_second_(download_bytes_per_second),
     upload_total_bytes_(upload_total_bytes),
     download_total_bytes_(download_total_bytes),
-    sequence_(sequence) {}
+    sequence_(sequence),
+    last_error_(last_error ? std::make_unique<HostError>(*last_error) : nullptr) {}
+
+TunnelStatus::TunnelStatus(const TunnelStatus& other)
+ : state_(other.state_),
+    profile_id_(other.profile_id_ ? std::optional<std::string>(*other.profile_id_) : std::nullopt),
+    carrier_(other.carrier_),
+    connected_at_unix_ms_(other.connected_at_unix_ms_),
+    upload_bytes_per_second_(other.upload_bytes_per_second_),
+    download_bytes_per_second_(other.download_bytes_per_second_),
+    upload_total_bytes_(other.upload_total_bytes_),
+    download_total_bytes_(other.download_total_bytes_),
+    sequence_(other.sequence_),
+    last_error_(other.last_error_ ? std::make_unique<HostError>(*other.last_error_) : nullptr) {}
+
+TunnelStatus& TunnelStatus::operator=(const TunnelStatus& other) {
+  state_ = other.state_;
+  profile_id_ = other.profile_id_;
+  carrier_ = other.carrier_;
+  connected_at_unix_ms_ = other.connected_at_unix_ms_;
+  upload_bytes_per_second_ = other.upload_bytes_per_second_;
+  download_bytes_per_second_ = other.download_bytes_per_second_;
+  upload_total_bytes_ = other.upload_total_bytes_;
+  download_total_bytes_ = other.download_total_bytes_;
+  sequence_ = other.sequence_;
+  last_error_ = other.last_error_ ? std::make_unique<HostError>(*other.last_error_) : nullptr;
+  return *this;
+}
 
 const TunnelState& TunnelStatus::state() const {
   return state_;
@@ -1213,9 +1361,22 @@ void TunnelStatus::set_sequence(int64_t value_arg) {
 }
 
 
+const HostError* TunnelStatus::last_error() const {
+  return last_error_.get();
+}
+
+void TunnelStatus::set_last_error(const HostError* value_arg) {
+  last_error_ = value_arg ? std::make_unique<HostError>(*value_arg) : nullptr;
+}
+
+void TunnelStatus::set_last_error(const HostError& value_arg) {
+  last_error_ = std::make_unique<HostError>(value_arg);
+}
+
+
 EncodableList TunnelStatus::ToEncodableList() const {
   EncodableList list;
-  list.reserve(9);
+  list.reserve(10);
   list.push_back(CustomEncodableValue(state_));
   list.push_back(profile_id_ ? EncodableValue(*profile_id_) : EncodableValue());
   list.push_back(CustomEncodableValue(carrier_));
@@ -1225,6 +1386,7 @@ EncodableList TunnelStatus::ToEncodableList() const {
   list.push_back(EncodableValue(upload_total_bytes_));
   list.push_back(EncodableValue(download_total_bytes_));
   list.push_back(EncodableValue(sequence_));
+  list.push_back(last_error_ ? CustomEncodableValue(*last_error_) : EncodableValue());
   return list;
 }
 
@@ -1242,11 +1404,15 @@ TunnelStatus TunnelStatus::FromEncodableList(const EncodableList& list) {
   if (!encodable_profile_id.IsNull()) {
     decoded.set_profile_id(std::get<std::string>(encodable_profile_id));
   }
+  auto& encodable_last_error = list[9];
+  if (!encodable_last_error.IsNull()) {
+    decoded.set_last_error(std::any_cast<const HostError&>(std::get<CustomEncodableValue>(encodable_last_error)));
+  }
   return decoded;
 }
 
 bool TunnelStatus::operator==(const TunnelStatus& other) const {
-  return PigeonInternalDeepEquals(state_, other.state_) && PigeonInternalDeepEquals(profile_id_, other.profile_id_) && PigeonInternalDeepEquals(carrier_, other.carrier_) && PigeonInternalDeepEquals(connected_at_unix_ms_, other.connected_at_unix_ms_) && PigeonInternalDeepEquals(upload_bytes_per_second_, other.upload_bytes_per_second_) && PigeonInternalDeepEquals(download_bytes_per_second_, other.download_bytes_per_second_) && PigeonInternalDeepEquals(upload_total_bytes_, other.upload_total_bytes_) && PigeonInternalDeepEquals(download_total_bytes_, other.download_total_bytes_) && PigeonInternalDeepEquals(sequence_, other.sequence_);
+  return PigeonInternalDeepEquals(state_, other.state_) && PigeonInternalDeepEquals(profile_id_, other.profile_id_) && PigeonInternalDeepEquals(carrier_, other.carrier_) && PigeonInternalDeepEquals(connected_at_unix_ms_, other.connected_at_unix_ms_) && PigeonInternalDeepEquals(upload_bytes_per_second_, other.upload_bytes_per_second_) && PigeonInternalDeepEquals(download_bytes_per_second_, other.download_bytes_per_second_) && PigeonInternalDeepEquals(upload_total_bytes_, other.upload_total_bytes_) && PigeonInternalDeepEquals(download_total_bytes_, other.download_total_bytes_) && PigeonInternalDeepEquals(sequence_, other.sequence_) && PigeonInternalDeepEquals(last_error_, other.last_error_);
 }
 
 bool TunnelStatus::operator!=(const TunnelStatus& other) const {
@@ -1264,6 +1430,7 @@ size_t TunnelStatus::Hash() const {
   result = result * 31 + PigeonInternalDeepHash(upload_total_bytes_);
   result = result * 31 + PigeonInternalDeepHash(download_total_bytes_);
   result = result * 31 + PigeonInternalDeepHash(sequence_);
+  result = result * 31 + PigeonInternalDeepHash(last_error_);
   return result;
 }
 
@@ -1294,11 +1461,403 @@ std::ostream& operator<<(
   os << PigeonInternalToString(obj.download_total_bytes_);
   os << ", sequence: ";
   os << PigeonInternalToString(obj.sequence_);
+  os << ", last_error: ";
+  if (obj.last_error_) {
+    os << *obj.last_error_;
+  }
+  else {
+    os << "null";
+  }
   os << ")";
   return os;
 }
 
 size_t PigeonInternalDeepHash(const TunnelStatus& v) {
+  return v.Hash();
+}
+
+// DiagnosticsRequest
+
+DiagnosticsRequest::DiagnosticsRequest(int64_t limit)
+ : limit_(limit) {}
+
+int64_t DiagnosticsRequest::limit() const {
+  return limit_;
+}
+
+void DiagnosticsRequest::set_limit(int64_t value_arg) {
+  limit_ = value_arg;
+}
+
+
+EncodableList DiagnosticsRequest::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(1);
+  list.push_back(EncodableValue(limit_));
+  return list;
+}
+
+DiagnosticsRequest DiagnosticsRequest::FromEncodableList(const EncodableList& list) {
+  DiagnosticsRequest decoded(
+    std::get<int64_t>(list[0]));
+  return decoded;
+}
+
+bool DiagnosticsRequest::operator==(const DiagnosticsRequest& other) const {
+  return PigeonInternalDeepEquals(limit_, other.limit_);
+}
+
+bool DiagnosticsRequest::operator!=(const DiagnosticsRequest& other) const {
+  return !(*this == other);
+}
+
+size_t DiagnosticsRequest::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(limit_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const DiagnosticsRequest& obj) {
+  os << "DiagnosticsRequest(";
+  os << "limit: ";
+  os << PigeonInternalToString(obj.limit_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const DiagnosticsRequest& v) {
+  return v.Hash();
+}
+
+// DiagnosticEvent
+
+DiagnosticEvent::DiagnosticEvent(
+  int64_t unix_ms,
+  const DiagnosticLevel& level,
+  const ErrorStage& stage,
+  const std::string& message,
+  const std::string& operation_id,
+  int64_t sequence)
+ : unix_ms_(unix_ms),
+    level_(level),
+    stage_(stage),
+    message_(message),
+    operation_id_(operation_id),
+    sequence_(sequence) {}
+
+DiagnosticEvent::DiagnosticEvent(
+  int64_t unix_ms,
+  const DiagnosticLevel& level,
+  const ErrorStage& stage,
+  const HostErrorCode* code,
+  const std::string& message,
+  const std::string& operation_id,
+  int64_t sequence)
+ : unix_ms_(unix_ms),
+    level_(level),
+    stage_(stage),
+    code_(code ? std::optional<HostErrorCode>(*code) : std::nullopt),
+    message_(message),
+    operation_id_(operation_id),
+    sequence_(sequence) {}
+
+int64_t DiagnosticEvent::unix_ms() const {
+  return unix_ms_;
+}
+
+void DiagnosticEvent::set_unix_ms(int64_t value_arg) {
+  unix_ms_ = value_arg;
+}
+
+
+const DiagnosticLevel& DiagnosticEvent::level() const {
+  return level_;
+}
+
+void DiagnosticEvent::set_level(const DiagnosticLevel& value_arg) {
+  level_ = value_arg;
+}
+
+
+const ErrorStage& DiagnosticEvent::stage() const {
+  return stage_;
+}
+
+void DiagnosticEvent::set_stage(const ErrorStage& value_arg) {
+  stage_ = value_arg;
+}
+
+
+const HostErrorCode* DiagnosticEvent::code() const {
+  return code_ ? &(*code_) : nullptr;
+}
+
+void DiagnosticEvent::set_code(const HostErrorCode* value_arg) {
+  code_ = value_arg ? std::optional<HostErrorCode>(*value_arg) : std::nullopt;
+}
+
+void DiagnosticEvent::set_code(const HostErrorCode& value_arg) {
+  code_ = value_arg;
+}
+
+
+const std::string& DiagnosticEvent::message() const {
+  return message_;
+}
+
+void DiagnosticEvent::set_message(std::string_view value_arg) {
+  message_ = value_arg;
+}
+
+
+const std::string& DiagnosticEvent::operation_id() const {
+  return operation_id_;
+}
+
+void DiagnosticEvent::set_operation_id(std::string_view value_arg) {
+  operation_id_ = value_arg;
+}
+
+
+int64_t DiagnosticEvent::sequence() const {
+  return sequence_;
+}
+
+void DiagnosticEvent::set_sequence(int64_t value_arg) {
+  sequence_ = value_arg;
+}
+
+
+EncodableList DiagnosticEvent::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(7);
+  list.push_back(EncodableValue(unix_ms_));
+  list.push_back(CustomEncodableValue(level_));
+  list.push_back(CustomEncodableValue(stage_));
+  list.push_back(code_ ? CustomEncodableValue(*code_) : EncodableValue());
+  list.push_back(EncodableValue(message_));
+  list.push_back(EncodableValue(operation_id_));
+  list.push_back(EncodableValue(sequence_));
+  return list;
+}
+
+DiagnosticEvent DiagnosticEvent::FromEncodableList(const EncodableList& list) {
+  DiagnosticEvent decoded(
+    std::get<int64_t>(list[0]),
+    std::any_cast<const DiagnosticLevel&>(std::get<CustomEncodableValue>(list[1])),
+    std::any_cast<const ErrorStage&>(std::get<CustomEncodableValue>(list[2])),
+    std::get<std::string>(list[4]),
+    std::get<std::string>(list[5]),
+    std::get<int64_t>(list[6]));
+  auto& encodable_code = list[3];
+  if (!encodable_code.IsNull()) {
+    decoded.set_code(std::any_cast<const HostErrorCode&>(std::get<CustomEncodableValue>(encodable_code)));
+  }
+  return decoded;
+}
+
+bool DiagnosticEvent::operator==(const DiagnosticEvent& other) const {
+  return PigeonInternalDeepEquals(unix_ms_, other.unix_ms_) && PigeonInternalDeepEquals(level_, other.level_) && PigeonInternalDeepEquals(stage_, other.stage_) && PigeonInternalDeepEquals(code_, other.code_) && PigeonInternalDeepEquals(message_, other.message_) && PigeonInternalDeepEquals(operation_id_, other.operation_id_) && PigeonInternalDeepEquals(sequence_, other.sequence_);
+}
+
+bool DiagnosticEvent::operator!=(const DiagnosticEvent& other) const {
+  return !(*this == other);
+}
+
+size_t DiagnosticEvent::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(unix_ms_);
+  result = result * 31 + PigeonInternalDeepHash(level_);
+  result = result * 31 + PigeonInternalDeepHash(stage_);
+  result = result * 31 + PigeonInternalDeepHash(code_);
+  result = result * 31 + PigeonInternalDeepHash(message_);
+  result = result * 31 + PigeonInternalDeepHash(operation_id_);
+  result = result * 31 + PigeonInternalDeepHash(sequence_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const DiagnosticEvent& obj) {
+  os << "DiagnosticEvent(";
+  os << "unix_ms: ";
+  os << PigeonInternalToString(obj.unix_ms_);
+  os << ", level: ";
+  os << PigeonInternalToString(obj.level_);
+  os << ", stage: ";
+  os << PigeonInternalToString(obj.stage_);
+  os << ", code: ";
+  if (obj.code_) {
+    os << PigeonInternalToString(*obj.code_);
+  }
+  else {
+    os << "null";
+  }
+  os << ", message: ";
+  os << PigeonInternalToString(obj.message_);
+  os << ", operation_id: ";
+  os << PigeonInternalToString(obj.operation_id_);
+  os << ", sequence: ";
+  os << PigeonInternalToString(obj.sequence_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const DiagnosticEvent& v) {
+  return v.Hash();
+}
+
+// DiagnosticsSnapshot
+
+DiagnosticsSnapshot::DiagnosticsSnapshot(
+  const std::string& app_version,
+  const std::string& host_version,
+  const std::string& core_version,
+  const std::string& carrier_policy,
+  const CarrierKind& current_carrier,
+  int64_t reconnect_count,
+  const EncodableList& events)
+ : app_version_(app_version),
+    host_version_(host_version),
+    core_version_(core_version),
+    carrier_policy_(carrier_policy),
+    current_carrier_(current_carrier),
+    reconnect_count_(reconnect_count),
+    events_(events) {}
+
+const std::string& DiagnosticsSnapshot::app_version() const {
+  return app_version_;
+}
+
+void DiagnosticsSnapshot::set_app_version(std::string_view value_arg) {
+  app_version_ = value_arg;
+}
+
+
+const std::string& DiagnosticsSnapshot::host_version() const {
+  return host_version_;
+}
+
+void DiagnosticsSnapshot::set_host_version(std::string_view value_arg) {
+  host_version_ = value_arg;
+}
+
+
+const std::string& DiagnosticsSnapshot::core_version() const {
+  return core_version_;
+}
+
+void DiagnosticsSnapshot::set_core_version(std::string_view value_arg) {
+  core_version_ = value_arg;
+}
+
+
+const std::string& DiagnosticsSnapshot::carrier_policy() const {
+  return carrier_policy_;
+}
+
+void DiagnosticsSnapshot::set_carrier_policy(std::string_view value_arg) {
+  carrier_policy_ = value_arg;
+}
+
+
+const CarrierKind& DiagnosticsSnapshot::current_carrier() const {
+  return current_carrier_;
+}
+
+void DiagnosticsSnapshot::set_current_carrier(const CarrierKind& value_arg) {
+  current_carrier_ = value_arg;
+}
+
+
+int64_t DiagnosticsSnapshot::reconnect_count() const {
+  return reconnect_count_;
+}
+
+void DiagnosticsSnapshot::set_reconnect_count(int64_t value_arg) {
+  reconnect_count_ = value_arg;
+}
+
+
+const EncodableList& DiagnosticsSnapshot::events() const {
+  return events_;
+}
+
+void DiagnosticsSnapshot::set_events(const EncodableList& value_arg) {
+  events_ = value_arg;
+}
+
+
+EncodableList DiagnosticsSnapshot::ToEncodableList() const {
+  EncodableList list;
+  list.reserve(7);
+  list.push_back(EncodableValue(app_version_));
+  list.push_back(EncodableValue(host_version_));
+  list.push_back(EncodableValue(core_version_));
+  list.push_back(EncodableValue(carrier_policy_));
+  list.push_back(CustomEncodableValue(current_carrier_));
+  list.push_back(EncodableValue(reconnect_count_));
+  list.push_back(EncodableValue(events_));
+  return list;
+}
+
+DiagnosticsSnapshot DiagnosticsSnapshot::FromEncodableList(const EncodableList& list) {
+  DiagnosticsSnapshot decoded(
+    std::get<std::string>(list[0]),
+    std::get<std::string>(list[1]),
+    std::get<std::string>(list[2]),
+    std::get<std::string>(list[3]),
+    std::any_cast<const CarrierKind&>(std::get<CustomEncodableValue>(list[4])),
+    std::get<int64_t>(list[5]),
+    std::get<EncodableList>(list[6]));
+  return decoded;
+}
+
+bool DiagnosticsSnapshot::operator==(const DiagnosticsSnapshot& other) const {
+  return PigeonInternalDeepEquals(app_version_, other.app_version_) && PigeonInternalDeepEquals(host_version_, other.host_version_) && PigeonInternalDeepEquals(core_version_, other.core_version_) && PigeonInternalDeepEquals(carrier_policy_, other.carrier_policy_) && PigeonInternalDeepEquals(current_carrier_, other.current_carrier_) && PigeonInternalDeepEquals(reconnect_count_, other.reconnect_count_) && PigeonInternalDeepEquals(events_, other.events_);
+}
+
+bool DiagnosticsSnapshot::operator!=(const DiagnosticsSnapshot& other) const {
+  return !(*this == other);
+}
+
+size_t DiagnosticsSnapshot::Hash() const {
+  size_t result = 1;
+  result = result * 31 + PigeonInternalDeepHash(app_version_);
+  result = result * 31 + PigeonInternalDeepHash(host_version_);
+  result = result * 31 + PigeonInternalDeepHash(core_version_);
+  result = result * 31 + PigeonInternalDeepHash(carrier_policy_);
+  result = result * 31 + PigeonInternalDeepHash(current_carrier_);
+  result = result * 31 + PigeonInternalDeepHash(reconnect_count_);
+  result = result * 31 + PigeonInternalDeepHash(events_);
+  return result;
+}
+
+std::ostream& operator<<(
+  std::ostream& os,
+  const DiagnosticsSnapshot& obj) {
+  os << "DiagnosticsSnapshot(";
+  os << "app_version: ";
+  os << PigeonInternalToString(obj.app_version_);
+  os << ", host_version: ";
+  os << PigeonInternalToString(obj.host_version_);
+  os << ", core_version: ";
+  os << PigeonInternalToString(obj.core_version_);
+  os << ", carrier_policy: ";
+  os << PigeonInternalToString(obj.carrier_policy_);
+  os << ", current_carrier: ";
+  os << PigeonInternalToString(obj.current_carrier_);
+  os << ", reconnect_count: ";
+  os << PigeonInternalToString(obj.reconnect_count_);
+  os << ", events: ";
+  os << PigeonInternalToString(obj.events_);
+  os << ")";
+  return os;
+}
+
+size_t PigeonInternalDeepHash(const DiagnosticsSnapshot& v) {
   return v.Hash();
 }
 
@@ -1330,31 +1889,58 @@ EncodableValue PigeonInternalCodecSerializer::ReadValueOfType(
         return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<CarrierKind>(enum_arg_value));
       }
     case 133: {
-        return CustomEncodableValue(HostApiVersion::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        const auto& encodable_enum_arg = ReadValue(stream);
+        const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<HostErrorCode>(enum_arg_value));
       }
     case 134: {
-        return CustomEncodableValue(HostCapabilities::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        const auto& encodable_enum_arg = ReadValue(stream);
+        const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<ErrorStage>(enum_arg_value));
       }
     case 135: {
-        return CustomEncodableValue(ProfileSummary::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        const auto& encodable_enum_arg = ReadValue(stream);
+        const int64_t enum_arg_value = encodable_enum_arg.IsNull() ? 0 : encodable_enum_arg.LongValue();
+        return encodable_enum_arg.IsNull() ? EncodableValue() : CustomEncodableValue(static_cast<DiagnosticLevel>(enum_arg_value));
       }
     case 136: {
-        return CustomEncodableValue(ImportProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(HostApiVersion::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 137: {
-        return CustomEncodableValue(SelectProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(HostCapabilities::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 138: {
-        return CustomEncodableValue(RemoveProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(ProfileSummary::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 139: {
-        return CustomEncodableValue(ConnectRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(ImportProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 140: {
-        return CustomEncodableValue(DisconnectRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+        return CustomEncodableValue(SelectProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     case 141: {
+        return CustomEncodableValue(RemoveProfileRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 142: {
+        return CustomEncodableValue(ConnectRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 143: {
+        return CustomEncodableValue(DisconnectRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 144: {
+        return CustomEncodableValue(HostError::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 145: {
         return CustomEncodableValue(TunnelStatus::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 146: {
+        return CustomEncodableValue(DiagnosticsRequest::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 147: {
+        return CustomEncodableValue(DiagnosticEvent::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
+      }
+    case 148: {
+        return CustomEncodableValue(DiagnosticsSnapshot::FromEncodableList(std::get<EncodableList>(ReadValue(stream))));
       }
     default:
       return ::flutter::StandardCodecSerializer::ReadValueOfType(type, stream);
@@ -1385,49 +1971,84 @@ void PigeonInternalCodecSerializer::WriteValue(
       WriteValue(EncodableValue(static_cast<int>(std::any_cast<CarrierKind>(*custom_value))), stream);
       return;
     }
-    if (custom_value->type() == typeid(HostApiVersion)) {
+    if (custom_value->type() == typeid(HostErrorCode)) {
       stream->WriteByte(133);
+      WriteValue(EncodableValue(static_cast<int>(std::any_cast<HostErrorCode>(*custom_value))), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(ErrorStage)) {
+      stream->WriteByte(134);
+      WriteValue(EncodableValue(static_cast<int>(std::any_cast<ErrorStage>(*custom_value))), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(DiagnosticLevel)) {
+      stream->WriteByte(135);
+      WriteValue(EncodableValue(static_cast<int>(std::any_cast<DiagnosticLevel>(*custom_value))), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(HostApiVersion)) {
+      stream->WriteByte(136);
       WriteValue(EncodableValue(std::any_cast<HostApiVersion>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(HostCapabilities)) {
-      stream->WriteByte(134);
+      stream->WriteByte(137);
       WriteValue(EncodableValue(std::any_cast<HostCapabilities>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(ProfileSummary)) {
-      stream->WriteByte(135);
+      stream->WriteByte(138);
       WriteValue(EncodableValue(std::any_cast<ProfileSummary>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(ImportProfileRequest)) {
-      stream->WriteByte(136);
+      stream->WriteByte(139);
       WriteValue(EncodableValue(std::any_cast<ImportProfileRequest>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(SelectProfileRequest)) {
-      stream->WriteByte(137);
+      stream->WriteByte(140);
       WriteValue(EncodableValue(std::any_cast<SelectProfileRequest>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(RemoveProfileRequest)) {
-      stream->WriteByte(138);
+      stream->WriteByte(141);
       WriteValue(EncodableValue(std::any_cast<RemoveProfileRequest>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(ConnectRequest)) {
-      stream->WriteByte(139);
+      stream->WriteByte(142);
       WriteValue(EncodableValue(std::any_cast<ConnectRequest>(*custom_value).ToEncodableList()), stream);
       return;
     }
     if (custom_value->type() == typeid(DisconnectRequest)) {
-      stream->WriteByte(140);
+      stream->WriteByte(143);
       WriteValue(EncodableValue(std::any_cast<DisconnectRequest>(*custom_value).ToEncodableList()), stream);
       return;
     }
+    if (custom_value->type() == typeid(HostError)) {
+      stream->WriteByte(144);
+      WriteValue(EncodableValue(std::any_cast<HostError>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
     if (custom_value->type() == typeid(TunnelStatus)) {
-      stream->WriteByte(141);
+      stream->WriteByte(145);
       WriteValue(EncodableValue(std::any_cast<TunnelStatus>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(DiagnosticsRequest)) {
+      stream->WriteByte(146);
+      WriteValue(EncodableValue(std::any_cast<DiagnosticsRequest>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(DiagnosticEvent)) {
+      stream->WriteByte(147);
+      WriteValue(EncodableValue(std::any_cast<DiagnosticEvent>(*custom_value).ToEncodableList()), stream);
+      return;
+    }
+    if (custom_value->type() == typeid(DiagnosticsSnapshot)) {
+      stream->WriteByte(148);
+      WriteValue(EncodableValue(std::any_cast<DiagnosticsSnapshot>(*custom_value).ToEncodableList()), stream);
       return;
     }
   }
@@ -1669,6 +2290,35 @@ void ClientHostApi::SetUp(
       channel.SetMessageHandler(nullptr);
     }
   }
+  {
+    BasicMessageChannel<> channel(binary_messenger, "dev.flutter.pigeon.neproto_host.ClientHostApi.getDiagnostics" + prepended_suffix, &GetCodec());
+    if (api != nullptr) {
+      channel.SetMessageHandler([api](const EncodableValue& message, const ::flutter::MessageReply<EncodableValue>& reply) {
+        try {
+          const auto& args = std::get<EncodableList>(message);
+          const auto& encodable_request_arg = args.at(0);
+          if (encodable_request_arg.IsNull()) {
+            reply(WrapError("request_arg unexpectedly null."));
+            return;
+          }
+          const auto& request_arg = std::any_cast<const DiagnosticsRequest&>(std::get<CustomEncodableValue>(encodable_request_arg));
+          api->GetDiagnostics(request_arg, [reply](ErrorOr<DiagnosticsSnapshot>&& output) {
+            if (output.has_error()) {
+              reply(WrapError(output.error()));
+              return;
+            }
+            EncodableList wrapped;
+            wrapped.push_back(CustomEncodableValue(std::move(output).TakeValue()));
+            reply(EncodableValue(std::move(wrapped)));
+          });
+        } catch (const std::exception& exception) {
+          reply(WrapError(exception.what()));
+        }
+      });
+    } else {
+      channel.SetMessageHandler(nullptr);
+    }
+  }
 }
 
 EncodableValue ClientHostApi::WrapError(std::string_view error_message) {
@@ -1684,6 +2334,46 @@ EncodableValue ClientHostApi::WrapError(const FlutterError& error) {
     EncodableValue(error.code()),
     EncodableValue(error.message()),
     error.details()
+  });
+}
+
+// Generated class from Pigeon that represents Flutter messages that can be called from C++.
+ClientHostFlutterApi::ClientHostFlutterApi(::flutter::BinaryMessenger* binary_messenger)
+ : binary_messenger_(binary_messenger),
+    message_channel_suffix_("") {}
+
+ClientHostFlutterApi::ClientHostFlutterApi(
+  ::flutter::BinaryMessenger* binary_messenger,
+  const std::string& message_channel_suffix)
+ : binary_messenger_(binary_messenger),
+    message_channel_suffix_(message_channel_suffix.length() > 0 ? std::string(".") + message_channel_suffix : "") {}
+
+const ::flutter::StandardMessageCodec& ClientHostFlutterApi::GetCodec() {
+  return ::flutter::StandardMessageCodec::GetInstance(&PigeonInternalCodecSerializer::GetInstance());
+}
+
+void ClientHostFlutterApi::StatusChanged(
+  const TunnelStatus& status_arg,
+  std::function<void(void)>&& on_success,
+  std::function<void(const FlutterError&)>&& on_error) {
+  const std::string channel_name = "dev.flutter.pigeon.neproto_host.ClientHostFlutterApi.statusChanged" + message_channel_suffix_;
+  BasicMessageChannel<> channel(binary_messenger_, channel_name, &GetCodec());
+  EncodableValue encoded_api_arguments = EncodableValue(EncodableList{
+    CustomEncodableValue(status_arg),
+  });
+  channel.Send(encoded_api_arguments, [channel_name, on_success = std::move(on_success), on_error = std::move(on_error)](const uint8_t* reply, size_t reply_size) {
+    std::unique_ptr<EncodableValue> response = GetCodec().DecodeMessage(reply, reply_size);
+    const auto& encodable_return_value = *response;
+    const auto* list_return_value = std::get_if<EncodableList>(&encodable_return_value);
+    if (list_return_value) {
+      if (list_return_value->size() > 1) {
+        on_error(FlutterError(std::get<std::string>(list_return_value->at(0)), std::get<std::string>(list_return_value->at(1)), list_return_value->at(2)));
+      } else {
+        on_success();
+      }
+    } else {
+      on_error(CreateConnectionError(channel_name));
+    }
   });
 }
 

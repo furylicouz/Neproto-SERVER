@@ -28,6 +28,41 @@ enum TunnelState {
 
 enum CarrierKind { unknown, none, http3WebTransport }
 
+enum HostErrorCode {
+  unknown,
+  hostUnavailable,
+  unsupportedApiVersion,
+  invalidProfile,
+  credentialUnavailable,
+  noSafeUplink,
+  dnsFailed,
+  udpUnreachable,
+  tlsFailed,
+  http3Timeout,
+  np2AuthFailed,
+  tunSetupFailed,
+  cancelled,
+  internal,
+}
+
+enum ErrorStage {
+  unknown,
+  hostIpc,
+  hostNegotiation,
+  profileValidation,
+  credentialLoad,
+  dnsResolution,
+  endpointRoute,
+  quicHandshake,
+  tlsHandshake,
+  webTransportConnect,
+  np2Authentication,
+  tunSetup,
+  packetForwarding,
+}
+
+enum DiagnosticLevel { unknown, info, warning, error }
+
 class HostApiVersion {
   HostApiVersion({required this.major, required this.minor});
 
@@ -119,6 +154,22 @@ class DisconnectRequest {
   String operationId;
 }
 
+class HostError {
+  HostError({
+    required this.code,
+    required this.stage,
+    required this.message,
+    required this.retryable,
+    required this.operationId,
+  });
+
+  HostErrorCode code;
+  ErrorStage stage;
+  String message;
+  bool retryable;
+  String operationId;
+}
+
 class TunnelStatus {
   TunnelStatus({
     required this.state,
@@ -130,6 +181,7 @@ class TunnelStatus {
     required this.uploadTotalBytes,
     required this.downloadTotalBytes,
     required this.sequence,
+    required this.lastError,
   });
 
   TunnelState state;
@@ -141,6 +193,53 @@ class TunnelStatus {
   int uploadTotalBytes;
   int downloadTotalBytes;
   int sequence;
+  HostError? lastError;
+}
+
+class DiagnosticsRequest {
+  DiagnosticsRequest({required this.limit});
+
+  int limit;
+}
+
+class DiagnosticEvent {
+  DiagnosticEvent({
+    required this.unixMs,
+    required this.level,
+    required this.stage,
+    required this.code,
+    required this.message,
+    required this.operationId,
+    required this.sequence,
+  });
+
+  int unixMs;
+  DiagnosticLevel level;
+  ErrorStage stage;
+  HostErrorCode? code;
+  String message;
+  String operationId;
+  int sequence;
+}
+
+class DiagnosticsSnapshot {
+  DiagnosticsSnapshot({
+    required this.appVersion,
+    required this.hostVersion,
+    required this.coreVersion,
+    required this.carrierPolicy,
+    required this.currentCarrier,
+    required this.reconnectCount,
+    required this.events,
+  });
+
+  String appVersion;
+  String hostVersion;
+  String coreVersion;
+  String carrierPolicy;
+  CarrierKind currentCarrier;
+  int reconnectCount;
+  List<DiagnosticEvent> events;
 }
 
 @HostApi()
@@ -168,4 +267,12 @@ abstract class ClientHostApi {
 
   @async
   TunnelStatus getStatus();
+
+  @async
+  DiagnosticsSnapshot getDiagnostics(DiagnosticsRequest request);
+}
+
+@FlutterApi()
+abstract class ClientHostFlutterApi {
+  void statusChanged(TunnelStatus status);
 }
