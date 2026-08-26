@@ -117,11 +117,13 @@ func startWithDialer(fileDescriptor int, mtu uint32, dialer *Dialer) (*Stack, er
 	if fileDescriptor < 0 || mtu < minimumMTU || mtu > maximumMTU || dialer == nil {
 		return nil, ErrInvalidStackConfig
 	}
-	offset := 0
+	var endpoint device.Device
+	var err error
 	if runtime.GOOS == "ios" {
-		offset = 4
+		endpoint, err = newDarwinUTUNDevice(fileDescriptor, mtu)
+	} else {
+		endpoint, err = fdbased.Open(strconv.Itoa(fileDescriptor), mtu, 0)
 	}
-	endpoint, err := fdbased.Open(strconv.Itoa(fileDescriptor), mtu, offset)
 	if err != nil {
 		return nil, err
 	}
