@@ -28,13 +28,13 @@ func NewPipeServer(api *API) (*PipeServer, error) {
 		return nil, ErrInvalidIPCMessage
 	}
 	listener, err := winio.ListenPipe(PipePath, &winio.PipeConfig{
-		SecurityDescriptor: "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;AU)",
+		SecurityDescriptor: PipeSecurityDescriptor,
 		MessageMode:        false, InputBufferSize: MaxIPCMessageBytes + 4, OutputBufferSize: MaxIPCMessageBytes + 4,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &PipeServer{api: api, listener: listener, clients: make(chan struct{}, 16)}, nil
+	return &PipeServer{api: api, listener: listener, clients: make(chan struct{}, MaxIPCClients)}, nil
 }
 
 func CallPipe(ctx context.Context, request Request) (Response, error) {

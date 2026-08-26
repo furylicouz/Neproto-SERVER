@@ -463,8 +463,11 @@ material are never serialized into those responses.
 SYSTEM and Administrators require administrative access. Unelevated local
 interactive users require only the rights needed to invoke the client API.
 Anonymous, network and remote-pipe access are denied. The exact descriptor is
-an implementation security review item; the current broad authenticated-user
-grant must not be copied without review.
+`O:SYG:SYD:P(D;;GA;;;AN)(D;;GA;;;NU)(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGW;;;IU)`:
+deny anonymous/network, grant full access to SYSTEM/Administrators, and grant
+read/write only to interactive users. The previous broad authenticated-user
+grant is not used. Every go-winio server instance additionally sets
+`FILE_PIPE_REJECT_REMOTE_CLIENTS`.
 
 The safe sequence remains:
 

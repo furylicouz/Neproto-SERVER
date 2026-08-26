@@ -262,11 +262,14 @@ build remains external because this PC has no Visual Studio; no client ran.
 
 ### Task C2 — Version and harden service IPC
 
-**Status:** 🔄 In progress. A backward-compatible `host.v1.*` namespace now
-provides version negotiation, stable structured errors, redacted profile
-summaries, monotonic status snapshots and bounded diagnostics. Existing WPF
-methods remain covered. Pipe locality, ACL/token hardening and Windows-only
-identity tests remain.
+**Status:** 🔄 Implementation completed; final race gate remains external. A backward-compatible
+`host.v1.*` namespace provides version negotiation, stable structured errors,
+redacted profile summaries, monotonic snapshots and bounded diagnostics. The
+pipe denies anonymous/network logons, grants interactive users read/write only,
+inherits go-winio remote-client rejection and preserves the 16-client bound.
+Full package tests and vet pass. Local `-race` reaches link but requires the
+MSVC synchronization import library unavailable on this PC, so that exact gate
+remains for Windows CI/external-PC verification.
 
 **Acceptance criteria:**
 
