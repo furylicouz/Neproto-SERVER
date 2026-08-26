@@ -159,6 +159,10 @@ fail-closed exhaustion are covered by deterministic tests.
 
 ### Task B1 — Bootstrap the unified app and fake host
 
+**Status:** ✅ Shared Flutter slice completed on the implementation branch.
+Analyze plus controller/widget tests pass; native Windows/iOS compilation stays
+at the C1/D1 platform checkpoints because this PC has no Visual Studio toolchain.
+
 **Acceptance criteria:**
 
 - Windows/iOS Flutter targets compile from one app package.
