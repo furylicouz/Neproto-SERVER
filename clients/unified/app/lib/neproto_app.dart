@@ -6,6 +6,7 @@ import 'package:neproto_host/neproto_host.dart';
 import 'application/client_session_controller.dart';
 import 'design/app_theme.dart';
 import 'host/client_host.dart';
+import 'screens/diagnostics/diagnostics_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/profiles/profiles_screen.dart';
 
@@ -18,21 +19,31 @@ final class NeprotoApp extends StatefulWidget {
   State<NeprotoApp> createState() => _NeprotoAppState();
 }
 
-final class _NeprotoAppState extends State<NeprotoApp> {
+final class _NeprotoAppState extends State<NeprotoApp>
+    with WidgetsBindingObserver {
   late final ClientSessionController _controller;
   int _destination = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = ClientSessionController(widget.host);
     unawaited(_controller.start());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_controller.refreshFromHost());
+    }
   }
 
   @override
@@ -70,6 +81,11 @@ final class _NeprotoAppState extends State<NeprotoApp> {
                   onRemove: _controller.removeProfile,
                   onImport: _controller.importProfile,
                 ),
+                DiagnosticsScreen(
+                  snapshot: state.diagnostics,
+                  loading: state.diagnosticsLoading,
+                  onRefresh: _controller.refreshDiagnostics,
+                ),
               ],
             ),
             bottomNavigationBar: NavigationBar(
@@ -78,6 +94,9 @@ final class _NeprotoAppState extends State<NeprotoApp> {
                 setState(() {
                   _destination = value;
                 });
+                if (value == 2 && _controller.state.diagnostics == null) {
+                  unawaited(_controller.refreshDiagnostics());
+                }
               },
               destinations: const <NavigationDestination>[
                 NavigationDestination(
@@ -89,6 +108,11 @@ final class _NeprotoAppState extends State<NeprotoApp> {
                   icon: Icon(Icons.dns_outlined),
                   selectedIcon: Icon(Icons.dns),
                   label: 'Профили',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.monitor_heart_outlined),
+                  selectedIcon: Icon(Icons.monitor_heart),
+                  label: 'Диагностика',
                 ),
               ],
             ),

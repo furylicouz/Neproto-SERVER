@@ -9,6 +9,7 @@ final class FakeClientHost implements ClientHost {
     HostCapabilities? capabilities,
     TunnelStatus? status,
     List<ProfileSummary>? profiles,
+    DiagnosticsSnapshot? diagnostics,
     this.onImport,
   }) : capabilities =
            capabilities ??
@@ -21,17 +22,20 @@ final class FakeClientHost implements ClientHost {
              supportsHttp3WebTransport: true,
            ),
        status = status ?? _disconnectedStatus(),
-       profiles = List<ProfileSummary>.of(profiles ?? <ProfileSummary>[]);
+       profiles = List<ProfileSummary>.of(profiles ?? <ProfileSummary>[]),
+       diagnostics = diagnostics ?? _emptyDiagnostics(capabilities);
 
   final HostCapabilities capabilities;
   final void Function(ImportProfileRequest request)? onImport;
   TunnelStatus status;
+  DiagnosticsSnapshot diagnostics;
   final List<String> callOrder = <String>[];
   final List<ProfileSummary> profiles;
   final List<ConnectRequest> connectRequests = <ConnectRequest>[];
   final List<DisconnectRequest> disconnectRequests = <DisconnectRequest>[];
   final List<SelectProfileRequest> selectRequests = <SelectProfileRequest>[];
   final List<RemoveProfileRequest> removeRequests = <RemoveProfileRequest>[];
+  final List<DiagnosticsRequest> diagnosticsRequests = <DiagnosticsRequest>[];
   int importCalls = 0;
   final StreamController<TunnelStatus> _statusController =
       StreamController<TunnelStatus>.broadcast(sync: true);
@@ -144,15 +148,8 @@ final class FakeClientHost implements ClientHost {
   @override
   Future<DiagnosticsSnapshot> getDiagnostics(DiagnosticsRequest request) async {
     callOrder.add('getDiagnostics');
-    return DiagnosticsSnapshot(
-      appVersion: capabilities.appVersion,
-      hostVersion: capabilities.hostVersion,
-      coreVersion: capabilities.coreVersion,
-      carrierPolicy: 'http3-only',
-      currentCarrier: status.carrier,
-      reconnectCount: 0,
-      events: <DiagnosticEvent>[],
-    );
+    diagnosticsRequests.add(request);
+    return diagnostics;
   }
 
   @override
@@ -163,6 +160,18 @@ final class FakeClientHost implements ClientHost {
     _disposed = true;
     unawaited(_statusController.close());
   }
+}
+
+DiagnosticsSnapshot _emptyDiagnostics(HostCapabilities? capabilities) {
+  return DiagnosticsSnapshot(
+    appVersion: capabilities?.appVersion ?? '0.1.0-fake',
+    hostVersion: capabilities?.hostVersion ?? '0.1.0-fake',
+    coreVersion: capabilities?.coreVersion ?? '0.1.0-fake',
+    carrierPolicy: 'http3-only',
+    currentCarrier: CarrierKind.none,
+    reconnectCount: 0,
+    events: <DiagnosticEvent>[],
+  );
 }
 
 TunnelStatus _disconnectedStatus() {

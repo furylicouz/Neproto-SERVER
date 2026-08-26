@@ -13,8 +13,10 @@ final class ClientSessionState {
     required this.ready,
     required this.commandPending,
     required this.status,
+    this.diagnosticsLoading = false,
     this.profiles = const <ProfileSummary>[],
     this.capabilities,
+    this.diagnostics,
     this.error,
   });
 
@@ -23,6 +25,7 @@ final class ClientSessionState {
       loading: false,
       ready: false,
       commandPending: false,
+      diagnosticsLoading: false,
       status: TunnelStatus(
         state: TunnelState.disconnected,
         carrier: CarrierKind.none,
@@ -39,9 +42,11 @@ final class ClientSessionState {
   final bool loading;
   final bool ready;
   final bool commandPending;
+  final bool diagnosticsLoading;
   final HostCapabilities? capabilities;
   final TunnelStatus status;
   final List<ProfileSummary> profiles;
+  final DiagnosticsSnapshot? diagnostics;
   final HostError? error;
 
   ProfileSummary? get selectedProfile {
@@ -57,9 +62,12 @@ final class ClientSessionState {
     bool? loading,
     bool? ready,
     bool? commandPending,
+    bool? diagnosticsLoading,
     HostCapabilities? capabilities,
     TunnelStatus? status,
     List<ProfileSummary>? profiles,
+    DiagnosticsSnapshot? diagnostics,
+    bool clearDiagnostics = false,
     HostError? error,
     bool clearError = false,
   }) {
@@ -67,9 +75,11 @@ final class ClientSessionState {
       loading: loading ?? this.loading,
       ready: ready ?? this.ready,
       commandPending: commandPending ?? this.commandPending,
+      diagnosticsLoading: diagnosticsLoading ?? this.diagnosticsLoading,
       capabilities: capabilities ?? this.capabilities,
       status: status ?? this.status,
       profiles: profiles ?? this.profiles,
+      diagnostics: clearDiagnostics ? null : diagnostics ?? this.diagnostics,
       error: clearError ? null : error ?? this.error,
     );
   }
@@ -229,6 +239,44 @@ final class ClientSessionController extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshDiagnostics({int limit = 100}) async {
+    if (!_state.ready || _state.diagnosticsLoading) {
+      return;
+    }
+    try {
+      HostInputValidator.validateDiagnosticsLimit(limit);
+    } on ArgumentError {
+      _setDiagnosticsError();
+      return;
+    }
+    _setState(_state.copyWith(diagnosticsLoading: true, clearError: true));
+    try {
+      final snapshot = await _host.getDiagnostics(
+        DiagnosticsRequest(limit: limit),
+      );
+      if (!_validDiagnostics(snapshot, limit)) {
+        _setDiagnosticsError();
+        return;
+      }
+      _setState(_state.copyWith(diagnostics: snapshot, clearError: true));
+    } catch (_) {
+      _setCommandError('diagnostics');
+    } finally {
+      _setState(_state.copyWith(diagnosticsLoading: false));
+    }
+  }
+
+  Future<void> refreshFromHost() async {
+    if (!_state.ready || _state.commandPending || _disposed) {
+      return;
+    }
+    try {
+      _applyStatus(await _host.getStatus());
+    } catch (_) {
+      _setCommandError('resume');
+    }
+  }
+
   Future<void> start() async {
     if (_started || _disposed) {
       return;
@@ -345,6 +393,21 @@ final class ClientSessionController extends ChangeNotifier {
     );
   }
 
+  void _setDiagnosticsError() {
+    _setState(
+      _state.copyWith(
+        clearDiagnostics: true,
+        error: HostError(
+          code: HostErrorCode.internal,
+          stage: ErrorStage.hostIpc,
+          message: 'Native diagnostics were rejected.',
+          retryable: true,
+          operationId: 'diagnostics',
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     if (_disposed) {
@@ -371,6 +434,39 @@ bool _validProfileId(String value) {
   return value.isNotEmpty &&
       value == value.trim() &&
       utf8.encode(value).length <= 128;
+}
+
+bool _validDiagnostics(DiagnosticsSnapshot snapshot, int requestedLimit) {
+  if (snapshot.carrierPolicy != 'http3-only' ||
+      snapshot.reconnectCount < 0 ||
+      snapshot.events.length > requestedLimit ||
+      snapshot.events.length > HostInputValidator.maxDiagnosticsEntries ||
+      !_validVersion(snapshot.appVersion) ||
+      !_validVersion(snapshot.hostVersion) ||
+      !_validVersion(snapshot.coreVersion)) {
+    return false;
+  }
+  for (final event in snapshot.events) {
+    if (event.unixMs < 0 || event.sequence < 0) {
+      return false;
+    }
+    try {
+      HostInputValidator.validateOperationId(event.operationId);
+      HostInputValidator.validateDiagnosticMessage(event.message);
+    } on ArgumentError {
+      return false;
+    }
+    if (event.message.toLowerCase().contains('np2://')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool _validVersion(String value) {
+  return value.isNotEmpty &&
+      value == value.trim() &&
+      utf8.encode(value).length <= 64;
 }
 
 ProfileSummary _copyProfile(ProfileSummary source, {required bool selected}) {

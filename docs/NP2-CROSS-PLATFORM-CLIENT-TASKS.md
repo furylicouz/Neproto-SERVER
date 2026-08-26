@@ -208,6 +208,13 @@ onboarding fails before Host API, and Dart state never retains onboarding data.
 
 ### Task B4 — Implement diagnostics lifecycle slice
 
+**Status:** ✅ Completed on the implementation branch. Native diagnostics are
+bounded and fail closed on invalid or onboarding-like content; the UI renders
+stable code/stage values, and app resume refreshes authoritative host status.
+App analysis, 26 app tests and 18 shared host-plugin tests pass. The Windows
+release build remains at C1 because Visual Studio is unavailable on this PC;
+the client was not launched locally.
+
 **Acceptance criteria:**
 
 - Diagnostics show stable code/stage and bounded redacted events.
