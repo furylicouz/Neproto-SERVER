@@ -44,6 +44,10 @@ type packetDeviceRuntime interface {
 	AttachPacketDevice(device.Device, uint32) error
 }
 
+type packetTunnelRuntime interface {
+	AttachPacketTunnel(int, uint32) error
+}
+
 type snapshotRuntime interface {
 	RuntimeSnapshot() RuntimeSnapshot
 }
@@ -113,6 +117,30 @@ func (c *Core) AttachPacketDevice(ctx context.Context, endpoint device.Device, m
 		return ErrPlatformAdapterUnavailable
 	}
 	if err := provider.AttachPacketDevice(endpoint, mtu); err != nil {
+		return err
+	}
+	return ctx.Err()
+}
+
+// AttachPacketTunnel transfers a duplicated platform tunnel file descriptor to
+// the active authenticated runtime. It is the NetworkExtension-facing twin of
+// AttachPacketDevice.
+func (c *Core) AttachPacketTunnel(ctx context.Context, fileDescriptor int, mtu uint32) error {
+	if ctx == nil || fileDescriptor < 0 {
+		return ErrInvalidPacketDevice
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	runtime, err := c.activeRuntime()
+	if err != nil {
+		return err
+	}
+	provider, ok := runtime.(packetTunnelRuntime)
+	if !ok {
+		return ErrPlatformAdapterUnavailable
+	}
+	if err := provider.AttachPacketTunnel(fileDescriptor, mtu); err != nil {
 		return err
 	}
 	return ctx.Err()

@@ -50,6 +50,27 @@ func TestCoreExposesOnlyActiveRuntimePlatformAdapter(t *testing.T) {
 	}
 }
 
+func TestCoreForwardsPacketTunnelDescriptorOnlyAfterAuthentication(t *testing.T) {
+	runtime := newPlatformFakeRuntime()
+	core, err := New(Options{Connect: connectorReturning(runtime)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = core.Close(context.Background()) }()
+	if err := core.AttachPacketTunnel(context.Background(), 9, 1500); !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("attach before authentication error = %v", err)
+	}
+	if _, err := core.Connect(context.Background(), validRequest("packet-tunnel")); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.AttachPacketTunnel(context.Background(), 9, 1500); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.fileDescriptor != 9 || runtime.mtu != 1500 {
+		t.Fatalf("fd=%d mtu=%d", runtime.fileDescriptor, runtime.mtu)
+	}
+}
+
 func TestCorePlatformAdapterRejectsInvalidRoutesBeforeRuntimeMutation(t *testing.T) {
 	runtime := newPlatformFakeRuntime()
 	core, err := New(Options{Connect: connectorReturning(runtime)})
@@ -90,9 +111,10 @@ func TestSafeServerAddressesMergesConnectedHTTP3EndpointAndRejectsUnsafeOnlySet(
 
 type platformFakeRuntime struct {
 	*fakeRuntime
-	routes   *tunstack.ClientRoutePolicy
-	endpoint device.Device
-	mtu      uint32
+	routes         *tunstack.ClientRoutePolicy
+	endpoint       device.Device
+	mtu            uint32
+	fileDescriptor int
 }
 
 func newPlatformFakeRuntime() *platformFakeRuntime {
@@ -106,6 +128,11 @@ func (r *platformFakeRuntime) SetClientRoutes(routes *tunstack.ClientRoutePolicy
 
 func (r *platformFakeRuntime) AttachPacketDevice(endpoint device.Device, mtu uint32) error {
 	r.endpoint, r.mtu = endpoint, mtu
+	return nil
+}
+
+func (r *platformFakeRuntime) AttachPacketTunnel(fileDescriptor int, mtu uint32) error {
+	r.fileDescriptor, r.mtu = fileDescriptor, mtu
 	return nil
 }
 

@@ -218,6 +218,26 @@ func (r *authenticatedRuntime) AttachPacketDevice(endpoint device.Device, mtu ui
 	return nil
 }
 
+func (r *authenticatedRuntime) AttachPacketTunnel(fileDescriptor int, mtu uint32) error {
+	if r == nil || fileDescriptor < 0 {
+		return ErrInvalidPacketDevice
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed || r.authenticated == nil || r.router == nil {
+		return ErrNotConnected
+	}
+	if r.stack != nil {
+		return ErrPacketTunnelAlreadyAttached
+	}
+	stack, err := tunstack.StartWithSessionRouter(fileDescriptor, mtu, r.router)
+	if err != nil {
+		return err
+	}
+	r.stack = stack
+	return nil
+}
+
 func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 	if r == nil {
 		return RuntimeSnapshot{Carrier: clienthost.CarrierNone}
