@@ -2,6 +2,13 @@
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
+import Foundation
+
+let repositoryCorePath = "../../../../ios/Core"
+let generatedCorePath = "../../../../../../../../ios/Core"
+let corePath = FileManager.default.fileExists(atPath: repositoryCorePath + "/Package.swift")
+    ? repositoryCorePath
+    : generatedCorePath
 
 let package = Package(
     name: "neproto_host",
@@ -13,7 +20,7 @@ let package = Package(
     ],
     dependencies: [
 		.package(name: "FlutterFramework", path: "../FlutterFramework"),
-		.package(name: "NeProtoCore", path: "../../../../ios/Core")
+		.package(name: "NeProtoCore", path: corePath)
     ],
     targets: [
         .target(
