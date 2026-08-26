@@ -139,11 +139,6 @@ func (c *Core) NetworkChanged(
 		return c.Snapshot(), context.Canceled
 	}
 
-	if currentCancel != nil {
-		currentCancel()
-	}
-	_ = current.Close()
-
 	lastErr := probeErr
 	for attempt := 0; attempt < policy.MaxAttempts; attempt++ {
 		if attempt > 0 {
@@ -175,6 +170,11 @@ func (c *Core) NetworkChanged(
 			lastErr = ErrUnexpectedCarrier
 			continue
 		}
+		if err := current.HandoverPacketPathTo(owned); err != nil {
+			_ = owned.Close()
+			lastErr = err
+			continue
+		}
 
 		c.mu.Lock()
 		if c.closed || c.generation != generation || c.runtime != current ||
@@ -196,6 +196,10 @@ func (c *Core) NetworkChanged(
 		result := c.snapshot
 		c.workers.Add(1)
 		c.mu.Unlock()
+		if currentCancel != nil {
+			currentCancel()
+		}
+		_ = current.Close()
 
 		go func() {
 			defer c.workers.Done()
@@ -213,6 +217,10 @@ func (c *Core) NetworkChanged(
 			ErrReconnectExhausted,
 		)
 	}
+	if currentCancel != nil {
+		currentCancel()
+	}
+	_ = current.Close()
 	c.mu.Lock()
 	if !c.closed && c.generation == generation && c.runtime == current &&
 		c.snapshot.State == clienthost.StateReconnecting {

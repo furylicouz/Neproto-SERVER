@@ -186,6 +186,38 @@ func (r *authenticatedRuntime) Close() error {
 	return errors.Join(stackErr, muxErr)
 }
 
+// HandoverPacketPathTo keeps the platform-owned TUN device and its bounded
+// packet-processing goroutines alive while atomically switching new flows to
+// an authenticated HTTP/3 replacement. The replacement then owns the router
+// and stack; closing the old runtime only closes the obsolete carrier mux.
+func (r *authenticatedRuntime) HandoverPacketPathTo(replacement Runtime) error {
+	next, ok := replacement.(*authenticatedRuntime)
+	if r == nil || !ok || next == nil || r == next {
+		return ErrNoRuntime
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	next.mu.Lock()
+	defer next.mu.Unlock()
+	if r.closed || next.closed || r.authenticated == nil || next.authenticated == nil ||
+		r.router == nil || next.router == nil {
+		return ErrNotConnected
+	}
+	maximumPayload, datagrams, err := authenticatedRoute(next.authenticated)
+	if err != nil {
+		return err
+	}
+	if err := r.router.Switch(next.authenticated.Mux, maximumPayload, datagrams); err != nil {
+		return err
+	}
+	next.router = r.router
+	next.stack = r.stack
+	r.router = nil
+	r.stack = nil
+	return nil
+}
+
 func (r *authenticatedRuntime) SetClientRoutes(policy *tunstack.ClientRoutePolicy) error {
 	if r == nil || policy == nil {
 		return tunstack.ErrInvalidClientRoutes

@@ -79,6 +79,109 @@ func TestNetworkChangedReconnectsUsingSameStrictConnector(t *testing.T) {
 	if second.closeCalls.Load() != 0 {
 		t.Fatalf("replacement runtime was closed")
 	}
+	if first.handoverCalls.Load() != 1 {
+		t.Fatalf("packet path handover calls=%d", first.handoverCalls.Load())
+	}
+	if first.handoverTarget != second {
+		t.Fatal("packet path was not handed to the authenticated replacement")
+	}
+	if first.closeCallsAtHandover != 0 {
+		t.Fatalf("old runtime closed before packet path handover: close calls=%d", first.closeCallsAtHandover)
+	}
+}
+
+func TestNetworkChangedPreservesPacketPathWhenOldWaitExitsDuringProbe(t *testing.T) {
+	first := newFakeRuntime()
+	first.probeErr = errors.New("old path failed")
+	first.probeStart = make(chan struct{})
+	first.probeGate = make(chan struct{})
+	first.waitDone = make(chan struct{})
+	second := newFakeRuntime()
+	var connectCalls atomic.Int64
+	core, err := New(Options{
+		Connect: func(context.Context, config.Client) (Runtime, error) {
+			if connectCalls.Add(1) == 1 {
+				return first, nil
+			}
+			return second, nil
+		},
+		Reconnect: deterministicReconnectPolicy(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = core.Close(context.Background()) }()
+	if _, err := core.Connect(context.Background(), validRequest("initial")); err != nil {
+		t.Fatal(err)
+	}
+
+	type result struct {
+		snapshot clienthost.Snapshot
+		err      error
+	}
+	resultReady := make(chan result, 1)
+	go func() {
+		snapshot, reconnectErr := core.NetworkChanged(context.Background(), "network-race")
+		resultReady <- result{snapshot: snapshot, err: reconnectErr}
+	}()
+	<-first.probeStart
+	first.closeOnce.Do(func() { close(first.closed) })
+	<-first.waitDone
+	close(first.probeGate)
+
+	got := <-resultReady
+	if got.err != nil || got.snapshot.State != clienthost.StateConnected {
+		t.Fatalf("reconnect result=%+v error=%v", got.snapshot, got.err)
+	}
+	if first.closeCallsAtHandover != 0 {
+		t.Fatalf("monitor closed old runtime before handover: close calls=%d", first.closeCallsAtHandover)
+	}
+}
+
+func TestNetworkChangedClosesEveryRejectedHandoverAndKeepsAttemptsBounded(t *testing.T) {
+	first := newFakeRuntime()
+	first.probeErr = errors.New("old path failed")
+	first.handoverErr = errors.New("packet path handover failed")
+	replacements := make([]*fakeRuntime, reconnectAttempts)
+	var connectCalls atomic.Int64
+	core, err := New(Options{
+		Connect: func(context.Context, config.Client) (Runtime, error) {
+			call := connectCalls.Add(1)
+			if call == 1 {
+				return first, nil
+			}
+			replacement := newFakeRuntime()
+			replacements[call-2] = replacement
+			return replacement, nil
+		},
+		Reconnect: deterministicReconnectPolicy(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.Connect(context.Background(), validRequest("initial")); err != nil {
+		t.Fatal(err)
+	}
+
+	got, reconnectErr := core.NetworkChanged(context.Background(), "network-handover-fails")
+	if !errors.Is(reconnectErr, ErrReconnectExhausted) ||
+		!errors.Is(reconnectErr, first.handoverErr) {
+		t.Fatalf("reconnect error=%v", reconnectErr)
+	}
+	if got.State != clienthost.StateFailed || first.handoverCalls.Load() != reconnectAttempts {
+		t.Fatalf("snapshot=%+v handover calls=%d", got, first.handoverCalls.Load())
+	}
+	for index, replacement := range replacements {
+		if replacement == nil || replacement.closeCalls.Load() != 1 {
+			t.Fatalf("replacement %d close calls=%v", index, replacement)
+		}
+	}
+	if first.closeCalls.Load() != 1 {
+		t.Fatalf("old runtime close calls=%d", first.closeCalls.Load())
+	}
+	if err := core.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestReconnectStopsAfterSixHTTP3AttemptsAndClosesOwnedState(t *testing.T) {

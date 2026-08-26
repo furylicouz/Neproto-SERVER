@@ -154,6 +154,15 @@ type fakeRuntime struct {
 	closeCalls atomic.Int64
 	probeCalls atomic.Int64
 	probeErr   error
+	probeStart chan struct{}
+	probeGate  chan struct{}
+	waitDone   chan struct{}
+	waitOnce   sync.Once
+
+	handoverCalls        atomic.Int64
+	handoverTarget       Runtime
+	closeCallsAtHandover int64
+	handoverErr          error
 }
 
 func newFakeRuntime() *fakeRuntime {
@@ -167,10 +176,28 @@ func (r *fakeRuntime) Carrier() clienthost.Carrier { return r.carrier }
 
 func (r *fakeRuntime) Probe(context.Context) error {
 	r.probeCalls.Add(1)
+	if r.probeStart != nil {
+		close(r.probeStart)
+	}
+	if r.probeGate != nil {
+		<-r.probeGate
+	}
 	return r.probeErr
 }
 
+func (r *fakeRuntime) HandoverPacketPathTo(replacement Runtime) error {
+	r.handoverCalls.Add(1)
+	r.handoverTarget = replacement
+	r.closeCallsAtHandover = r.closeCalls.Load()
+	return r.handoverErr
+}
+
 func (r *fakeRuntime) Wait(ctx context.Context) error {
+	defer func() {
+		if r.waitDone != nil {
+			r.waitOnce.Do(func() { close(r.waitDone) })
+		}
+	}()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

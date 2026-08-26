@@ -210,11 +210,19 @@ func (c *Core) monitor(
 	operationID string,
 ) {
 	waitErr := runtime.Wait(ctx)
-	closeErr := runtime.Close()
-
 	c.mu.Lock()
 	if !c.closed && c.generation == generation && c.runtime == runtime &&
-		c.snapshot.State != clienthost.StateReconnecting {
+		c.snapshot.State == clienthost.StateReconnecting {
+		// NetworkChanged owns this runtime until an authenticated replacement
+		// has inherited its packet path or all bounded attempts have failed.
+		// Closing here would tear down the TUN stack during Wi-Fi/cellular
+		// handover even though the replacement session itself can succeed.
+		c.mu.Unlock()
+		close(done)
+		return
+	}
+	owned := !c.closed && c.generation == generation && c.runtime == runtime
+	if owned {
 		c.runtime = nil
 		c.activeCancel = nil
 		c.activeDone = nil
@@ -224,10 +232,6 @@ func (c *Core) monitor(
 			mapped := clienthost.MapError(operationID, clienthost.StagePacketForwarding, waitErr)
 			c.snapshot.State = clienthost.StateFailed
 			c.snapshot.LastError = &mapped
-		} else if closeErr != nil {
-			mapped := clienthost.MapError(operationID, clienthost.StagePacketForwarding, closeErr)
-			c.snapshot.State = clienthost.StateFailed
-			c.snapshot.LastError = &mapped
 		} else {
 			c.snapshot.State = clienthost.StateDisconnected
 			c.snapshot.LastError = nil
@@ -235,6 +239,18 @@ func (c *Core) monitor(
 		c.snapshot.Sequence++
 	}
 	c.mu.Unlock()
+	closeErr := runtime.Close()
+	if owned && waitErr == nil && closeErr != nil {
+		c.mu.Lock()
+		if !c.closed && c.generation == generation && c.runtime == nil &&
+			c.snapshot.State == clienthost.StateDisconnected {
+			mapped := clienthost.MapError(operationID, clienthost.StagePacketForwarding, closeErr)
+			c.snapshot.State = clienthost.StateFailed
+			c.snapshot.LastError = &mapped
+			c.snapshot.Sequence++
+		}
+		c.mu.Unlock()
+	}
 	close(done)
 }
 
@@ -317,9 +333,24 @@ type ownedRuntime struct {
 	err     error
 }
 
+type packetPathHandover interface {
+	HandoverPacketPathTo(Runtime) error
+}
+
 func (r *ownedRuntime) Wait(ctx context.Context) error { return r.runtime.Wait(ctx) }
 
 func (r *ownedRuntime) Close() error {
 	r.once.Do(func() { r.err = r.runtime.Close() })
 	return r.err
+}
+
+func (r *ownedRuntime) HandoverPacketPathTo(replacement *ownedRuntime) error {
+	if r == nil || r.runtime == nil || replacement == nil || replacement.runtime == nil {
+		return ErrNoRuntime
+	}
+	handover, ok := r.runtime.(packetPathHandover)
+	if !ok {
+		return nil
+	}
+	return handover.HandoverPacketPathTo(replacement.runtime)
 }
