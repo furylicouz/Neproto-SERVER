@@ -2,6 +2,13 @@
   "flutter": "3.44.7",
   "dart": "3.12.2",
   "pigeon": "28.0.0",
+  "flutter_macos_archive": "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_3.44.7-stable.zip",
+  "flutter_macos_sha256": "90d7b92b62d73e311b9a65e3631c905e944a3be3301a6f886751ceff5fd60572",
+  "go_macos_version": "1.26.7",
+  "go_macos_archive": "https://go.dev/dl/go1.26.7.darwin-arm64.tar.gz",
+  "go_macos_sha256": "020a1e8224811be75163e920bc77e0926a1390a6aeea19bdcf23f74b9d749f6d",
+  "xcodegen": "2.45.4",
+  "xcodegen_commit": "8d3d3476a69ae3e5d68e1adccc701c410c05eb36",
   "flutter_windows_archive": "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_3.44.7-stable.zip",
   "flutter_windows_sha256": "327b89c2ff612418c1d756efc9636d7811c50e4b50a916d07bc3bdc317ba25e5"
 }

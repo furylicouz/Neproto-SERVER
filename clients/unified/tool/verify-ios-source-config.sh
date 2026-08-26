@@ -12,6 +12,12 @@ fail() {
     exit 1
 }
 
+json_string() {
+    local key=$1
+    sed -n "s/^[[:space:]]*\"$key\": \"\([^\"]*\)\"[,]\{0,1\}$/\1/p" \
+        "$ROOT_DIR/clients/unified/tool/versions.json"
+}
+
 release_version=$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")
 [[ "$release_version" =~ ^np2-([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || \
     fail "invalid repository VERSION: $release_version"
@@ -42,6 +48,31 @@ framework_toolchain=$(sed -n 's/^readonly GO_VERSION="\([^"]*\)"$/\1/p' \
 [[ -n "$module_toolchain" ]] || fail 'go.mod has no pinned toolchain'
 [[ "$framework_toolchain" == "$module_toolchain" ]] || \
     fail "framework Go $framework_toolchain does not match $module_toolchain"
+
+pinned_go=$(json_string go_macos_version)
+[[ "go$pinned_go" == "$module_toolchain" ]] || \
+    fail "macOS Go pin $pinned_go does not match $module_toolchain"
+[[ $(json_string go_macos_archive) == "https://go.dev/dl/$module_toolchain.darwin-arm64.tar.gz" ]] || \
+    fail 'macOS Go archive does not match the pinned toolchain'
+[[ $(json_string go_macos_sha256) =~ ^[a-f0-9]{64}$ ]] || \
+    fail 'macOS Go archive SHA-256 is not pinned'
+
+flutter_version=$(json_string flutter)
+[[ $(json_string flutter_macos_archive) == *"flutter_macos_arm64_${flutter_version}-stable.zip" ]] || \
+    fail 'macOS Flutter archive does not match the pinned Flutter version'
+[[ $(json_string flutter_macos_sha256) =~ ^[a-f0-9]{64}$ ]] || \
+    fail 'macOS Flutter archive SHA-256 is not pinned'
+
+xcodegen_version=$(json_string xcodegen)
+xcodegen_commit=$(json_string xcodegen_commit)
+[[ "$xcodegen_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'XcodeGen version is not pinned'
+[[ "$xcodegen_commit" =~ ^[a-f0-9]{40}$ ]] || fail 'XcodeGen commit is not pinned'
+grep -q "readonly XCODEGEN_VERSION=\"$xcodegen_version\"" \
+    "$ROOT_DIR/clients/unified/tool/generate-ios-project.sh" || \
+    fail 'XcodeGen script version does not match versions.json'
+grep -q "readonly XCODEGEN_COMMIT=\"$xcodegen_commit\"" \
+    "$ROOT_DIR/clients/unified/tool/generate-ios-project.sh" || \
+    fail 'XcodeGen script commit does not match versions.json'
 
 grep -q 'PRODUCT_BUNDLE_IDENTIFIER: com.neproto.ios$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner bundle identifier is not pinned'
