@@ -34,6 +34,16 @@ type RuntimeSnapshot struct {
 	CarrierPoolTarget      int64
 	CarrierPoolHealthy     int64
 	CarrierPoolAssignments int64
+	QUICMinRTTMS           int64
+	QUICLatestRTTMS        int64
+	QUICSmoothedRTTMS      int64
+	QUICRTTDeviationMS     int64
+	QUICBytesSent          uint64
+	QUICPacketsSent        uint64
+	QUICBytesReceived      uint64
+	QUICPacketsReceived    uint64
+	QUICBytesLost          uint64
+	QUICPacketsLost        uint64
 }
 
 type clientRouteRuntime interface {

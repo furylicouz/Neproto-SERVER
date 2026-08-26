@@ -77,10 +77,28 @@ type ServerConfig struct {
 	ConnectionReceiveLimit uint64
 }
 
+// ConnectionStats is a bounded, payload-free snapshot of the underlying QUIC
+// path. It deliberately excludes connection identifiers, addresses, TLS
+// material and application data so platform diagnostics can expose transport
+// health without revealing browsing destinations.
+type ConnectionStats struct {
+	MinRTT          time.Duration
+	LatestRTT       time.Duration
+	SmoothedRTT     time.Duration
+	MeanDeviation   time.Duration
+	BytesSent       uint64
+	PacketsSent     uint64
+	BytesReceived   uint64
+	PacketsReceived uint64
+	BytesLost       uint64
+	PacketsLost     uint64
+}
+
 type Conn struct {
 	session            *webtransport.Session
 	stream             *webtransport.Stream
 	dialer             *webtransport.Dialer
+	quicConnection     *quic.Conn
 	maxDatagramPayload int
 	release            func()
 
@@ -120,6 +138,7 @@ func Dial(ctx context.Context, config DialConfig) (*Conn, error) {
 		config.InitialReceiveWindow, config.MaximumReceiveWindow, config.ConnectionReceiveLimit,
 	)
 	dialer := &webtransport.Dialer{TLSClientConfig: tlsConfig, QUICConfig: quicConfig}
+	var selected atomic.Pointer[quic.Conn]
 	if len(config.ServerAddresses) > 0 {
 		addresses := append([]netip.Addr(nil), config.ServerAddresses...)
 		for _, address := range addresses {
@@ -136,6 +155,7 @@ func Dial(ctx context.Context, config DialConfig) (*Conn, error) {
 			for _, address := range addresses {
 				connection, dialErr := quic.DialAddrEarly(attempt, net.JoinHostPort(address.String(), port), tlsCfg, cfg)
 				if dialErr == nil {
+					selected.Store(connection)
 					return connection, nil
 				}
 				failures = append(failures, dialErr)
@@ -144,6 +164,14 @@ func Dial(ctx context.Context, config DialConfig) (*Conn, error) {
 				}
 			}
 			return nil, errors.Join(failures...)
+		}
+	} else {
+		dialer.DialAddr = func(attempt context.Context, address string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+			connection, dialErr := quic.DialAddrEarly(attempt, address, tlsCfg, cfg)
+			if dialErr == nil {
+				selected.Store(connection)
+			}
+			return connection, dialErr
 		}
 	}
 
@@ -168,7 +196,10 @@ func Dial(ctx context.Context, config DialConfig) (*Conn, error) {
 		_ = dialer.Close()
 		return nil, fmt.Errorf("write reliable WebTransport stream preface: %w", err)
 	}
-	connection := newConn(session, stream, dialer, normalizedDatagramLimit(config.MaxDatagramPayload), nil)
+	connection := newConn(
+		session, stream, dialer, selected.Load(),
+		normalizedDatagramLimit(config.MaxDatagramPayload), nil,
+	)
 	go connection.rejectExtraStreams()
 	return connection, nil
 }
@@ -278,6 +309,20 @@ func (c *Conn) ReceiveDatagram(ctx context.Context) ([]byte, error) {
 
 func (c *Conn) MaxDatagramPayload() int { return c.maxDatagramPayload }
 
+func (c *Conn) ConnectionStats() ConnectionStats {
+	if c == nil || c.quicConnection == nil {
+		return ConnectionStats{}
+	}
+	stats := c.quicConnection.ConnectionStats()
+	return ConnectionStats{
+		MinRTT: stats.MinRTT, LatestRTT: stats.LatestRTT,
+		SmoothedRTT: stats.SmoothedRTT, MeanDeviation: stats.MeanDeviation,
+		BytesSent: stats.BytesSent, PacketsSent: stats.PacketsSent,
+		BytesReceived: stats.BytesReceived, PacketsReceived: stats.PacketsReceived,
+		BytesLost: stats.BytesLost, PacketsLost: stats.PacketsLost,
+	}
+}
+
 func (c *Conn) Kind() protocol.CarrierKind { return protocol.CarrierHTTP3 }
 
 func (c *Conn) RemoteAddresses() []netip.Addr {
@@ -338,10 +383,18 @@ func (c *Conn) rejectExtraStreams() {
 	}
 }
 
-func newConn(session *webtransport.Session, stream *webtransport.Stream, dialer *webtransport.Dialer, maxDatagramPayload int, release func()) *Conn {
+func newConn(
+	session *webtransport.Session,
+	stream *webtransport.Stream,
+	dialer *webtransport.Dialer,
+	quicConnection *quic.Conn,
+	maxDatagramPayload int,
+	release func(),
+) *Conn {
 	connection := &Conn{
 		session: session, stream: stream, dialer: dialer,
-		maxDatagramPayload: maxDatagramPayload, release: release, done: make(chan struct{}),
+		quicConnection: quicConnection, maxDatagramPayload: maxDatagramPayload,
+		release: release, done: make(chan struct{}),
 	}
 	context.AfterFunc(session.Context(), func() { _ = connection.Close() })
 	return connection
@@ -502,7 +555,7 @@ func (s *Server) handle(writer http.ResponseWriter, request *http.Request) {
 		_ = session.CloseWithError(1, "invalid reliable stream preface")
 		return
 	}
-	connection := newConn(session, stream, nil, s.datagramMax, release)
+	connection := newConn(session, stream, nil, nil, s.datagramMax, release)
 	ownedByConnection = true
 	go connection.rejectExtraStreams()
 	select {

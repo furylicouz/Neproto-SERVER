@@ -58,6 +58,12 @@ func authenticateProductionHTTP3(
 	if connection == nil || connection.Kind() != protocol.CarrierHTTP3 {
 		return nil, ErrUnexpectedCarrier
 	}
+	var quicStats func() http3wt.ConnectionStats
+	if provider, ok := connection.(interface {
+		ConnectionStats() http3wt.ConnectionStats
+	}); ok {
+		quicStats = provider.ConnectionStats
+	}
 	authenticated, err := app.AuthenticateClientCarrier(ctx, clientConfig, connection)
 	if err != nil {
 		return nil, err
@@ -68,7 +74,7 @@ func authenticateProductionHTTP3(
 		}
 		return nil, ErrNoRuntime
 	}
-	return newAuthenticatedRuntime(clientConfig, authenticated)
+	return newAuthenticatedRuntime(clientConfig, authenticated, quicStats)
 }
 
 func boundedHTTP3IdleTimeout(handshakeTimeout time.Duration) time.Duration {
@@ -88,12 +94,14 @@ type authenticatedRuntime struct {
 	router        *tunstack.SessionRouter
 	stack         *tunstack.Stack
 	addresses     []string
+	quicStats     func() http3wt.ConnectionStats
 	closed        bool
 }
 
 func newAuthenticatedRuntime(
 	clientConfig config.Client,
 	authenticated *session.Authenticated,
+	quicStats func() http3wt.ConnectionStats,
 ) (*authenticatedRuntime, error) {
 	if authenticated == nil || authenticated.Mux == nil || authenticated.Carrier != protocol.CarrierHTTP3 {
 		return nil, ErrNoRuntime
@@ -117,6 +125,7 @@ func newAuthenticatedRuntime(
 		authenticated: authenticated,
 		router:        router,
 		addresses:     addresses,
+		quicStats:     quicStats,
 	}, nil
 }
 
@@ -279,6 +288,7 @@ func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 	router := r.router
 	closed := r.closed
 	addresses := append([]string(nil), r.addresses...)
+	quicStats := r.quicStats
 	r.mu.Unlock()
 	if closed || router == nil {
 		return RuntimeSnapshot{Carrier: clienthost.CarrierNone}
@@ -294,6 +304,19 @@ func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 	if stack != nil {
 		result.UploadBytesPerSecond, result.DownloadBytesPerSecond,
 			result.UploadTotalBytes, result.DownloadTotalBytes = stack.TrafficStats()
+	}
+	if quicStats != nil {
+		stats := quicStats()
+		result.QUICMinRTTMS = stats.MinRTT.Milliseconds()
+		result.QUICLatestRTTMS = stats.LatestRTT.Milliseconds()
+		result.QUICSmoothedRTTMS = stats.SmoothedRTT.Milliseconds()
+		result.QUICRTTDeviationMS = stats.MeanDeviation.Milliseconds()
+		result.QUICBytesSent = stats.BytesSent
+		result.QUICPacketsSent = stats.PacketsSent
+		result.QUICBytesReceived = stats.BytesReceived
+		result.QUICPacketsReceived = stats.PacketsReceived
+		result.QUICBytesLost = stats.BytesLost
+		result.QUICPacketsLost = stats.PacketsLost
 	}
 	return result
 }

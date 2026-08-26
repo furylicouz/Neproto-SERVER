@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -60,6 +61,26 @@ func TestInstanceClientCoreCloseCancelsInFlightConnect(t *testing.T) {
 	}
 }
 
+func TestInstanceClientCoreSnapshotIncludesPayloadFreeQUICHealth(t *testing.T) {
+	core := newStrictClientCore(&fakeStrictCore{})
+	raw := core.SnapshotJSON()
+	var snapshot struct {
+		QUICSmoothedRTTMS int64  `json:"quic_smoothed_rtt_ms"`
+		QUICPacketsSent   uint64 `json:"quic_packets_sent"`
+		QUICPacketsLost   uint64 `json:"quic_packets_lost"`
+		QUICBytesSent     uint64 `json:"quic_bytes_sent"`
+		QUICBytesLost     uint64 `json:"quic_bytes_lost"`
+	}
+	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.QUICSmoothedRTTMS != 37 || snapshot.QUICPacketsSent != 1000 ||
+		snapshot.QUICPacketsLost != 25 || snapshot.QUICBytesSent != 900_000 ||
+		snapshot.QUICBytesLost != 20_000 {
+		t.Fatalf("QUIC snapshot=%+v raw=%s", snapshot, raw)
+	}
+}
+
 type fakeStrictCore struct {
 	events         *[]string
 	connect        func(context.Context) error
@@ -97,7 +118,11 @@ func (*fakeStrictCore) Snapshot() clienthost.Snapshot {
 	return clienthost.Snapshot{State: clienthost.StateConnected, Carrier: clienthost.CarrierHTTP3WebTransport}
 }
 func (*fakeStrictCore) RuntimeSnapshot() clientcore.RuntimeSnapshot {
-	return clientcore.RuntimeSnapshot{Carrier: clienthost.CarrierHTTP3WebTransport, ServerAddresses: []string{"8.8.8.8"}}
+	return clientcore.RuntimeSnapshot{
+		Carrier: clienthost.CarrierHTTP3WebTransport, ServerAddresses: []string{"8.8.8.8"},
+		QUICSmoothedRTTMS: 37, QUICPacketsSent: 1000, QUICPacketsLost: 25,
+		QUICBytesSent: 900_000, QUICBytesLost: 20_000,
+	}
 }
 func (*fakeStrictCore) FetchCatalog(context.Context) ([]byte, error) { return []byte(`{}`), nil }
 func (*fakeStrictCore) Close(context.Context) error                  { return nil }

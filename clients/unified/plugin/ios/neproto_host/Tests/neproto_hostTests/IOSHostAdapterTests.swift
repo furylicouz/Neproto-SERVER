@@ -81,6 +81,21 @@ struct IOSHostAdapterTests {
     #expect(unexpected.stage == .hostIpc)
   }
 
+  @Test("packet tunnel runtime health is bounded and destination free")
+  func parsesPacketTunnelRuntimeHealth() throws {
+    let raw = Data(#"{"state":"connected","carrier":"http3-webtransport","upload_bytes_per_second":125000,"download_bytes_per_second":250000,"upload_total_bytes":1000000,"download_total_bytes":2000000,"quic_smoothed_rtt_ms":84,"quic_packets_sent":2000,"quic_packets_lost":40,"quic_bytes_sent":1800000,"quic_bytes_lost":36000}"#.utf8)
+    let health = try #require(IOSRuntimeHealth.decode(raw))
+    #expect(health.downloadBytesPerSecond == 250_000)
+    #expect(health.quicSmoothedRTTMS == 84)
+    #expect(health.quicPacketsSent == 2_000)
+    #expect(health.quicPacketsLost == 40)
+    #expect(health.diagnosticMessage.contains("2.00%"))
+    #expect(!health.diagnosticMessage.contains("telegram"))
+
+    #expect(IOSRuntimeHealth.decode(Data(repeating: 0x41, count: 16_385)) == nil)
+    #expect(IOSRuntimeHealth.decode(Data(#"{"quic_packets_lost":2,"quic_packets_sent":1}"#.utf8)) == nil)
+  }
+
   private func makeProfile() -> ServerProfile {
     ServerProfile(
       id: UUID(uuidString: "79D6AC07-A320-42D7-8F8F-1B8576EE7BD1")!,

@@ -102,6 +102,10 @@ func TestDialServerAddressesVerifiesURLHostname(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial direct address with DNS certificate identity: %v", err)
 	}
+	stats := client.ConnectionStats()
+	if stats.SmoothedRTT <= 0 || stats.PacketsSent == 0 || stats.PacketsReceived == 0 {
+		t.Fatalf("QUIC connection stats were not captured: %+v", stats)
+	}
 	_ = client.Close()
 }
 

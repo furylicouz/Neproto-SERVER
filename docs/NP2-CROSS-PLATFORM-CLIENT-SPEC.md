@@ -508,7 +508,11 @@ The Swift host:
 - owns `NETunnelProviderManager` creation/loading;
 - starts/stops `NETunnelProviderSession`;
 - maps `NEVPNStatusDidChange` to Host API states;
-- requests bounded redacted diagnostics with provider messages.
+- requests a provider snapshot capped at 16 KiB and maps its authoritative
+  packet-tunnel throughput counters into `TunnelStatus`;
+- exposes only aggregate QUIC path health in diagnostics: smoothed RTT,
+  packets/bytes sent and declared lost. Connection IDs, endpoint addresses,
+  TLS material, destinations and payloads are prohibited.
 
 The extension:
 

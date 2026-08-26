@@ -170,6 +170,16 @@ func (c *ClientCore) SnapshotJSON() string {
 		CarrierPoolTarget      int64              `json:"carrier_pool_target"`
 		CarrierPoolHealthy     int64              `json:"carrier_pool_healthy"`
 		CarrierPoolAssignments int64              `json:"carrier_pool_assignments"`
+		QUICMinRTTMS           int64              `json:"quic_min_rtt_ms"`
+		QUICLatestRTTMS        int64              `json:"quic_latest_rtt_ms"`
+		QUICSmoothedRTTMS      int64              `json:"quic_smoothed_rtt_ms"`
+		QUICRTTDeviationMS     int64              `json:"quic_rtt_deviation_ms"`
+		QUICBytesSent          uint64             `json:"quic_bytes_sent"`
+		QUICPacketsSent        uint64             `json:"quic_packets_sent"`
+		QUICBytesReceived      uint64             `json:"quic_bytes_received"`
+		QUICPacketsReceived    uint64             `json:"quic_packets_received"`
+		QUICBytesLost          uint64             `json:"quic_bytes_lost"`
+		QUICPacketsLost        uint64             `json:"quic_packets_lost"`
 	}{
 		State: snapshot.State, ProfileID: snapshot.ProfileID, Carrier: snapshot.Carrier,
 		ConnectedAtUnixMS:    snapshot.ConnectedAtUnixMS,
@@ -178,6 +188,11 @@ func (c *ClientCore) SnapshotJSON() string {
 		Sequence: snapshot.Sequence, UDPMode: runtime.UDPMode,
 		CarrierPoolTarget: runtime.CarrierPoolTarget, CarrierPoolHealthy: runtime.CarrierPoolHealthy,
 		CarrierPoolAssignments: runtime.CarrierPoolAssignments,
+		QUICMinRTTMS:           runtime.QUICMinRTTMS, QUICLatestRTTMS: runtime.QUICLatestRTTMS,
+		QUICSmoothedRTTMS: runtime.QUICSmoothedRTTMS, QUICRTTDeviationMS: runtime.QUICRTTDeviationMS,
+		QUICBytesSent: runtime.QUICBytesSent, QUICPacketsSent: runtime.QUICPacketsSent,
+		QUICBytesReceived: runtime.QUICBytesReceived, QUICPacketsReceived: runtime.QUICPacketsReceived,
+		QUICBytesLost: runtime.QUICBytesLost, QUICPacketsLost: runtime.QUICPacketsLost,
 	}
 	raw, err := json.Marshal(result)
 	if err != nil {

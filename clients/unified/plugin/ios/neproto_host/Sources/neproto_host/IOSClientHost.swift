@@ -154,6 +154,19 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
       throw Self.pigeonError(code: "INVALID_PROFILE", message: "The diagnostics limit is invalid.")
     }
     let status = try await getStatus()
+    var events = diagnostics
+    if let health = tunnel.runtimeHealth {
+      let runtimeSequence = diagnosticSequence == Int64.max ? 1 : diagnosticSequence + 1
+      events.append(DiagnosticEvent(
+        unixMs: Int64(Date().timeIntervalSince1970 * 1_000),
+        level: .info,
+        stage: .webTransportConnect,
+        code: nil,
+        message: health.diagnosticMessage,
+        operationId: "runtime-health",
+        sequence: runtimeSequence
+      ))
+    }
     return DiagnosticsSnapshot(
       appVersion: Self.bundleVersion(),
       hostVersion: Self.bundleVersion(),
@@ -161,7 +174,7 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
       carrierPolicy: "http3-only",
       currentCarrier: status.carrier,
       reconnectCount: 0,
-      events: Array(diagnostics.suffix(Int(request.limit)))
+      events: Array(events.suffix(Int(request.limit)))
     )
   }
 

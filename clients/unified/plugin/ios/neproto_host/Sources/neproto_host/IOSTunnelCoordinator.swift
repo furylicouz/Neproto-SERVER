@@ -11,6 +11,7 @@ enum IOSTunnelCoordinatorError: Error {
 @MainActor
 protocol IOSTunnelManaging: AnyObject {
   var statusChanged: ((TunnelStatus) -> Void)? { get set }
+  var runtimeHealth: IOSRuntimeHealth? { get }
   func connect(profile: ServerProfile, providerConfiguration: [String: Any], credentialReference: Data) async throws -> TunnelStatus
   func disconnect(operationID: String) async throws -> TunnelStatus
   func removeConfiguration(profileID: UUID) async throws
@@ -23,6 +24,7 @@ protocol IOSTunnelManaging: AnyObject {
 @MainActor
 final class IOSTunnelCoordinator: IOSTunnelManaging {
   var statusChanged: ((TunnelStatus) -> Void)?
+  private(set) var runtimeHealth: IOSRuntimeHealth?
 
   private var managers: [UUID: NETunnelProviderManager] = [:]
   private var activeProfileID: UUID?
@@ -52,6 +54,7 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
     providerConfiguration: [String: Any],
     credentialReference: Data
   ) async throws -> TunnelStatus {
+    runtimeHealth = nil
     try await reloadManagers()
     if let activeProfileID, activeProfileID != profile.id,
        let activeManager = managers[activeProfileID],
@@ -87,6 +90,7 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
       return snapshot(profileID: nil, manager: nil, overriding: .disconnected)
     }
     manager.connection.stopVPNTunnel()
+    runtimeHealth = nil
     return snapshot(profileID: profileID, manager: manager, overriding: .disconnecting)
   }
 
@@ -102,6 +106,7 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
     managers.removeValue(forKey: profileID)
     if activeProfileID == profileID {
       activeProfileID = nil
+      runtimeHealth = nil
     }
   }
 
@@ -109,7 +114,9 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
     try await reloadManagers()
     let profileID = activeProfileID ?? selectedProfileID
     let manager = profileID.flatMap { managers[$0] }
-    return snapshot(profileID: profileID, manager: manager)
+    let health = await requestRuntimeHealth(manager)
+    runtimeHealth = health
+    return snapshot(profileID: profileID, manager: manager, runtime: health)
   }
 
   private func reloadManagers() async throws {
@@ -149,6 +156,7 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
     } else if connection.status == .disconnected || connection.status == .invalid,
               activeProfileID == entry.key {
       activeProfileID = nil
+      runtimeHealth = nil
     }
     statusChanged?(snapshot(profileID: entry.key, manager: entry.value))
   }
@@ -156,7 +164,8 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
   private func snapshot(
     profileID: UUID?,
     manager: NETunnelProviderManager?,
-    overriding stateOverride: TunnelState? = nil
+    overriding stateOverride: TunnelState? = nil,
+    runtime: IOSRuntimeHealth? = nil
   ) -> TunnelStatus {
     sequence = sequence == Int64.max ? 1 : sequence + 1
     let status = manager?.connection.status ?? .disconnected
@@ -170,12 +179,104 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
       profileId: profileID?.uuidString.lowercased(),
       carrier: carrier,
       connectedAtUnixMs: connectedAt,
-      uploadBytesPerSecond: 0,
-      downloadBytesPerSecond: 0,
-      uploadTotalBytes: 0,
-      downloadTotalBytes: 0,
+      uploadBytesPerSecond: runtime?.uploadBytesPerSecond ?? 0,
+      downloadBytesPerSecond: runtime?.downloadBytesPerSecond ?? 0,
+      uploadTotalBytes: runtime?.uploadTotalBytes ?? 0,
+      downloadTotalBytes: runtime?.downloadTotalBytes ?? 0,
       sequence: sequence,
       lastError: nil
+    )
+  }
+
+  private func requestRuntimeHealth(_ manager: NETunnelProviderManager?) async -> IOSRuntimeHealth? {
+    guard let manager,
+          manager.connection.status == .connected || manager.connection.status == .reasserting,
+          let session = manager.connection as? NETunnelProviderSession else {
+      return nil
+    }
+    return await withCheckedContinuation { continuation in
+      let reply = IOSRuntimeHealthReply(continuation)
+      DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) {
+        reply.finish(nil)
+      }
+      do {
+        try session.sendProviderMessage(Data("np2-runtime-snapshot".utf8)) { data in
+          reply.finish(data.flatMap(IOSRuntimeHealth.decode))
+        }
+      } catch {
+        reply.finish(nil)
+      }
+    }
+  }
+}
+
+private final class IOSRuntimeHealthReply: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<IOSRuntimeHealth?, Never>?
+
+  init(_ continuation: CheckedContinuation<IOSRuntimeHealth?, Never>) {
+    self.continuation = continuation
+  }
+
+  func finish(_ value: IOSRuntimeHealth?) {
+    let owned: CheckedContinuation<IOSRuntimeHealth?, Never>? = lock.withLock {
+      defer { continuation = nil }
+      return continuation
+    }
+    owned?.resume(returning: value)
+  }
+}
+
+struct IOSRuntimeHealth: Decodable, Equatable, Sendable {
+  static let maximumSnapshotBytes = 16 * 1024
+
+  let uploadBytesPerSecond: Int64
+  let downloadBytesPerSecond: Int64
+  let uploadTotalBytes: Int64
+  let downloadTotalBytes: Int64
+  let quicSmoothedRTTMS: Int64
+  let quicPacketsSent: UInt64
+  let quicPacketsLost: UInt64
+  let quicBytesSent: UInt64
+  let quicBytesLost: UInt64
+
+  enum CodingKeys: String, CodingKey {
+    case uploadBytesPerSecond = "upload_bytes_per_second"
+    case downloadBytesPerSecond = "download_bytes_per_second"
+    case uploadTotalBytes = "upload_total_bytes"
+    case downloadTotalBytes = "download_total_bytes"
+    case quicSmoothedRTTMS = "quic_smoothed_rtt_ms"
+    case quicPacketsSent = "quic_packets_sent"
+    case quicPacketsLost = "quic_packets_lost"
+    case quicBytesSent = "quic_bytes_sent"
+    case quicBytesLost = "quic_bytes_lost"
+  }
+
+  static func decode(_ data: Data) -> IOSRuntimeHealth? {
+    guard !data.isEmpty, data.count <= maximumSnapshotBytes,
+          let value = try? JSONDecoder().decode(IOSRuntimeHealth.self, from: data),
+          value.uploadBytesPerSecond >= 0, value.downloadBytesPerSecond >= 0,
+          value.uploadTotalBytes >= 0, value.downloadTotalBytes >= 0,
+          value.quicSmoothedRTTMS >= 0, value.quicSmoothedRTTMS <= 10 * 60 * 1_000,
+          value.quicPacketsLost <= value.quicPacketsSent,
+          value.quicBytesLost <= value.quicBytesSent else {
+      return nil
+    }
+    return value
+  }
+
+  var diagnosticMessage: String {
+    let lossPercent = quicPacketsSent == 0
+      ? 0
+      : Double(quicPacketsLost) * 100 / Double(quicPacketsSent)
+    return String(
+      format: "HTTP/3 health: RTT %lld ms, packet loss %llu/%llu (%.2f%%), upload %lld B/s, download %lld B/s.",
+      quicSmoothedRTTMS,
+      quicPacketsLost,
+      quicPacketsSent,
+      lossPercent,
+      uploadBytesPerSecond,
+      downloadBytesPerSecond
     )
   }
 }
