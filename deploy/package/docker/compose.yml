@@ -11,7 +11,6 @@ services:
     user: "65532:65532"
     group_add: ["__SERVICE_GID__"]
     cap_drop: [ALL]
-    cap_add: [NET_BIND_SERVICE]
     security_opt: [no-new-privileges:true]
     volumes:
       - /etc/neproto:/etc/neproto:ro
@@ -30,7 +29,6 @@ services:
     user: "65533:65533"
     group_add: ["__SERVICE_GID__"]
     cap_drop: [ALL]
-    cap_add: [NET_BIND_SERVICE]
     security_opt: [no-new-privileges:true]
     environment:
       XDG_DATA_HOME: /data

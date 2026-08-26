@@ -189,7 +189,7 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 && ${NEPROTO_SELF_UPDATE:-0} != 1 ]]; then
   fi
 elif [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
   info 'validating dependencies already installed on this managed node'
-  required_commands=(certbot curl getent install jq openssl qrencode sysctl systemctl tar)
+  required_commands=(certbot curl getent groupadd install jq openssl qrencode sysctl systemctl tar)
   [[ $mode != docker ]] || required_commands+=(docker)
   for command_name in "${required_commands[@]}"; do
     command -v "$command_name" >/dev/null 2>&1 || die "managed update requires installed command: $command_name"
@@ -303,9 +303,15 @@ done
 
 service_uid=
 service_gid=
+service_group=
 if [[ ${NEPROTO_TEST_MODE:-} == 1 ]]; then
   service_uid=${NEPROTO_TEST_UID:-65532}
   service_gid=${NEPROTO_TEST_GID:-65532}
+  if [[ $mode == docker ]]; then
+    service_group=neproto-docker
+  else
+    service_group=neproto
+  fi
 elif [[ $mode == bare-metal ]]; then
   getent group neproto >/dev/null || groupadd --system neproto
   getent passwd neproto >/dev/null || useradd --system --gid neproto --home-dir /nonexistent --shell /usr/sbin/nologin neproto
@@ -313,9 +319,21 @@ elif [[ $mode == bare-metal ]]; then
   usermod -a -G neproto caddy
   service_uid=$(id -u neproto)
   service_gid=$(id -g neproto)
+  service_group=neproto
 else
   service_uid=65532
   service_gid=65532
+  docker_group_record=$(getent group "$service_gid" || true)
+  if [[ -n $docker_group_record ]]; then
+    service_group=${docker_group_record%%:*}
+  elif getent group neproto-docker >/dev/null; then
+    [[ $(getent group neproto-docker | cut -d: -f3) == "$service_gid" ]] || \
+      die 'host group neproto-docker already uses an incompatible GID'
+    service_group=neproto-docker
+  else
+    groupadd --system --gid "$service_gid" neproto-docker
+    service_group=neproto-docker
+  fi
 fi
 
 web_stage=$(mktemp -d "$opt_neproto/.web.XXXXXX")
@@ -370,6 +388,13 @@ install -m 0644 "$script_dir/site/index.html" "$site_dir/index.html"
 install -m 0644 "$script_dir/performance/neproto-bbr.conf" "$modules_load_dir/neproto-bbr.conf"
 install -m 0644 "$script_dir/performance/90-neproto-udp.conf" "$sysctl_dir/90-neproto-udp.conf"
 install -m 0644 "$script_dir/performance/99-neproto-performance.conf" "$sysctl_dir/99-neproto-performance.conf"
+if [[ $mode == docker ]]; then
+  install -m 0644 "$script_dir/performance/91-neproto-docker-ports.conf" "$sysctl_dir/91-neproto-docker-ports.conf"
+  if [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
+    sysctl -p "$sysctl_dir/91-neproto-docker-ports.conf" >/dev/null
+    info 'enabled low-port binding for unprivileged Docker services'
+  fi
+fi
 # Keep a root-only self-contained bundle so the master can provision future
 # cluster nodes without requiring a workstation or another download.
 tar -czf "$opt_neproto/neproto-server-bundle.tar.gz.tmp" -C "$script_dir" .
@@ -571,7 +596,7 @@ else
   install -m 0755 "$bundle_bin/node" "$opt_neproto/node"
 fi
 
-sed -e "s/__SERVICE_GID__/$service_gid/g" \
+sed -e "s/__SERVICE_GROUP__/$service_group/g" \
   "$script_dir/systemd/neproto-control.service" >"$systemd_dir/neproto-control.service"
 chmod 0644 "$systemd_dir/neproto-control.service"
 

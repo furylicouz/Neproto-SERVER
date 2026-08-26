@@ -64,7 +64,7 @@ test_mode() {
   [[ -s $root/etc/systemd/system/neproto-control.service ]]
   grep -q 'ExecStart=/usr/local/bin/neprotoctl web-api-server' "$root/etc/systemd/system/neproto-control.service"
   grep -q '^RuntimeDirectory=neproto$' "$root/etc/systemd/system/neproto-control.service"
-  ! grep -q '__SERVICE_GID__' "$root/etc/systemd/system/neproto-control.service"
+  ! grep -q '__SERVICE_GROUP__' "$root/etc/systemd/system/neproto-control.service"
   ! grep -q '^Conflicts=' "$root/etc/systemd/system/neproto-update.service"
   ! grep -q '^Conflicts=' "$root/etc/systemd/system/neproto-update-check.service"
   [[ -s $root/opt/neproto/neproto-server-bundle.tar.gz ]]
@@ -153,9 +153,10 @@ test_mode() {
     grep -q '/run/neproto:/run/neproto:ro' "$root/opt/neproto/compose.yml"
     grep -qx 'HOSTNAME=0.0.0.0' "$root/etc/neproto/web.env"
     grep -q 'cap_drop: \[ALL\]' "$root/opt/neproto/compose.yml"
+    ! grep -q 'cap_add:' "$root/opt/neproto/compose.yml"
     grep -q '/etc/neproto/geodata:/etc/neproto/geodata:rw' "$root/opt/neproto/compose.yml"
     grep -q '/var/lib/neproto/usage:/var/lib/neproto/usage:rw' "$root/opt/neproto/compose.yml"
-    [[ $(grep -c 'cap_add: \[NET_BIND_SERVICE\]' "$root/opt/neproto/compose.yml") -eq 2 ]]
+    grep -qx 'net.ipv4.ip_unprivileged_port_start=0' "$root/etc/sysctl.d/91-neproto-docker-ports.conf"
     if grep -q '__SERVICE_GID__' "$root/opt/neproto/compose.yml"; then
       return 1
     fi
