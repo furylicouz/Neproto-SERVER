@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -6,19 +6,21 @@ import PackageDescription
 let package = Package(
     name: "neproto_host",
     platforms: [
-        .iOS("13.0")
+		.iOS("16.0")
     ],
     products: [
         .library(name: "neproto-host", targets: ["neproto_host"])
     ],
     dependencies: [
-        .package(name: "FlutterFramework", path: "../FlutterFramework")
+		.package(name: "FlutterFramework", path: "../FlutterFramework"),
+		.package(name: "NeProtoCore", path: "../../../../ios/Core")
     ],
     targets: [
         .target(
             name: "neproto_host",
             dependencies: [
-                .product(name: "FlutterFramework", package: "FlutterFramework")
+				.product(name: "FlutterFramework", package: "FlutterFramework"),
+				"NeProtoCore",
             ],
             resources: [
                 // If your plugin requires a privacy manifest, for example if it uses any required
@@ -31,6 +33,10 @@ let package = Package(
                 // the following instructions to add them:
                 // https://developer.apple.com/documentation/xcode/bundling-resources-with-a-swift-package
             ]
-        )
+		),
+		.testTarget(
+			name: "neproto_hostTests",
+			dependencies: ["neproto_host", "NeProtoCore"]
+		)
     ]
 )

@@ -50,6 +50,42 @@ struct ServerProfileTests {
         #expect(profile.clusterID == "cluster-01")
     }
 
+	@Test("cross-platform candidate adapts a stored profile to HTTP/3 only")
+	func emitsHTTP3OnlyCandidateConfiguration() throws {
+		let profile = ServerProfile(
+			name: "Primary",
+			serverIdentity: "vpn.example.com",
+			serverAddress: "8.8.8.8",
+			httpsPath: "/private/https/session",
+			webRTCPath: "/private/webrtc/offer",
+			http3Path: "/private/http3/session",
+			maxParallelCarriers: 3,
+			coverProfile: .web
+		)
+
+		let raw = try profile.strictHTTP3ClientConfigurationJSON()
+		let object = try #require(JSONSerialization.jsonObject(with: raw) as? [String: Any])
+		#expect(object["carrier_policy"] as? String == "http3-only")
+		#expect(object["max_parallel_carriers"] as? Int == 1)
+		#expect(object["http3_url"] as? String == "https://vpn.example.com/private/http3/session")
+		#expect(profile.maxParallelCarriers == 3)
+	}
+
+	@Test("HTTP/3-only candidate rejects a legacy profile without HTTP/3")
+	func rejectsCandidateWithoutHTTP3() {
+		let profile = ServerProfile(
+			name: "Legacy",
+			serverIdentity: "vpn.example.com",
+			serverAddress: "8.8.8.8",
+			httpsPath: "/private/https/session",
+			webRTCPath: "/private/webrtc/offer",
+			coverProfile: .web
+		)
+		#expect(throws: ProfileValidationError.invalidHTTP3Path) {
+			try profile.strictHTTP3ClientConfigurationJSON()
+		}
+	}
+
     @Test("provider payload round-trips without credentials")
     func providerPayloadRoundTrips() throws {
         let profile = ServerProfile(

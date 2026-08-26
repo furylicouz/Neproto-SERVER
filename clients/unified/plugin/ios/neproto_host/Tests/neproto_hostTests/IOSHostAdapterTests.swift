@@ -1,0 +1,104 @@
+import Foundation
+import NeProtoCore
+import NetworkExtension
+import Testing
+@testable import neproto_host
+
+@Suite("iOS host adapter")
+@MainActor
+struct IOSHostAdapterTests {
+  @Test("legacy profile storage is read through without rewrite")
+  func legacyReadThroughIsByteStable() throws {
+    let suite = "neproto-host-tests-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let profile = makeProfile()
+    let original = try JSONEncoder().encode([profile])
+    defaults.set(original, forKey: IOSProfileRepository.profileStorageKey)
+    let credentials = FakeCredentialStore()
+    credentials.values[profile.id] = Data([1, 2, 3])
+
+    let first = IOSProfileRepository(defaults: defaults, credentials: credentials)
+    let second = IOSProfileRepository(defaults: defaults, credentials: credentials)
+
+    #expect(first.summaries().count == 1)
+    #expect(first.summaries()[0].hasCredential)
+    #expect(first.selectedProfileID == profile.id)
+    #expect(second.selectedProfileID == profile.id)
+    #expect(defaults.data(forKey: IOSProfileRepository.profileStorageKey) == original)
+    #expect(defaults.string(forKey: IOSProfileRepository.selectedProfileKey) == nil)
+  }
+
+  @Test("provider configuration contains strict HTTP3 but no credential")
+  func strictProviderConfigurationIsSecretFree() throws {
+    let suite = "neproto-host-tests-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let profile = makeProfile()
+    defaults.set(try JSONEncoder().encode([profile]), forKey: IOSProfileRepository.profileStorageKey)
+    let credentials = FakeCredentialStore()
+    let repository = IOSProfileRepository(defaults: defaults, credentials: credentials)
+
+    let configuration = try repository.strictProviderConfiguration(profile: profile)
+    let raw = try #require(configuration["client_configuration"] as? Data)
+    let object = try #require(JSONSerialization.jsonObject(with: raw) as? [String: Any])
+    #expect(object["carrier_policy"] as? String == "http3-only")
+    #expect(object["max_parallel_carriers"] as? Int == 1)
+    #expect(configuration["secret"] == nil)
+    #expect(configuration["credential"] == nil)
+  }
+
+  @Test("NetworkExtension states map fail closed")
+  func mapsVPNStates() {
+    #expect(IOSVPNStatusMapper.state(.invalid) == .disconnected)
+    #expect(IOSVPNStatusMapper.state(.connecting) == .connecting)
+    #expect(IOSVPNStatusMapper.state(.connected) == .connected)
+    #expect(IOSVPNStatusMapper.state(.reasserting) == .reconnecting)
+    #expect(IOSVPNStatusMapper.state(.disconnecting) == .disconnecting)
+    #expect(IOSVPNStatusMapper.carrier(.connected) == .http3WebTransport)
+    #expect(IOSVPNStatusMapper.carrier(.connecting) == .none)
+    #expect(IOSVPNStatusMapper.carrier(.failed) == .none)
+  }
+
+  private func makeProfile() -> ServerProfile {
+    ServerProfile(
+      id: UUID(uuidString: "79D6AC07-A320-42D7-8F8F-1B8576EE7BD1")!,
+      name: "Primary",
+      serverIdentity: "vpn.example.com",
+      serverAddress: "8.8.8.8",
+      httpsPath: "/private/https/session",
+      webRTCPath: "/private/webrtc/offer",
+      http3Path: "/private/http3/session",
+      maxParallelCarriers: 3,
+      coverProfile: .web
+    )
+  }
+}
+
+@MainActor
+private final class FakeCredentialStore: IOSCredentialStore {
+  var values: [UUID: Data] = [:]
+
+  func save(secret: String, profileID: UUID) throws -> Data {
+    let reference = Data(secret.utf8.prefix(16))
+    values[profileID] = reference
+    return reference
+  }
+
+  func persistentReference(profileID: UUID) throws -> Data {
+    guard let value = values[profileID] else { throw KeychainSecretStoreError.itemNotFound }
+    return value
+  }
+
+  func read(profileID: UUID) throws -> String {
+    guard values[profileID] != nil else { throw KeychainSecretStoreError.itemNotFound }
+    return Data(repeating: 0x42, count: 32).base64EncodedString()
+  }
+
+  func delete(profileID: UUID) throws {
+    guard values.removeValue(forKey: profileID) != nil else {
+      throw KeychainSecretStoreError.itemNotFound
+    }
+  }
+}
+

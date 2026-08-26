@@ -147,6 +147,24 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
     }
 
     public func clientConfigurationJSON(deviceID: UUID? = nil) throws -> Data {
+		try clientConfigurationJSON(deviceID: deviceID, carrierPolicy: "performance", parallelCarriers: maxParallelCarriers)
+	}
+
+	/// Builds the first cross-platform candidate configuration without
+	/// rewriting the persisted legacy profile. Only HTTP/3 WebTransport is
+	/// eligible and the carrier pool is fixed to one.
+	public func strictHTTP3ClientConfigurationJSON(deviceID: UUID? = nil) throws -> Data {
+		guard effectiveHTTP3Path != nil else {
+			throw ProfileValidationError.invalidHTTP3Path
+		}
+		return try clientConfigurationJSON(deviceID: deviceID, carrierPolicy: "http3-only", parallelCarriers: 1)
+	}
+
+	private func clientConfigurationJSON(
+		deviceID: UUID?,
+		carrierPolicy: String,
+		parallelCarriers: Int
+	) throws -> Data {
         let normalizedHTTP3Path = effectiveHTTP3Path
         let configuration = ClientConfiguration(
             serverIdentity: serverIdentity,
@@ -159,11 +177,11 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
             // "web" is the backward-compatible wire value for Mosaic's
             // automatic runtime web/realtime/stream classification.
             profile: CoverProfile.web.rawValue,
-            carrierPolicy: "performance",
+			carrierPolicy: carrierPolicy,
             maxCoverOverheadPercent: 30,
             initialWindowBytes: 2_097_152,
             maxStreams: 128,
-            maxParallelCarriers: maxParallelCarriers,
+			maxParallelCarriers: parallelCarriers,
             requireDatagrams: requireDatagrams,
             enableConstellation: enableConstellation,
             enableForwardSecrecy: enableForwardSecrecy,
