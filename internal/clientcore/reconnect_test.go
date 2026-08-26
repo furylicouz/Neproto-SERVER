@@ -138,6 +138,48 @@ func TestNetworkChangedPreservesPacketPathWhenOldWaitExitsDuringProbe(t *testing
 	}
 }
 
+func TestNetworkChangedReplacesSessionWhenWaitExitsDuringSuccessfulProbe(t *testing.T) {
+	first := newFakeRuntime()
+	first.probeStart = make(chan struct{})
+	first.probeGate = make(chan struct{})
+	first.waitDone = make(chan struct{})
+	second := newFakeRuntime()
+	var connectCalls atomic.Int64
+	core, err := New(Options{
+		Connect: func(context.Context, config.Client) (Runtime, error) {
+			if connectCalls.Add(1) == 1 {
+				return first, nil
+			}
+			return second, nil
+		},
+		Reconnect: deterministicReconnectPolicy(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = core.Close(context.Background()) }()
+	if _, err := core.Connect(context.Background(), validRequest("initial")); err != nil {
+		t.Fatal(err)
+	}
+
+	resultReady := make(chan error, 1)
+	go func() {
+		_, reconnectErr := core.NetworkChanged(context.Background(), "network-wait-exited")
+		resultReady <- reconnectErr
+	}()
+	<-first.probeStart
+	first.closeOnce.Do(func() { close(first.closed) })
+	<-first.waitDone
+	close(first.probeGate)
+
+	if reconnectErr := <-resultReady; reconnectErr != nil {
+		t.Fatal(reconnectErr)
+	}
+	if connectCalls.Load() != 2 || first.handoverCalls.Load() != 1 {
+		t.Fatalf("connect calls=%d handover calls=%d", connectCalls.Load(), first.handoverCalls.Load())
+	}
+}
+
 func TestNetworkChangedClosesEveryRejectedHandoverAndKeepsAttemptsBounded(t *testing.T) {
 	first := newFakeRuntime()
 	first.probeErr = errors.New("old path failed")

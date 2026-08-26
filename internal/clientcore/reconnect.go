@@ -13,6 +13,7 @@ import (
 var (
 	ErrReconnectExhausted = errors.New("HTTP/3 reconnect attempts exhausted")
 	ErrProbeUnavailable   = errors.New("authenticated session probe is unavailable")
+	ErrSessionEnded       = errors.New("authenticated session ended during probe")
 )
 
 const (
@@ -125,7 +126,7 @@ func (c *Core) NetworkChanged(
 	probeContext, probeCancel := context.WithTimeout(reconnectContext, policy.ProbeTimeout)
 	probeErr := current.Probe(probeContext)
 	probeCancel()
-	if probeErr == nil {
+	if probeErr == nil && !current.WaitReturned() {
 		c.mu.Lock()
 		if !c.closed && c.generation == generation && c.runtime == current &&
 			c.snapshot.State == clienthost.StateReconnecting {
@@ -137,6 +138,9 @@ func (c *Core) NetworkChanged(
 		}
 		c.mu.Unlock()
 		return c.Snapshot(), context.Canceled
+	}
+	if probeErr == nil {
+		probeErr = ErrSessionEnded
 	}
 
 	lastErr := probeErr

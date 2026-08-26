@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"neproto.local/chameleon/internal/clienthost"
@@ -331,13 +332,22 @@ type ownedRuntime struct {
 	runtime Runtime
 	once    sync.Once
 	err     error
+	waited  atomic.Bool
 }
 
 type packetPathHandover interface {
 	HandoverPacketPathTo(Runtime) error
 }
 
-func (r *ownedRuntime) Wait(ctx context.Context) error { return r.runtime.Wait(ctx) }
+func (r *ownedRuntime) Wait(ctx context.Context) error {
+	err := r.runtime.Wait(ctx)
+	r.waited.Store(true)
+	return err
+}
+
+func (r *ownedRuntime) WaitReturned() bool {
+	return r == nil || r.waited.Load()
+}
 
 func (r *ownedRuntime) Close() error {
 	r.once.Do(func() { r.err = r.runtime.Close() })
