@@ -113,7 +113,7 @@ remain disabled unless authenticated peers negotiate `cluster_catalog_v1`.
 
 | Component | Version | Role |
 |---|---:|---|
-| Go | 1.26.5 | Client, server, tests |
+| Go | 1.26.7 | Client, server, tests |
 | Pion WebRTC | 4.2.16 | Standards-compliant WebRTC carrier |
 | quic-go | 0.60.0 | QUIC and HTTP/3 transport |
 | webtransport-go | 0.11.1 | WebTransport Extended CONNECT sessions and datagrams |
