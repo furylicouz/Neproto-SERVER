@@ -21,6 +21,8 @@ list(APPEND PLUGIN_SOURCES
   "client_host_api.g.cpp"
   "neproto_host_plugin.cpp"
   "neproto_host_plugin.h"
+  "pipe_client.cpp"
+  "pipe_client.h"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -84,6 +86,7 @@ FetchContent_MakeAvailable(googletest)
 # directly into the test binary rather than using the DLL.
 add_executable(${TEST_RUNNER}
   test/neproto_host_plugin_test.cpp
+  test/pipe_client_test.cpp
   ${PLUGIN_SOURCES}
 )
 apply_standard_settings(${TEST_RUNNER})

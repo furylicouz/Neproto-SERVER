@@ -445,6 +445,13 @@ initially, provided it gains:
 - client identity/security tests;
 - preservation of the 256 KiB frame and 16-client limits.
 
+The Windows plugin uses one request and one response per connection. Each is a
+four-byte little-endian length followed by strict UTF-8 JSON. The plugin waits
+at most 1.5 seconds for the local pipe and applies one 12-second deadline to
+the complete write/read exchange. Partial I/O is completed within that same
+deadline; a zero, truncated or larger-than-256-KiB frame fails closed before
+JSON decoding.
+
 SYSTEM and Administrators require administrative access. Unelevated local
 interactive users require only the rights needed to invoke the client API.
 Anonymous, network and remote-pipe access are denied. The exact descriptor is
