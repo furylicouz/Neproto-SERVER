@@ -101,6 +101,10 @@ schemes:
         Runner: all
         PacketTunnel: all
         RunnerTests: [test]
+      preActions:
+        - name: Run Prepare Flutter Framework Script
+          script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" prepare
+          settingsTarget: Runner
     run:
       config: Debug
       executable: Runner

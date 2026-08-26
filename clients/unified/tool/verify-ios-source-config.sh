@@ -82,5 +82,9 @@ grep -q '^[[:space:]]*executable: Runner$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme has no explicit app executable'
 grep -q '^[[:space:]]*macroExpansion: Runner$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner test action has no explicit macro expansion target'
+grep -q '^[[:space:]]*- name: Run Prepare Flutter Framework Script$' \
+    "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme has no Flutter SPM prepare action'
+grep -Fq 'script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" prepare' \
+    "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme prepare action is invalid'
 
 echo "PASS: iOS source configuration matches $release_version and $module_toolchain"
