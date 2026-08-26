@@ -100,7 +100,7 @@ enum class HostErrorCode {
   kNp2AuthFailed = 10,
   kTunSetupFailed = 11,
   kCancelled = 12,
-  kInternal = 13
+  kInternalFailure = 13
 };
 
 enum class ErrorStage {

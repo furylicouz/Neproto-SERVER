@@ -27,7 +27,7 @@ void main() {
         unixMs: 1,
         level: DiagnosticLevel.error,
         stage: ErrorStage.webTransportConnect,
-        code: HostErrorCode.internal,
+        code: HostErrorCode.internalFailure,
         message: 'np2://import/v2/secret',
         operationId: 'connect-1',
         sequence: 1,
@@ -41,7 +41,7 @@ void main() {
     await controller.refreshDiagnostics();
 
     expect(controller.state.diagnostics, isNull);
-    expect(controller.state.error?.code, HostErrorCode.internal);
+    expect(controller.state.error?.code, HostErrorCode.internalFailure);
   });
 
   test('resume refreshes authoritative native status', () async {

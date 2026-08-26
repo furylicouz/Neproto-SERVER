@@ -63,6 +63,6 @@ void main() {
 
   test('unknown state and error values never represent success', () {
     expect(TunnelState.unknown, isNot(TunnelState.connected));
-    expect(HostErrorCode.unknown, isNot(HostErrorCode.internal));
+    expect(HostErrorCode.unknown, isNot(HostErrorCode.internalFailure));
   });
 }

@@ -82,9 +82,24 @@ grep -q '^[[:space:]]*executable: Runner$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme has no explicit app executable'
 grep -q '^[[:space:]]*macroExpansion: Runner$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner test action has no explicit macro expansion target'
+grep -q '^[[:space:]]*SWIFT_VERSION: "5.0"$' \
+    "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Flutter iOS targets must use Swift 5 compatibility mode'
+grep -q '^[[:space:]]*CLANG_ENABLE_MODULES: YES$' \
+    "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Flutter iOS targets must enable Clang modules'
 grep -q '^[[:space:]]*- name: Run Prepare Flutter Framework Script$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme has no Flutter SPM prepare action'
 grep -Fq 'script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" prepare' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme prepare action is invalid'
+
+readonly generated_project="$ROOT_DIR/clients/unified/app/ios/Runner.xcodeproj/project.pbxproj"
+readonly generated_scheme="$ROOT_DIR/clients/unified/app/ios/Runner.xcodeproj/xcshareddata/xcschemes/Runner.xcscheme"
+grep -q 'PBXNativeTarget "PacketTunnel"' "$generated_project" || \
+    fail 'generated Xcode project has no PacketTunnel target'
+grep -q 'PRODUCT_BUNDLE_IDENTIFIER = com.neproto.ios.PacketTunnel;' "$generated_project" || \
+    fail 'generated Xcode project has no PacketTunnel bundle identifier'
+grep -q 'BlueprintName = "Runner"' "$generated_scheme" || \
+    fail 'generated Runner scheme has no Runner buildable'
+grep -q 'xcode_backend.sh.*prepare' "$generated_scheme" || \
+    fail 'generated Runner scheme has no Flutter SPM prepare action'
 
 echo "PASS: iOS source configuration matches $release_version and $module_toolchain"

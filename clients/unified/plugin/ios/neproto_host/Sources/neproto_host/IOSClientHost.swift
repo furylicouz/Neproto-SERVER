@@ -14,11 +14,11 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
 
   init(
     binaryMessenger: FlutterBinaryMessenger,
-    profiles: IOSProfileRepository = IOSProfileRepository(),
-    tunnel: any IOSTunnelManaging = IOSTunnelCoordinator()
+    profiles: IOSProfileRepository? = nil,
+    tunnel: (any IOSTunnelManaging)? = nil
   ) {
-    self.profiles = profiles
-    self.tunnel = tunnel
+    self.profiles = profiles ?? IOSProfileRepository()
+    self.tunnel = tunnel ?? IOSTunnelCoordinator()
     flutter = ClientHostFlutterApi(binaryMessenger: binaryMessenger)
     self.tunnel.statusChanged = { [weak self] status in
       guard let self else { return }
@@ -188,4 +188,3 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
     (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.1.0"
   }
 }
-

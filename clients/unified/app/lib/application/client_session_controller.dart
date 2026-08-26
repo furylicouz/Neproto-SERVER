@@ -398,7 +398,7 @@ final class ClientSessionController extends ChangeNotifier {
       _state.copyWith(
         clearDiagnostics: true,
         error: HostError(
-          code: HostErrorCode.internal,
+          code: HostErrorCode.internalFailure,
           stage: ErrorStage.hostIpc,
           message: 'Native diagnostics were rejected.',
           retryable: true,

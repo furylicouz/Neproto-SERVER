@@ -42,7 +42,7 @@ enum HostErrorCode {
   np2AuthFailed,
   tunSetupFailed,
   cancelled,
-  internal,
+  internalFailure,
 }
 
 enum ErrorStage {

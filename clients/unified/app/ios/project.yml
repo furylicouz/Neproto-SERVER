@@ -10,8 +10,9 @@ configs:
   Release: release
 settings:
   base:
-    SWIFT_VERSION: "6.0"
+    SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: targeted
+    CLANG_ENABLE_MODULES: YES
     IPHONEOS_DEPLOYMENT_TARGET: "16.0"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: Q97V3ZHHFH

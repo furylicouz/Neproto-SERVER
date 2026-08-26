@@ -59,9 +59,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             return result
         }
         shutdownQueue.async {
-            var closeError: NSError?
-            if let owned, !owned.close(&closeError) {
-                self.logMobileFailure("Closing strict HTTP/3 ClientCore failed", error: closeError)
+            if let owned {
+                do {
+                    try owned.close()
+                } catch {
+                    self.logMobileFailure("Closing strict HTTP/3 ClientCore failed", error: error as NSError)
+                }
             }
 			self.stateLock.withLock {
 				self.starting = false
@@ -120,18 +123,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }) else {
                 throw TunnelProviderError.stopping
             }
-            guard newCore.setClientRoutesJSON(bootstrap.clientRoutesJSON, error: &mobileError) else {
-                throw mobileError ?? TunnelProviderError.invalidClientRoutes
-            }
-            guard newCore.connect(
+            try newCore.setClientRoutesJSON(bootstrap.clientRoutesJSON)
+            try newCore.connect(
                 bootstrap.clientConfigurationJSON,
                 secret: secret,
                 operationID: Self.operationID(prefix: "ios-start"),
-                profileID: bootstrap.profileID,
-                error: &mobileError
-            ) else {
-                throw mobileError ?? TunnelProviderError.connectFailed
-            }
+                profileID: bootstrap.profileID
+            )
             let exclusions = try ServerRouteExclusions(newCore.serverAddresses())
             guard !stateLock.withLock({ stopping }) else {
                 throw TunnelProviderError.stopping
@@ -139,8 +137,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
             setTunnelNetworkSettings(Self.networkSettings(excluding: exclusions)) { [weak self] settingsError in
                 guard let self else {
-                    var closeError: NSError?
-                    _ = newCore.close(&closeError)
+                    try? newCore.close()
                     completion.call(Self.xpcSafeError(TunnelProviderError.providerReleased))
                     return
                 }
@@ -154,10 +151,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                         guard descriptor >= 0 else {
                             throw TunnelProviderError.missingTunnelFileDescriptor
                         }
-                        var attachError: NSError?
-                        guard newCore.attachPacketTunnel(Int64(descriptor), mtu: 1_500, error: &attachError) else {
+                        do {
+                            try newCore.attachPacketTunnel(Int64(descriptor), mtu: 1_500)
+                        } catch {
                             neproto_close_tunnel_file_descriptor(descriptor)
-                            throw attachError ?? TunnelProviderError.packetDataPlaneFailed
+                            throw error
                         }
 						guard self.stateLock.withLock({
 							guard self.core === newCore, !self.stopping else { return false }
@@ -193,8 +191,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             stateLock.withLock {
                 if core === failedCore { core = nil }
             }
-            var closeError: NSError?
-            _ = failedCore.close(&closeError)
+            try? failedCore.close()
         }
         let safeError = Self.xpcSafeError(error)
         logger.error("Strict HTTP/3 Packet Tunnel start failed: domain=\(safeError.domain, privacy: .public) code=\(safeError.code)")
@@ -226,8 +223,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 
     private func startNetworkPathMonitor(for expectedCore: Np2mobileClientCore) {
         let monitor = NWPathMonitor()
-        monitor.pathUpdateHandler = { [weak self, weak expectedCore] path in
-            guard let self, let expectedCore else { return }
+        let coreReference = SendableClientCoreReference(expectedCore)
+        monitor.pathUpdateHandler = { [weak self, coreReference] path in
+            guard let self else { return }
+            let expectedCore = coreReference.value
             let signature = Self.networkPathSignature(path)
             let changed = self.stateLock.withLock {
                 guard self.core === expectedCore, !self.stopping else { return false }
@@ -260,17 +259,19 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 				return
 			}
 			self.reasserting = true
-			var migrationError: NSError?
-			let migrated = expectedCore.networkChanged(
-				Self.operationID(prefix: "ios-network"),
-				error: &migrationError
-			)
+			let migrationError: NSError?
+			do {
+				try expectedCore.networkChanged(Self.operationID(prefix: "ios-network"))
+				migrationError = nil
+			} catch {
+				migrationError = error as NSError
+			}
 			self.reasserting = false
-			guard migrated else {
+			if let migrationError {
 				self.logMobileFailure("Strict HTTP/3 reconnect exhausted", error: migrationError)
 				self.terminateAfterRuntimeFailure(
 					expectedCore,
-					error: migrationError ?? TunnelProviderError.reconnectFailed
+					error: migrationError
 				)
 				return
 			}
@@ -301,8 +302,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             return true
         }
         guard shouldTerminate else { return }
-        var closeError: NSError?
-        _ = failedCore.close(&closeError)
+        try? failedCore.close()
         cancelTunnelWithError(Self.xpcSafeError(error))
     }
 
@@ -325,8 +325,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         "\(prefix)-\(UUID().uuidString.lowercased())"
     }
 
-    private static func networkPathSignature(_ path: NWPath) -> String {
-        let types: [NWInterface.InterfaceType] = [.wifi, .cellular, .wiredEthernet, .loopback, .other]
+    private static func networkPathSignature(_ path: Network.NWPath) -> String {
+        let types: [Network.NWInterface.InterfaceType] = [.wifi, .cellular, .wiredEthernet, .loopback, .other]
         let active = types.filter { path.usesInterfaceType($0) }
             .map { String(describing: $0) }
             .joined(separator: ",")
@@ -363,6 +363,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             code: source.code,
             userInfo: [NSLocalizedDescriptionKey: source.localizedDescription]
         )
+    }
+}
+
+private final class SendableClientCoreReference: @unchecked Sendable {
+    let value: Np2mobileClientCore
+
+    init(_ value: Np2mobileClientCore) {
+        self.value = value
     }
 }
 

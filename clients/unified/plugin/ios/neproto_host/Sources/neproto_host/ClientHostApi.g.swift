@@ -230,7 +230,7 @@ enum HostErrorCode: Int, CaseIterable {
   case np2AuthFailed = 10
   case tunSetupFailed = 11
   case cancelled = 12
-  case internal = 13
+  case internalFailure = 13
 }
 
 enum ErrorStage: Int, CaseIterable {

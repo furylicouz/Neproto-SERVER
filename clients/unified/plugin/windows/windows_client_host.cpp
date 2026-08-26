@@ -168,7 +168,7 @@ std::optional<HostErrorCode> ParseErrorCode(const std::string& value) {
   if (value == "NP2_AUTH_FAILED") return HostErrorCode::kNp2AuthFailed;
   if (value == "TUN_SETUP_FAILED") return HostErrorCode::kTunSetupFailed;
   if (value == "CANCELLED") return HostErrorCode::kCancelled;
-  if (value == "INTERNAL") return HostErrorCode::kInternal;
+  if (value == "INTERNAL") return HostErrorCode::kInternalFailure;
   if (value == "UNKNOWN") return HostErrorCode::kUnknown;
   return std::nullopt;
 }
