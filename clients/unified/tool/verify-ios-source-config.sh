@@ -78,5 +78,9 @@ grep -q 'PRODUCT_BUNDLE_IDENTIFIER: com.neproto.ios$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner bundle identifier is not pinned'
 grep -q 'PRODUCT_BUNDLE_IDENTIFIER: com.neproto.ios.PacketTunnel$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'PacketTunnel bundle identifier is not pinned'
+grep -q '^[[:space:]]*executable: Runner$' \
+    "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme has no explicit app executable'
+grep -q '^[[:space:]]*macroExpansion: Runner$' \
+    "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner test action has no explicit macro expansion target'
 
 echo "PASS: iOS source configuration matches $release_version and $module_toolchain"

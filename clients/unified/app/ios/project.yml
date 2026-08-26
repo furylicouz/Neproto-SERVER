@@ -103,8 +103,10 @@ schemes:
         RunnerTests: [test]
     run:
       config: Debug
+      executable: Runner
     test:
       config: Debug
+      macroExpansion: Runner
       targets:
         - RunnerTests
     archive:
