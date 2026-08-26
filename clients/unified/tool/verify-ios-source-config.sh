@@ -86,6 +86,11 @@ grep -q '^[[:space:]]*SWIFT_VERSION: "5.0"$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Flutter iOS targets must use Swift 5 compatibility mode'
 grep -q '^[[:space:]]*CLANG_ENABLE_MODULES: YES$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Flutter iOS targets must enable Clang modules'
+grep -q '^[[:space:]]*iOS: "16.0"$' \
+    "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Flutter iOS deployment target must be 16.0'
+grep -Fq '.iOS("16.0")' \
+    "$ROOT_DIR/clients/unified/plugin/ios/neproto_host/Package.swift" || \
+    fail 'native host package deployment target must be iOS 16.0'
 for plist in \
     "$ROOT_DIR/clients/unified/app/ios/Runner/Info.plist" \
     "$ROOT_DIR/clients/unified/app/ios/PacketTunnel/Info.plist"; do
@@ -113,5 +118,12 @@ grep -q 'BlueprintName = "Runner"' "$generated_scheme" || \
     fail 'generated Runner scheme has no Runner buildable'
 grep -q 'xcode_backend.sh.*prepare' "$generated_scheme" || \
     fail 'generated Runner scheme has no Flutter SPM prepare action'
+
+readonly plugin_registration="$ROOT_DIR/clients/unified/plugin/ios/neproto_host/Sources/neproto_host/NeprotoHostPlugin.swift"
+if grep -Fq 'Task { @MainActor' "$plugin_registration"; then
+    fail 'native host registration must not be deferred to an unstructured Task'
+fi
+grep -Fq 'MainActor.assumeIsolated {' "$plugin_registration" || \
+    fail 'native host registration must install Pigeon handlers synchronously on MainActor'
 
 echo "PASS: iOS source configuration matches $release_version and $module_toolchain"
