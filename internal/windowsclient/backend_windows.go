@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -13,8 +14,9 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/core/device"
 	"github.com/xjasonlyu/tun2socks/v2/core/device/tun"
 
+	"neproto.local/chameleon/internal/clientcore"
+	"neproto.local/chameleon/internal/clienthost"
 	"neproto.local/chameleon/internal/config"
-	"neproto.local/chameleon/mobile/np2mobile"
 )
 
 const (
@@ -23,15 +25,28 @@ const (
 )
 
 type WindowsBackend struct {
-	mu          sync.Mutex
-	routes      windowsRouteManager
-	endpoint    device.Device
-	connecting  bool
-	generation  uint64
-	recoveryErr error
-	cleanupDone chan struct{}
-	cleanupErr  error
-	startNP2    func(string, string) error
+	mu               sync.Mutex
+	routes           windowsRouteManager
+	endpoint         device.Device
+	connecting       bool
+	generation       uint64
+	recoveryErr      error
+	cleanupDone      chan struct{}
+	cleanupErr       error
+	core             windowsClientCore
+	routePolicy      []byte
+	newCore          func() (windowsClientCore, error)
+	openTunnel       func(string, int) (device.Device, error)
+	resolveInterface func(context.Context, string) (int, error)
+}
+
+type windowsClientCore interface {
+	Connect(context.Context, clientcore.ConnectRequest) (clienthost.Snapshot, error)
+	SetClientRoutesJSON([]byte) error
+	AttachPacketDevice(context.Context, device.Device, uint32) error
+	RuntimeSnapshot() clientcore.RuntimeSnapshot
+	FetchCatalog(context.Context) ([]byte, error)
+	Close(context.Context) error
 }
 
 type windowsRouteManager interface {
@@ -50,22 +65,40 @@ func NewWindowsBackendWithStartupRecovery(routes *WindowsRouteManager, recoveryE
 }
 
 func newWindowsBackend(routes windowsRouteManager, recoveryErr error) *WindowsBackend {
-	return &WindowsBackend{routes: routes, recoveryErr: recoveryErr, startNP2: np2mobile.Start}
+	return &WindowsBackend{
+		routes: routes, recoveryErr: recoveryErr,
+		newCore: func() (windowsClientCore, error) {
+			return clientcore.NewProductionStrictHTTP3Core()
+		},
+		openTunnel:       func(name string, mtu int) (device.Device, error) { return tun.Open(name, uint32(mtu)) },
+		resolveInterface: waitForInterface,
+	}
 }
 
-func (*WindowsBackend) SetRoutes(raw []byte) error {
-	return np2mobile.SetClientRoutesJSON(string(raw))
+func (b *WindowsBackend) SetRoutes(raw []byte) error {
+	if err := clientcore.ValidateClientRoutesJSON(raw); err != nil {
+		return err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.connecting || b.core != nil {
+		return ErrControllerBusy
+	}
+	b.routePolicy = append(b.routePolicy[:0], raw...)
+	return nil
 }
 
 func (b *WindowsBackend) Connect(ctx context.Context, profile []byte, secret string) (BackendStatus, error) {
 	b.mu.Lock()
-	if b.endpoint != nil || b.connecting || b.routes == nil {
+	if b.endpoint != nil || b.core != nil || b.connecting || b.routes == nil ||
+		b.newCore == nil || b.openTunnel == nil || b.resolveInterface == nil {
 		b.mu.Unlock()
 		return BackendStatus{}, ErrControllerBusy
 	}
 	b.connecting = true
 	b.generation++
 	generation := b.generation
+	routePolicy := append([]byte(nil), b.routePolicy...)
 	b.mu.Unlock()
 	defer func() {
 		b.mu.Lock()
@@ -109,37 +142,69 @@ func (b *WindowsBackend) Connect(ctx context.Context, profile []byte, secret str
 		cleanupPrepared()
 		return BackendStatus{}, err
 	}
+	core, err := b.newCore()
+	if err != nil || core == nil {
+		cleanupPrepared()
+		if err != nil {
+			return BackendStatus{}, err
+		}
+		return BackendStatus{}, clientcore.ErrNoRuntime
+	}
+	closeCore := func() error {
+		closeContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		return core.Close(closeContext)
+	}
 	np2Started := time.Now()
-	if err := b.startNP2(string(profile), secret); err != nil {
+	if _, err := core.Connect(ctx, clientcore.ConnectRequest{
+		OperationID: "windows-connect", ProfileID: "windows-active", Profile: loaded,
+	}); err != nil {
+		_ = closeCore()
 		cleanupPrepared()
 		return BackendStatus{}, err
 	}
 	np2Duration := time.Since(np2Started)
 	windowsStarted := time.Now()
 	fail := func(endpoint device.Device, attached bool) {
-		cleanupContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		_ = b.routes.Cleanup(cleanupContext)
-		cancel()
-		np2mobile.Stop()
+		_ = closeCore()
 		if endpoint != nil && !attached {
 			endpoint.Close()
 		}
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		cleanupErr := b.routes.Cleanup(cleanupContext)
+		cancel()
+		if cleanupErr != nil {
+			b.mu.Lock()
+			b.recoveryErr = cleanupErr
+			b.mu.Unlock()
+		}
 	}
-	connectedAddresses := splitAddresses(np2mobile.ServerAddresses())
-	if len(connectedAddresses) == 0 {
+	if len(routePolicy) > 0 {
+		if err := core.SetClientRoutesJSON(routePolicy); err != nil {
+			fail(nil, false)
+			return BackendStatus{}, err
+		}
+	}
+	runtime := core.RuntimeSnapshot()
+	connectedAddresses := runtime.ServerAddresses
+	if runtime.Carrier != clienthost.CarrierHTTP3WebTransport || len(connectedAddresses) == 0 {
 		fail(nil, false)
-		return BackendStatus{}, errors.New("NP/2 carrier returned no route exclusions")
+		return BackendStatus{}, errors.New("strict HTTP/3 core returned no route exclusions")
+	}
+	if !containsAllAddresses(addresses, connectedAddresses) {
+		fail(nil, false)
+		return BackendStatus{}, errors.New("strict HTTP/3 core returned an unprepared route exclusion")
 	}
 	if err := ctx.Err(); err != nil {
 		fail(nil, false)
 		return BackendStatus{}, err
 	}
-	endpoint, err := tun.Open(windowsAdapterName, windowsTunnelMTU)
+	endpoint, err := b.openTunnel(windowsAdapterName, windowsTunnelMTU)
 	if err != nil {
 		fail(nil, false)
 		return BackendStatus{}, err
 	}
-	interfaceIndex, err := waitForInterface(ctx, windowsAdapterName)
+	interfaceIndex, err := b.resolveInterface(ctx, windowsAdapterName)
 	if err != nil {
 		fail(endpoint, false)
 		return BackendStatus{}, err
@@ -148,7 +213,7 @@ func (b *WindowsBackend) Connect(ctx context.Context, profile []byte, secret str
 		fail(endpoint, false)
 		return BackendStatus{}, err
 	}
-	if err := np2mobile.StartWindowsPacketTunnel(endpoint, windowsTunnelMTU); err != nil {
+	if err := core.AttachPacketDevice(ctx, endpoint, windowsTunnelMTU); err != nil {
 		fail(endpoint, false)
 		return BackendStatus{}, err
 	}
@@ -156,6 +221,7 @@ func (b *WindowsBackend) Connect(ctx context.Context, profile []byte, secret str
 	stale := b.generation != generation || !b.connecting
 	if !stale {
 		b.endpoint = endpoint
+		b.core = core
 	}
 	b.mu.Unlock()
 	if stale || ctx.Err() != nil {
@@ -193,14 +259,24 @@ func (b *WindowsBackend) ensureRoutesRecovered(ctx context.Context) error {
 }
 
 func (b *WindowsBackend) Disconnect(ctx context.Context) error {
+	if ctx == nil {
+		return context.Canceled
+	}
 	b.mu.Lock()
 	b.generation++
 	b.connecting = false
 	b.endpoint = nil
+	core := b.core
+	b.core = nil
 	b.mu.Unlock()
-	np2mobile.Stop()
+	var closeErr error
+	if core != nil {
+		closeContext, cancel := context.WithTimeout(ctx, 15*time.Second)
+		closeErr = core.Close(closeContext)
+		cancel()
+	}
 	b.startRouteCleanup()
-	return nil
+	return closeErr
 }
 
 func (b *WindowsBackend) startRouteCleanup() {
@@ -258,38 +334,60 @@ func (b *WindowsBackend) WaitForCleanup(ctx context.Context) error {
 }
 
 func (b *WindowsBackend) Snapshot() BackendStatus {
+	b.mu.Lock()
+	core := b.core
+	b.mu.Unlock()
+	if core == nil {
+		return BackendStatus{}
+	}
+	runtime := core.RuntimeSnapshot()
+	carrier := ""
+	if runtime.Carrier == clienthost.CarrierHTTP3WebTransport {
+		carrier = "http3"
+	}
 	return BackendStatus{
-		Carrier: np2mobile.Carrier(), ServerAddresses: splitAddresses(np2mobile.ServerAddresses()),
-		UploadBytesPerSecond: np2mobile.UploadBytesPerSecond(), DownloadBytesPerSecond: np2mobile.DownloadBytesPerSecond(),
-		UploadTotalBytes: np2mobile.UploadTotalBytes(), DownloadTotalBytes: np2mobile.DownloadTotalBytes(),
-		UDPMode: np2mobile.UDPMode(), CarrierPoolTarget: np2mobile.CarrierPoolTarget(),
-		CarrierPoolHealthy: np2mobile.CarrierPoolHealthy(), CarrierPoolAssignments: np2mobile.CarrierPoolAssignments(),
+		Carrier: carrier, ServerAddresses: append([]string(nil), runtime.ServerAddresses...),
+		UploadBytesPerSecond: runtime.UploadBytesPerSecond, DownloadBytesPerSecond: runtime.DownloadBytesPerSecond,
+		UploadTotalBytes: runtime.UploadTotalBytes, DownloadTotalBytes: runtime.DownloadTotalBytes,
+		UDPMode: runtime.UDPMode, CarrierPoolTarget: runtime.CarrierPoolTarget,
+		CarrierPoolHealthy: runtime.CarrierPoolHealthy, CarrierPoolAssignments: runtime.CarrierPoolAssignments,
 	}
 }
 
-func (*WindowsBackend) FetchCatalog(ctx context.Context) ([]byte, error) {
+func (b *WindowsBackend) FetchCatalog(ctx context.Context) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	raw, err := np2mobile.CatalogJSON()
-	if err != nil {
-		return nil, err
+	b.mu.Lock()
+	core := b.core
+	b.mu.Unlock()
+	if core == nil {
+		return nil, clientcore.ErrNotConnected
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return []byte(raw), nil
+	return core.FetchCatalog(ctx)
 }
 
-func splitAddresses(value string) []string {
-	var result []string
-	for _, address := range strings.Split(value, ",") {
-		address = strings.TrimSpace(address)
-		if address != "" {
-			result = append(result, address)
+func containsAllAddresses(prepared, connected []string) bool {
+	allowed := make(map[netip.Addr]struct{}, len(prepared))
+	for _, value := range prepared {
+		address, err := netip.ParseAddr(strings.TrimSpace(value))
+		if err == nil {
+			allowed[address.Unmap()] = struct{}{}
 		}
 	}
-	return result
+	if len(connected) == 0 {
+		return false
+	}
+	for _, value := range connected {
+		address, err := netip.ParseAddr(strings.TrimSpace(value))
+		if err != nil {
+			return false
+		}
+		if _, ok := allowed[address.Unmap()]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func waitForInterface(ctx context.Context, name string) (int, error) {

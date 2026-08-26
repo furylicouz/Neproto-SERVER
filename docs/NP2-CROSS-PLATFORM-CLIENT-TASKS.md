@@ -302,6 +302,15 @@ tests plus vet pass.
 
 ### Task C4 — Adapt Windows strict tunnel lifecycle
 
+**Status:** ✅ Completed on the implementation branch. The Windows service now
+owns one strict production ClientCore instance rather than calling the global
+`np2mobile` controller. Endpoint exclusions are journaled before authentication;
+Wintun creation, tunnel route activation and packet attachment occur only after
+the authenticated core reports HTTP/3 WebTransport and a prepared endpoint set.
+Focused fakes prove ordering, unprepared-endpoint rejection and operation-owned
+rollback. The full Go suite and `go vet ./...` pass without launching the local
+Windows client, service, setup, Wintun or route workflow.
+
 **Acceptance criteria:**
 
 - Service uses ClientCore HTTP/3-only path.
