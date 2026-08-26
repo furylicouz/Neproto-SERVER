@@ -32,7 +32,7 @@ fast-path. Большие datagrams автоматически использу�
 
 ## Сборка
 
-Требования: macOS, Xcode 26, Go 1.26.5 и Apple Developer Team с разрешённой
+Требования: macOS, Xcode 26, Go 1.26.7 и Apple Developer Team с разрешённой
 Network Extensions capability.
 
 ```bash

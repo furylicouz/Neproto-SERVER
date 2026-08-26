@@ -9,7 +9,7 @@ readonly ROOT_DIR
 readonly IOS_DIR="$ROOT_DIR/clients/ios"
 readonly CACHE_DIR="${NEPROTO_IOS_CACHE:-$HOME/Library/Caches/NeProtoBuild}"
 readonly FRAMEWORK_DIR="$IOS_DIR/Frameworks"
-readonly GO_VERSION="go1.26.5"
+readonly GO_VERSION="go1.26.7"
 readonly GOMOBILE_VERSION="v0.0.0-20260709172247-6129f5bee9d5"
 NP2_VERSION=$(tr -d '[:space:]' <"$ROOT_DIR/VERSION")
 readonly NP2_VERSION

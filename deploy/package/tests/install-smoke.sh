@@ -8,6 +8,7 @@ temporary_root=${NEPROTO_TEST_TMPDIR:-/var/lib}
   exit 1
 }
 "$package_dir/tests/platform-smoke.sh"
+"$package_dir/tests/sync-certificate-smoke.sh"
 architecture=${1:-amd64}
 expected_version=${2:-}
 [[ -x $package_dir/bin/$architecture/neproto-server ]]

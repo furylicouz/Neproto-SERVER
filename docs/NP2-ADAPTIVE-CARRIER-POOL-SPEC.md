@@ -123,8 +123,8 @@ No destination, credential, route token, or per-stream identifier may be logged.
 
 ```sh
 C:/Neproto/.tools/go/bin/go.exe test ./... -count=1
-ssh mac-89 'cd /Users/intimnyjprysik/.local/share/neproto/ios-stage2 && $HOME/.local/share/neproto/go1.26.5/bin/go test ./internal/tunstack ./mobile/np2mobile'
-ssh mac-89 'cd /Users/intimnyjprysik/.local/share/neproto/ios-stage2 && GO_BIN=$HOME/.local/share/neproto/go1.26.5/bin/go ./clients/ios/Scripts/build-frameworks.sh'
+ssh mac-89 'cd /Users/intimnyjprysik/.local/share/neproto/ios-stage2 && $HOME/.local/share/neproto/go1.26.7/bin/go test ./internal/tunstack ./mobile/np2mobile'
+ssh mac-89 'cd /Users/intimnyjprysik/.local/share/neproto/ios-stage2 && GO_BIN=$HOME/.local/share/neproto/go1.26.7/bin/go ./clients/ios/Scripts/build-frameworks.sh'
 docker run --rm -v C:/Neproto:/repo -w /repo ubuntu:24.04 bash deploy/package/tests/install-smoke.sh
 ```
 
