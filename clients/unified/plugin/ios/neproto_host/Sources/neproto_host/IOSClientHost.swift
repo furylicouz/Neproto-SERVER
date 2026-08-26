@@ -28,9 +28,9 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
     self.tunnel = tunnel ?? IOSTunnelCoordinator()
     flutter = ClientHostFlutterApi(binaryMessenger: binaryMessenger)
     self.tunnel.statusChanged = { [weak self] status in
-      guard let self else { return }
-      self.record(level: .info, stage: .unknown, code: nil, message: "Tunnel state changed.", operationID: "status-change")
-      Task {
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        self.record(level: .info, stage: .unknown, code: nil, message: "Tunnel state changed.", operationID: "status-change")
         try? await self.flutter.statusChanged(status: status)
       }
     }

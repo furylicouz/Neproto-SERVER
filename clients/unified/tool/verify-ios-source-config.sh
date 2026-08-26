@@ -126,4 +126,8 @@ fi
 grep -Fq 'MainActor.assumeIsolated {' "$plugin_registration" || \
     fail 'native host registration must install Pigeon handlers synchronously on MainActor'
 
+readonly ios_client_host="$ROOT_DIR/clients/unified/plugin/ios/neproto_host/Sources/neproto_host/IOSClientHost.swift"
+grep -Fq 'Task { @MainActor [weak self] in' "$ios_client_host" || \
+    fail 'native-to-Flutter status callbacks must be dispatched explicitly on MainActor'
+
 echo "PASS: iOS source configuration matches $release_version and $module_toolchain"
