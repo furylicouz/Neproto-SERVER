@@ -6,6 +6,8 @@
 
 #include <memory>
 
+#include "windows_client_host.h"
+
 namespace neproto_host {
 
 class NeprotoHostPlugin : public flutter::Plugin {
@@ -24,6 +26,10 @@ class NeprotoHostPlugin : public flutter::Plugin {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue> &method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+
+ private:
+  flutter::BinaryMessenger* messenger_ = nullptr;
+  std::unique_ptr<WindowsClientHost> host_;
 };
 
 }  // namespace neproto_host

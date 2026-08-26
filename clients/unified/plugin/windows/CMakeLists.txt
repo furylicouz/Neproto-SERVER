@@ -25,6 +25,10 @@ list(APPEND PLUGIN_SOURCES
   "neproto_host_plugin.h"
   "pipe_client.cpp"
   "pipe_client.h"
+  "service_client.cpp"
+  "service_client.h"
+  "windows_client_host.cpp"
+  "windows_client_host.h"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -90,10 +94,14 @@ add_executable(${TEST_RUNNER}
   test/neproto_host_plugin_test.cpp
   test/json_value_test.cpp
   test/pipe_client_test.cpp
+  test/service_client_test.cpp
+  test/windows_client_host_test.cpp
   ${PLUGIN_SOURCES}
 )
 apply_standard_settings(${TEST_RUNNER})
-target_include_directories(${TEST_RUNNER} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(${TEST_RUNNER} PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/neproto_host")
 target_link_libraries(${TEST_RUNNER} PRIVATE flutter_wrapper_plugin)
 target_link_libraries(${TEST_RUNNER} PRIVATE gtest_main gmock)
 # flutter_wrapper_plugin has link dependencies on the Flutter DLL.

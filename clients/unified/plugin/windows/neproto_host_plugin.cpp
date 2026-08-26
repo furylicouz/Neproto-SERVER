@@ -25,6 +25,9 @@ void NeprotoHostPlugin::RegisterWithRegistrar(
 
   auto plugin = std::make_unique<NeprotoHostPlugin>();
 
+  plugin->messenger_ = registrar->messenger();
+  ClientHostApi::SetUp(plugin->messenger_, plugin->host_.get());
+
   channel->SetMethodCallHandler(
       [plugin_pointer = plugin.get()](const auto &call, auto result) {
         plugin_pointer->HandleMethodCall(call, std::move(result));
@@ -33,9 +36,15 @@ void NeprotoHostPlugin::RegisterWithRegistrar(
   registrar->AddPlugin(std::move(plugin));
 }
 
-NeprotoHostPlugin::NeprotoHostPlugin() {}
+NeprotoHostPlugin::NeprotoHostPlugin()
+    : host_(std::make_unique<WindowsClientHost>(
+          std::make_unique<ServiceClient>(CreatePipeServiceTransport()))) {}
 
-NeprotoHostPlugin::~NeprotoHostPlugin() {}
+NeprotoHostPlugin::~NeprotoHostPlugin() {
+  if (messenger_ != nullptr) {
+    ClientHostApi::SetUp(messenger_, nullptr);
+  }
+}
 
 void NeprotoHostPlugin::HandleMethodCall(
     const flutter::MethodCall<flutter::EncodableValue> &method_call,
