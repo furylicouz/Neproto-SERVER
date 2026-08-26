@@ -452,6 +452,14 @@ the complete write/read exchange. Partial I/O is completed within that same
 deadline; a zero, truncated or larger-than-256-KiB frame fails closed before
 JSON decoding.
 
+The replacement client uses the `host.v1.*` method namespace on the existing
+pipe. This keeps the legacy WPF method/result shapes available during rollback.
+Host v1 failures retain the legacy redacted `error` string and additionally
+carry a validated `host_error` object with code, stage, retryability and
+operation ID. Host v1 results contain only capabilities, profile summaries,
+tunnel snapshots or bounded diagnostics; persisted profile records and DPAPI
+material are never serialized into those responses.
+
 SYSTEM and Administrators require administrative access. Unelevated local
 interactive users require only the rights needed to invoke the client API.
 Anonymous, network and remote-pipe access are denied. The exact descriptor is

@@ -260,6 +260,12 @@ compilation remain.
 
 ### Task C2 — Version and harden service IPC
 
+**Status:** 🔄 In progress. A backward-compatible `host.v1.*` namespace now
+provides version negotiation, stable structured errors, redacted profile
+summaries, monotonic status snapshots and bounded diagnostics. Existing WPF
+methods remain covered. Pipe locality, ACL/token hardening and Windows-only
+identity tests remain.
+
 **Acceptance criteria:**
 
 - Service implements Host API-compatible version negotiation/errors.

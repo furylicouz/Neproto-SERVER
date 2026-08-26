@@ -1,5 +1,10 @@
 package clienthost
 
+const (
+	HostAPIMajor = 1
+	HostAPIMinor = 0
+)
+
 type State string
 
 const (

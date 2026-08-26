@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync/atomic"
 
 	"neproto.local/chameleon/internal/cluster"
 )
@@ -12,6 +13,7 @@ import (
 type API struct {
 	controller *Controller
 	store      *Store
+	sequence   atomic.Int64
 }
 
 func NewAPI(controller *Controller, store *Store) *API {
@@ -24,6 +26,9 @@ func (a *API) Handle(request Request) Response {
 	}
 	var result any
 	var err error
+	if isHostV1Method(request.Method) {
+		return a.handleHostV1(request)
+	}
 	switch request.Method {
 	case MethodStatus:
 		err = decodeParams(request.Params, &struct{}{})
