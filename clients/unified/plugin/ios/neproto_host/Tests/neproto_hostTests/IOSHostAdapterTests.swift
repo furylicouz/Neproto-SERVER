@@ -1,6 +1,7 @@
 import Foundation
 import NeProtoCore
 import NetworkExtension
+import Security
 import Testing
 @testable import neproto_host
 
@@ -60,6 +61,26 @@ struct IOSHostAdapterTests {
     #expect(IOSVPNStatusMapper.carrier(.failed) == .none)
   }
 
+  @Test("profile import failures keep their stable boundary")
+  func classifiesProfileImportFailures() {
+    let invalid = IOSClientHost.importFailure(for: OnboardingProfileError.malformedPayload)
+    #expect(invalid.pigeonCode == "INVALID_PROFILE")
+    #expect(invalid.diagnosticCode == .invalidProfile)
+    #expect(invalid.stage == .profileValidation)
+
+    let credential = IOSClientHost.importFailure(
+      for: KeychainSecretStoreError.unexpectedStatus(errSecMissingEntitlement)
+    )
+    #expect(credential.pigeonCode == "CREDENTIAL_UNAVAILABLE")
+    #expect(credential.diagnosticCode == .credentialUnavailable)
+    #expect(credential.stage == .credentialLoad)
+
+    let unexpected = IOSClientHost.importFailure(for: ImportProbeError())
+    #expect(unexpected.pigeonCode == "INTERNAL")
+    #expect(unexpected.diagnosticCode == .internalFailure)
+    #expect(unexpected.stage == .hostIpc)
+  }
+
   private func makeProfile() -> ServerProfile {
     ServerProfile(
       id: UUID(uuidString: "79D6AC07-A320-42D7-8F8F-1B8576EE7BD1")!,
@@ -74,6 +95,8 @@ struct IOSHostAdapterTests {
     )
   }
 }
+
+private struct ImportProbeError: Error {}
 
 @MainActor
 private final class FakeCredentialStore: IOSCredentialStore {
@@ -101,4 +124,3 @@ private final class FakeCredentialStore: IOSCredentialStore {
     }
   }
 }
-

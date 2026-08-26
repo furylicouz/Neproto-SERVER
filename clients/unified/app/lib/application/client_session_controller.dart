@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:neproto_host/neproto_host.dart';
 
 import '../host/client_host.dart';
@@ -170,6 +171,9 @@ final class ClientSessionController extends ChangeNotifier {
         ),
       );
       return true;
+    } on PlatformException catch (error) {
+      _setPlatformCommandError(error, operationId);
+      return false;
     } catch (_) {
       _setCommandError(operationId);
       return false;
@@ -374,6 +378,46 @@ final class ClientSessionController extends ChangeNotifier {
           stage: ErrorStage.hostIpc,
           message: 'Native host command failed.',
           retryable: true,
+          operationId: operationId,
+        ),
+      ),
+    );
+  }
+
+  void _setPlatformCommandError(PlatformException error, String operationId) {
+    final (code, stage, message, retryable) = switch (error.code) {
+      'INVALID_PROFILE' => (
+        HostErrorCode.invalidProfile,
+        ErrorStage.profileValidation,
+        'Native profile validation rejected the onboarding value.',
+        false,
+      ),
+      'CREDENTIAL_UNAVAILABLE' => (
+        HostErrorCode.credentialUnavailable,
+        ErrorStage.credentialLoad,
+        'iOS Keychain could not save the profile credential.',
+        false,
+      ),
+      'INTERNAL' => (
+        HostErrorCode.internalFailure,
+        ErrorStage.hostIpc,
+        'The native profile store rejected the import.',
+        false,
+      ),
+      _ => (
+        HostErrorCode.hostUnavailable,
+        ErrorStage.hostIpc,
+        'Native host command failed.',
+        true,
+      ),
+    };
+    _setState(
+      _state.copyWith(
+        error: HostError(
+          code: code,
+          stage: stage,
+          message: message,
+          retryable: retryable,
           operationId: operationId,
         ),
       ),

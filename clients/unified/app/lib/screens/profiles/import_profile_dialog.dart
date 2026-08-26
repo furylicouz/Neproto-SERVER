@@ -4,7 +4,7 @@ import '../../design/app_theme.dart';
 
 Future<void> showImportProfileDialog(
   BuildContext context, {
-  required Future<bool> Function(String value) onImport,
+  required Future<String?> Function(String value) onImport,
 }) {
   return showDialog<void>(
     context: context,
@@ -15,7 +15,7 @@ Future<void> showImportProfileDialog(
 final class _ImportProfileDialog extends StatefulWidget {
   const _ImportProfileDialog({required this.onImport});
 
-  final Future<bool> Function(String value) onImport;
+  final Future<String?> Function(String value) onImport;
 
   @override
   State<_ImportProfileDialog> createState() => _ImportProfileDialogState();
@@ -41,18 +41,18 @@ final class _ImportProfileDialogState extends State<_ImportProfileDialog> {
       _busy = true;
       _error = null;
     });
-    final accepted = await widget.onImport(_controller.text);
+    final error = await widget.onImport(_controller.text);
     if (!mounted) {
       return;
     }
-    if (accepted) {
+    if (error == null) {
       _controller.clear();
       Navigator.of(context).pop();
       return;
     }
     setState(() {
       _busy = false;
-      _error = 'Проверьте строку импорта NP/2';
+      _error = error;
     });
   }
 

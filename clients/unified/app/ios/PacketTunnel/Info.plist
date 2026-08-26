@@ -19,7 +19,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NeProtoKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)ru.neproto.shared</string>
+	<string>$(DEVELOPMENT_TEAM).ru.neproto.shared</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

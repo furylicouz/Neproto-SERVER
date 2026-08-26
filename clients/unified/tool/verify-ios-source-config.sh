@@ -86,6 +86,18 @@ grep -q '^[[:space:]]*SWIFT_VERSION: "5.0"$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Flutter iOS targets must use Swift 5 compatibility mode'
 grep -q '^[[:space:]]*CLANG_ENABLE_MODULES: YES$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Flutter iOS targets must enable Clang modules'
+for plist in \
+    "$ROOT_DIR/clients/unified/app/ios/Runner/Info.plist" \
+    "$ROOT_DIR/clients/unified/app/ios/PacketTunnel/Info.plist"; do
+    grep -Fq '<string>$(DEVELOPMENT_TEAM).ru.neproto.shared</string>' "$plist" || \
+        fail "runtime Keychain group must include DEVELOPMENT_TEAM in $plist"
+done
+for entitlements in \
+    "$ROOT_DIR/clients/unified/app/ios/Runner/Runner.entitlements" \
+    "$ROOT_DIR/clients/unified/app/ios/PacketTunnel/PacketTunnel.entitlements"; do
+    grep -Fq '<string>$(AppIdentifierPrefix)ru.neproto.shared</string>' "$entitlements" || \
+        fail "signed Keychain group must include AppIdentifierPrefix in $entitlements"
+done
 grep -q '^[[:space:]]*- name: Run Prepare Flutter Framework Script$' \
     "$ROOT_DIR/clients/unified/app/ios/project.yml" || fail 'Runner scheme has no Flutter SPM prepare action'
 grep -Fq 'script: /bin/sh "$FLUTTER_ROOT/packages/flutter_tools/bin/xcode_backend.sh" prepare' \

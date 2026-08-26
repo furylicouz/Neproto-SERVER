@@ -27,7 +27,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NeProtoKeychainAccessGroup</key>
-	<string>$(AppIdentifierPrefix)ru.neproto.shared</string>
+	<string>$(DEVELOPMENT_TEAM).ru.neproto.shared</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

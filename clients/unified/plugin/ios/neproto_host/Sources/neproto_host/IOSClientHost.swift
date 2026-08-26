@@ -2,6 +2,13 @@ import Flutter
 import Foundation
 import NeProtoCore
 
+struct IOSImportFailure {
+  let pigeonCode: String
+  let diagnosticCode: HostErrorCode
+  let stage: ErrorStage
+  let message: String
+}
+
 @MainActor
 final class IOSClientHost: @preconcurrency ClientHostApi {
   static let apiVersion = HostApiVersion(major: 1, minor: 0)
@@ -58,8 +65,15 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
       record(level: .info, stage: .profileValidation, code: nil, message: "Profile imported.", operationID: request.operationId)
       return result
     } catch {
-      record(level: .error, stage: .profileValidation, code: .invalidProfile, message: "Profile import failed.", operationID: request.operationId)
-      throw Self.pigeonError(code: "INVALID_PROFILE", message: "The NP/2 profile is invalid.")
+      let failure = Self.importFailure(for: error)
+      record(
+        level: .error,
+        stage: failure.stage,
+        code: failure.diagnosticCode,
+        message: failure.message,
+        operationID: request.operationId
+      )
+      throw Self.pigeonError(code: failure.pigeonCode, message: failure.message)
     }
   }
 
@@ -178,6 +192,31 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
           value.utf8.allSatisfy({ $0 >= 0x21 && $0 <= 0x7e }) else {
       throw pigeonError(code: "INVALID_PROFILE", message: "The operation identifier is invalid.")
     }
+  }
+
+  static func importFailure(for error: Error) -> IOSImportFailure {
+    if error is OnboardingProfileError || error is OnboardingImportResolutionError {
+      return IOSImportFailure(
+        pigeonCode: "INVALID_PROFILE",
+        diagnosticCode: .invalidProfile,
+        stage: .profileValidation,
+        message: "The NP/2 onboarding value failed native validation."
+      )
+    }
+    if error is KeychainSecretStoreError {
+      return IOSImportFailure(
+        pigeonCode: "CREDENTIAL_UNAVAILABLE",
+        diagnosticCode: .credentialUnavailable,
+        stage: .credentialLoad,
+        message: "The profile credential could not be saved in Keychain."
+      )
+    }
+    return IOSImportFailure(
+      pigeonCode: "INTERNAL",
+      diagnosticCode: .internalFailure,
+      stage: .hostIpc,
+      message: "The native profile store rejected the import."
+    )
   }
 
   private static func pigeonError(code: String, message: String) -> PigeonError {

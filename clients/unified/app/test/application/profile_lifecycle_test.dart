@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neproto_client/application/client_session_controller.dart';
 import 'package:neproto_client/host/fake_client_host.dart';
@@ -68,6 +69,24 @@ void main() {
     expect(await controller.importProfile('\n\t$onboarding \r\n'), isTrue);
     expect(host.importCalls, 1);
     expect(observed, onboarding);
+  });
+
+  test('native credential import failure keeps its stable category', () async {
+    final host = FakeClientHost(
+      onImport: (_) {
+        throw PlatformException(code: 'CREDENTIAL_UNAVAILABLE');
+      },
+    );
+    final controller = ClientSessionController(host);
+    addTearDown(controller.dispose);
+    await controller.start();
+
+    expect(
+      await controller.importProfile('np2://import/v2/one-time-secret-value'),
+      isFalse,
+    );
+    expect(controller.state.error?.code, HostErrorCode.credentialUnavailable);
+    expect(controller.state.error?.stage, ErrorStage.credentialLoad);
   });
 
   test('select and remove update immutable profile state', () async {

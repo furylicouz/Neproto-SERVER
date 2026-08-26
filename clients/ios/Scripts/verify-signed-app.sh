@@ -11,6 +11,7 @@ readonly APP_PATH="$1"
 readonly EXTENSION_PATH="$APP_PATH/PlugIns/PacketTunnel.appex"
 readonly NETWORK_EXTENSION_KEY="com.apple.developer.networking.networkextension"
 readonly KEYCHAIN_GROUP_KEY="keychain-access-groups"
+shared_runtime_group=""
 
 for bundle in "$APP_PATH" "$EXTENSION_PATH"; do
     if [[ ! -d "$bundle" ]]; then
@@ -31,6 +32,21 @@ for bundle in "$APP_PATH" "$EXTENSION_PATH"; do
         echo "Missing shared Keychain entitlement in $bundle" >&2
         exit 1
     fi
+
+    runtime_group="$(/usr/libexec/PlistBuddy -c "Print :NeProtoKeychainAccessGroup" "$bundle/Info.plist" 2>/dev/null || true)"
+    if [[ -z "$runtime_group" || "$runtime_group" == *'$('* ]]; then
+        echo "Missing or unresolved NeProtoKeychainAccessGroup in $bundle" >&2
+        exit 1
+    fi
+    if ! grep -Fq "<string>$runtime_group</string>" <<<"$entitlements"; then
+        echo "Runtime Keychain group is not present in signed entitlements for $bundle" >&2
+        exit 1
+    fi
+    if [[ -n "$shared_runtime_group" && "$runtime_group" != "$shared_runtime_group" ]]; then
+        echo "Application and Packet Tunnel use different runtime Keychain groups" >&2
+        exit 1
+    fi
+    shared_runtime_group="$runtime_group"
 done
 
 echo "Signed application and Packet Tunnel entitlements are valid."

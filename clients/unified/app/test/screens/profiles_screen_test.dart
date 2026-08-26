@@ -28,7 +28,7 @@ void main() {
           },
           onImport: (value) async {
             imported = value;
-            return true;
+            return null;
           },
         ),
       ),
@@ -64,7 +64,7 @@ void main() {
           busy: false,
           onSelect: (_) async {},
           onRemove: (_) async {},
-          onImport: (_) async => false,
+          onImport: (_) async => 'Профиль отклонён',
         ),
       ),
     );
@@ -91,12 +91,46 @@ void main() {
           busy: false,
           onSelect: (_) async {},
           onRemove: (_) async {},
-          onImport: (_) async => true,
+          onImport: (_) async => null,
         ),
       ),
     );
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('import dialog renders the native failure category', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: ProfilesScreen(
+          profiles: const <ProfileSummary>[],
+          busy: false,
+          onSelect: (_) async {},
+          onRemove: (_) async {},
+          onImport: (_) async =>
+              'iOS Keychain не сохранил ключ профиля (CREDENTIAL_UNAVAILABLE)',
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('import-profile')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('onboarding-input')),
+      'np2://import/v2/one-time-value',
+    );
+    await tester.tap(find.text('Импортировать'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'iOS Keychain не сохранил ключ профиля (CREDENTIAL_UNAVAILABLE)',
+      ),
+      findsOneWidget,
+    );
   });
 }
 

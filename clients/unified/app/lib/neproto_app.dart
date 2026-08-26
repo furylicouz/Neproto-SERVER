@@ -79,7 +79,12 @@ final class _NeprotoAppState extends State<NeprotoApp>
                   busy: state.commandPending,
                   onSelect: _controller.selectProfile,
                   onRemove: _controller.removeProfile,
-                  onImport: _controller.importProfile,
+                  onImport: (value) async {
+                    final accepted = await _controller.importProfile(value);
+                    return accepted
+                        ? null
+                        : _profileImportErrorMessage(_controller.state.error);
+                  },
                 ),
                 DiagnosticsScreen(
                   snapshot: state.diagnostics,
@@ -121,4 +126,16 @@ final class _NeprotoAppState extends State<NeprotoApp>
       ),
     );
   }
+}
+
+String _profileImportErrorMessage(HostError? error) {
+  return switch (error?.code) {
+    HostErrorCode.invalidProfile =>
+      'Строка отклонена native-парсером (INVALID_PROFILE)',
+    HostErrorCode.credentialUnavailable =>
+      'iOS Keychain не сохранил ключ профиля (CREDENTIAL_UNAVAILABLE)',
+    HostErrorCode.internalFailure =>
+      'Native-хранилище профилей отклонило импорт (INTERNAL)',
+    _ => 'Системный модуль iOS недоступен (HOST_UNAVAILABLE)',
+  };
 }

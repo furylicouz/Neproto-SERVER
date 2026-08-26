@@ -19,7 +19,7 @@ final class ProfilesScreen extends StatelessWidget {
   final bool busy;
   final Future<void> Function(String id) onSelect;
   final Future<void> Function(String id) onRemove;
-  final Future<bool> Function(String value) onImport;
+  final Future<String?> Function(String value) onImport;
 
   @override
   Widget build(BuildContext context) {
