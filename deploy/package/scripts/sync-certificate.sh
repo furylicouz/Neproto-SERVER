@@ -1,7 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-installation=/etc/neproto/installation.json
+test_root=
+if [[ -n ${NEPROTO_TEST_ROOT:-} ]]; then
+  [[ ${NEPROTO_TEST_MODE:-} == 1 ]] || {
+    printf 'NEPROTO_TEST_ROOT is only available in test mode\n' >&2
+    exit 1
+  }
+  [[ $NEPROTO_TEST_ROOT == /* && -d $NEPROTO_TEST_ROOT ]] || {
+    printf 'invalid NeProto test root\n' >&2
+    exit 1
+  }
+  test_root=$(cd -- "$NEPROTO_TEST_ROOT" && pwd -P)
+  [[ $test_root != / ]] || {
+    printf 'invalid NeProto test root\n' >&2
+    exit 1
+  }
+fi
+
+installation=$test_root/etc/neproto/installation.json
 [[ -f $installation ]] || { printf 'missing %s\n' "$installation" >&2; exit 1; }
 
 domain=$(sed -n 's/.*"domain"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$installation")
@@ -12,19 +29,21 @@ service_gid=$(sed -n 's/.*"service_gid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).
   exit 1
 }
 
-source_directory=/etc/letsencrypt/live/$domain
-destination=/etc/neproto/tls
+source_directory=$test_root/etc/letsencrypt/live/$domain
+destination=$test_root/etc/neproto/tls
 [[ -s $source_directory/fullchain.pem && -s $source_directory/privkey.pem ]] || {
   printf 'certificate for %s is unavailable\n' "$domain" >&2
   exit 1
 }
 
-install -d -o root -g "$service_gid" -m 0750 "$destination"
+install -d -o root -m 0750 "$destination"
+chown 0:"$service_gid" "$destination"
 copy_atomic() {
   local source=$1 target=$2 mode_value=$3 temporary
   temporary=$(mktemp "$destination/.certificate.XXXXXX")
   trap 'rm -f -- "$temporary"' RETURN
-  install -o root -g "$service_gid" -m "$mode_value" "$source" "$temporary"
+  install -o root -m "$mode_value" "$source" "$temporary"
+  chown 0:"$service_gid" "$temporary"
   mv -f -- "$temporary" "$target"
   trap - RETURN
 }
