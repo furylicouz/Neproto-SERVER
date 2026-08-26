@@ -53,6 +53,23 @@ void main() {
     },
   );
 
+  test('outer paste whitespace is removed before native import', () async {
+    String? observed;
+    final host = FakeClientHost(
+      onImport: (request) {
+        observed = request.onboardingValue;
+      },
+    );
+    final controller = ClientSessionController(host);
+    addTearDown(controller.dispose);
+    await controller.start();
+
+    const onboarding = 'np2://import/v2/one-time-secret-value';
+    expect(await controller.importProfile('\n\t$onboarding \r\n'), isTrue);
+    expect(host.importCalls, 1);
+    expect(observed, onboarding);
+  });
+
   test('select and remove update immutable profile state', () async {
     final host = FakeClientHost(
       profiles: <ProfileSummary>[

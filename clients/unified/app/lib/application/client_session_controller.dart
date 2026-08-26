@@ -145,8 +145,9 @@ final class ClientSessionController extends ChangeNotifier {
     if (!_state.ready || _state.commandPending) {
       return false;
     }
+    final normalizedOnboardingValue = onboardingValue.trim();
     try {
-      HostInputValidator.validateOnboardingValue(onboardingValue);
+      HostInputValidator.validateOnboardingValue(normalizedOnboardingValue);
     } on ArgumentError {
       _setProfileValidationError('import-invalid');
       return false;
@@ -156,7 +157,7 @@ final class ClientSessionController extends ChangeNotifier {
     try {
       final imported = await _host.importProfile(
         ImportProfileRequest(
-          onboardingValue: onboardingValue,
+          onboardingValue: normalizedOnboardingValue,
           operationId: operationId,
         ),
       );
