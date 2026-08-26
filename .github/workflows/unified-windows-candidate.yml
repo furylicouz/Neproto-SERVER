@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/cross-platform-client
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
