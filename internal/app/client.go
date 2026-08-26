@@ -7,6 +7,7 @@ import (
 	"net"
 	"time"
 
+	"neproto.local/chameleon/internal/carrier"
 	"neproto.local/chameleon/internal/carrier/http3wt"
 	"neproto.local/chameleon/internal/carrier/httpsws"
 	"neproto.local/chameleon/internal/carrier/hybrid"
@@ -308,29 +309,50 @@ func connectClientSingle(ctx context.Context, config config.Client, mode ProbeMo
 	if err != nil {
 		return nil, hybrid.Result{}, fmt.Errorf("select carrier: %w", err)
 	}
-	features, err := clientFeatures(config.Profile)
+	authenticated, err := AuthenticateClientCarrier(ctx, config, selected.Carrier)
 	if err != nil {
-		_ = selected.Carrier.Close()
 		return nil, hybrid.Result{}, err
 	}
-	if !config.DeviceID.IsZero() {
+	return authenticated, selected, nil
+}
+
+// AuthenticateClientCarrier applies the shared NP/2 feature and extension
+// contract to an already established carrier. The caller selects the carrier;
+// strict candidate code passes only HTTP/3 WebTransport here.
+func AuthenticateClientCarrier(
+	ctx context.Context,
+	clientConfig config.Client,
+	connection carrier.Carrier,
+) (*session.Authenticated, error) {
+	if ctx == nil || connection == nil {
+		if connection != nil {
+			_ = connection.Close()
+		}
+		return nil, config.ErrInvalidConfig
+	}
+	features, err := clientFeatures(clientConfig.Profile)
+	if err != nil {
+		_ = connection.Close()
+		return nil, err
+	}
+	if !clientConfig.DeviceID.IsZero() {
 		features |= protocol.FeatureDeviceIdentity
 	}
-	extensionRequest := productionClientExtensionRequest(config, selected.Carrier)
-	requiredExtensions := requiredClientExtensions(config)
-	authenticated, err := session.ConnectClient(ctx, selected.Carrier, session.AuthenticatedConfig{
-		RootSecret: config.Secret.Bytes(), ServerIdentity: config.ServerIdentity,
-		DeviceID: config.DeviceID,
-		Features: features, InitialWindow: config.InitialWindowBytes, MaxStreams: config.MaxStreams,
-		MaxCoverOverheadPercent: config.MaxCoverOverheadPercent,
+	extensionRequest := productionClientExtensionRequest(clientConfig, connection)
+	requiredExtensions := requiredClientExtensions(clientConfig)
+	authenticated, err := session.ConnectClient(ctx, connection, session.AuthenticatedConfig{
+		RootSecret: clientConfig.Secret.Bytes(), ServerIdentity: clientConfig.ServerIdentity,
+		DeviceID: clientConfig.DeviceID,
+		Features: features, InitialWindow: clientConfig.InitialWindowBytes, MaxStreams: clientConfig.MaxStreams,
+		MaxCoverOverheadPercent: clientConfig.MaxCoverOverheadPercent,
 		ExtensionRequest:        &extensionRequest, RequiredExtensions: requiredExtensions,
 		ExtensionTimeout:     500 * time.Millisecond,
-		EnableForwardSecrecy: config.EnableForwardSecrecy,
+		EnableForwardSecrecy: clientConfig.EnableForwardSecrecy,
 	})
 	if err != nil {
-		return nil, hybrid.Result{}, fmt.Errorf("authenticate session: %w", err)
+		return nil, fmt.Errorf("authenticate session: %w", err)
 	}
-	return authenticated, selected, nil
+	return authenticated, nil
 }
 
 func requiredClientExtensions(clientConfig config.Client) protocol.ExtensionCapability {

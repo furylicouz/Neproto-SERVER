@@ -121,6 +121,10 @@ pass; race execution remains a CI gate on a CGO-enabled runner.
 
 ### Task A7 — Enforce strict HTTP/3 construction
 
+**Status:** ✅ Completed on the implementation branch. The production
+constructor retains only HTTP/3 WebTransport dial and NP/2 authentication
+dependencies; focused spies prove zero alternate-carrier calls.
+
 **Acceptance criteria:**
 
 - New candidate configuration constructs one HTTP/3 connector.
