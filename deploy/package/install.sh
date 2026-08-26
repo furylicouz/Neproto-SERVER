@@ -695,7 +695,8 @@ if [[ ${NEPROTO_TEST_MODE:-} != 1 ]]; then
     install -d -o caddy -g caddy -m 0750 /var/lib/caddy
   else
     chown root:65533 "$etc_caddy/Caddyfile"
-    install -d -o 65533 -g 65533 -m 0750 /var/lib/caddy
+    install -d -o root -g root -m 0750 /var/lib/caddy
+    chown 65533:65533 /var/lib/caddy
   fi
   if ! find "$etc_neproto/users/active" -maxdepth 1 -name '*.secret' -print -quit | grep -q .; then
     "$bin_dir/neprotoctl" user add --name Administrator --profile web --no-restart
