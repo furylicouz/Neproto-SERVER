@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_ref:
+        description: Existing NP/2 release tag to package
+        required: true
+        type: string
   push:
     tags:
       - 'np2-*'
@@ -9,12 +14,18 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_VERSION: ${{ inputs.release_ref || github.ref_name }}
+  RELEASE_REF: ${{ inputs.release_ref || github.ref }}
+
 jobs:
   package-windows:
     runs-on: windows-2025
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - uses: actions/setup-go@v6
         with:
@@ -29,22 +40,22 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content -Raw VERSION).Trim()
-          if ($env:GITHUB_REF_NAME -ne $version) { throw "Tag does not match VERSION" }
+          if ($env:RELEASE_VERSION -ne $version) { throw "Release ref does not match VERSION" }
 
       - name: Build and verify Windows installer
         shell: pwsh
         run: |
-          ./clients/windows/build.ps1 -Version "${{ github.ref_name }}"
-          $setup = Get-Item "dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe"
+          ./clients/windows/build.ps1 -Version "$env:RELEASE_VERSION"
+          $setup = Get-Item "dist/windows/NeProto-Setup-$($env:RELEASE_VERSION)-x64.exe"
           & $setup.FullName /verify
           if ($LASTEXITCODE -ne 0) { throw "Installer payload verification failed" }
 
       - uses: actions/upload-artifact@v7
         with:
-          name: neproto-windows-${{ github.ref_name }}
+          name: neproto-windows-${{ env.RELEASE_VERSION }}
           path: |
-            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe
-            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe.sha256
+            dist/windows/NeProto-Setup-${{ env.RELEASE_VERSION }}-x64.exe
+            dist/windows/NeProto-Setup-${{ env.RELEASE_VERSION }}-x64.exe.sha256
           if-no-files-found: error
 
   package:
@@ -53,6 +64,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - uses: actions/setup-go@v6
         with:
@@ -66,12 +79,12 @@ jobs:
           cache-dependency-path: neproto-web/package-lock.json
 
       - name: Validate tag and source version
-        run: test "${GITHUB_REF_NAME}" = "$(tr -d '[:space:]' < VERSION)"
+        run: test "$RELEASE_VERSION" = "$(tr -d '[:space:]' < VERSION)"
 
       - name: Build reproducible server bundle
         run: |
           epoch=$(git log -1 --format=%ct)
-          SOURCE_DATE_EPOCH="$epoch" deploy/build-server-bundle.sh "$GITHUB_REF_NAME" dist
+          SOURCE_DATE_EPOCH="$epoch" deploy/build-server-bundle.sh "$RELEASE_VERSION" dist
 
       - name: Run isolated installation lifecycle
         run: |
@@ -87,23 +100,24 @@ jobs:
             bd8f82907d2a3862b528a35c1f39a639cc1bc54cbd2557284bf9ef8e62ae8504 \
             "$stage/$legacy_name" | sha256sum --check --status
           tar -xzf "$stage/$legacy_name" -C "$stage"
-          tar -xzf "dist/neproto-server-bundle-$GITHUB_REF_NAME.tar.gz" -C "$stage"
-          sudo "$stage/neproto-server-bundle-$GITHUB_REF_NAME/tests/legacy-updater-sandbox-smoke.sh" \
+          tar -xzf "dist/neproto-server-bundle-$RELEASE_VERSION.tar.gz" -C "$stage"
+          sudo "$stage/neproto-server-bundle-$RELEASE_VERSION/tests/legacy-updater-sandbox-smoke.sh" \
             "$stage/neproto-server-bundle-$legacy"
-          sudo "$stage/neproto-server-bundle-$GITHUB_REF_NAME/tests/install-smoke.sh" amd64 "$GITHUB_REF_NAME"
+          sudo "$stage/neproto-server-bundle-$RELEASE_VERSION/tests/install-smoke.sh" amd64 "$RELEASE_VERSION"
 
       - uses: actions/download-artifact@v8
         with:
-          name: neproto-windows-${{ github.ref_name }}
+          name: neproto-windows-${{ env.RELEASE_VERSION }}
           path: dist/windows
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ env.RELEASE_VERSION }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: |
-            dist/neproto-server-bundle-${{ github.ref_name }}.tar.gz
-            dist/neproto-server-bundle-${{ github.ref_name }}.tar.gz.sha256
-            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe
-            dist/windows/NeProto-Setup-${{ github.ref_name }}-x64.exe.sha256
+            dist/neproto-server-bundle-${{ env.RELEASE_VERSION }}.tar.gz
+            dist/neproto-server-bundle-${{ env.RELEASE_VERSION }}.tar.gz.sha256
+            dist/windows/NeProto-Setup-${{ env.RELEASE_VERSION }}-x64.exe
+            dist/windows/NeProto-Setup-${{ env.RELEASE_VERSION }}-x64.exe.sha256
