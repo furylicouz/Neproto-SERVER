@@ -8,6 +8,7 @@ import OSLog
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let runtimeQueue = DispatchQueue(label: "com.neproto.packet-tunnel.runtime", qos: .userInitiated)
     private let migrationQueue = DispatchQueue(label: "com.neproto.packet-tunnel.migration", qos: .utility)
+    private let shutdownQueue = DispatchQueue(label: "com.neproto.packet-tunnel.shutdown", qos: .utility)
     private let stateLock = NSLock()
     private let logger = Logger(subsystem: "NeProto", category: "StrictPacketTunnel")
 
@@ -15,14 +16,24 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private var runtimeMonitor: DispatchSourceTimer?
     private var pathMonitor: NWPathMonitor?
     private var lastPathSignature: String?
+    private var starting = false
     private var stopping = false
+    private var migrationGate = StrictNetworkMigrationGate()
 
     override func startTunnel(
         options _: [String: NSObject]? = nil,
         completionHandler: @escaping (Error?) -> Void
     ) {
         let completion = TunnelStartCompletion(completionHandler)
-        stateLock.withLock { stopping = false }
+		let accepted = stateLock.withLock {
+			guard !starting, !stopping, core == nil else { return false }
+			starting = true
+			return true
+		}
+		guard accepted else {
+			completion.call(Self.xpcSafeError(TunnelProviderError.alreadyActive))
+			return
+		}
         runtimeQueue.async { [weak self] in
             self?.startStrictHTTP3Tunnel(completion: completion)
                 ?? completion.call(Self.xpcSafeError(TunnelProviderError.providerReleased))
@@ -42,15 +53,20 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             pathMonitor?.cancel()
             pathMonitor = nil
             lastPathSignature = nil
+			migrationGate.reset()
             let result = core
             core = nil
             return result
         }
-        runtimeQueue.async {
+        shutdownQueue.async {
             var closeError: NSError?
             if let owned, !owned.close(&closeError) {
                 self.logMobileFailure("Closing strict HTTP/3 ClientCore failed", error: closeError)
             }
+			self.stateLock.withLock {
+				self.starting = false
+				self.stopping = false
+			}
             completion.call()
         }
     }
@@ -98,7 +114,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             }
             createdCore = newCore
             guard stateLock.withLock({
-                guard !stopping, core == nil else { return false }
+				guard starting, !stopping, core == nil else { return false }
                 core = newCore
                 return true
             }) else {
@@ -143,8 +159,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                             neproto_close_tunnel_file_descriptor(descriptor)
                             throw attachError ?? TunnelProviderError.packetDataPlaneFailed
                         }
+						guard self.stateLock.withLock({
+							guard self.core === newCore, !self.stopping else { return false }
+							self.starting = false
+							return true
+						}) else {
+							throw TunnelProviderError.stopping
+						}
                         self.startRuntimeMonitor(for: newCore)
                         self.startNetworkPathMonitor(for: newCore)
+						guard self.stateLock.withLock({ self.core === newCore && !self.stopping }) else {
+							throw TunnelProviderError.stopping
+						}
                         self.logger.notice("Strict HTTP/3 WebTransport Packet Tunnel is connected")
                         completion.call(nil)
                     } catch {
@@ -162,6 +188,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         error: Error,
         completion: TunnelStartCompletion
     ) {
+		stateLock.withLock { starting = false }
         if let failedCore {
             stateLock.withLock {
                 if core === failedCore { core = nil }
@@ -186,11 +213,15 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                   state == "failed" || state == "disconnected" else { return }
             self.terminateAfterRuntimeFailure(expectedCore, error: TunnelProviderError.runtimeStopped)
         }
+		timer.resume()
         stateLock.withLock {
+			guard core === expectedCore, !stopping else {
+				timer.cancel()
+				return
+			}
             runtimeMonitor?.cancel()
             runtimeMonitor = timer
         }
-        timer.resume()
     }
 
     private func startNetworkPathMonitor(for expectedCore: Np2mobileClientCore) {
@@ -201,37 +232,61 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             let changed = self.stateLock.withLock {
                 guard self.core === expectedCore, !self.stopping else { return false }
                 defer { self.lastPathSignature = signature }
-                return self.lastPathSignature.map { $0 != signature } ?? false
+				guard self.lastPathSignature.map({ $0 != signature }) ?? false else { return false }
+				return self.migrationGate.pathChanged()
             }
             guard changed else { return }
-            self.migrationQueue.async { [weak self, weak expectedCore] in
-                guard let self, let expectedCore,
-                      self.stateLock.withLock({ self.core === expectedCore && !self.stopping }) else { return }
-                self.reasserting = true
-                var migrationError: NSError?
-                let migrated = expectedCore.networkChanged(
-                    Self.operationID(prefix: "ios-network"),
-                    error: &migrationError
-                )
-                self.reasserting = false
-                guard migrated else {
-                    self.logMobileFailure("Strict HTTP/3 reconnect exhausted", error: migrationError)
-                    self.terminateAfterRuntimeFailure(
-                        expectedCore,
-                        error: migrationError ?? TunnelProviderError.reconnectFailed
-                    )
-                    return
-                }
-                self.logger.notice("Network transition retained strict HTTP/3 WebTransport")
-            }
+			self.scheduleNetworkMigration(for: expectedCore)
         }
+		monitor.start(queue: runtimeQueue)
         stateLock.withLock {
+			guard core === expectedCore, !stopping else {
+				monitor.cancel()
+				return
+			}
             pathMonitor?.cancel()
             pathMonitor = monitor
             lastPathSignature = nil
         }
-        monitor.start(queue: runtimeQueue)
     }
+
+	private func scheduleNetworkMigration(for expectedCore: Np2mobileClientCore) {
+		migrationQueue.async { [weak self, weak expectedCore] in
+			guard let self, let expectedCore else { return }
+			guard self.stateLock.withLock({ self.core === expectedCore && !self.stopping }) else {
+				self.stateLock.withLock {
+					self.migrationGate.reset()
+				}
+				return
+			}
+			self.reasserting = true
+			var migrationError: NSError?
+			let migrated = expectedCore.networkChanged(
+				Self.operationID(prefix: "ios-network"),
+				error: &migrationError
+			)
+			self.reasserting = false
+			guard migrated else {
+				self.logMobileFailure("Strict HTTP/3 reconnect exhausted", error: migrationError)
+				self.terminateAfterRuntimeFailure(
+					expectedCore,
+					error: migrationError ?? TunnelProviderError.reconnectFailed
+				)
+				return
+			}
+			self.logger.notice("Network transition retained strict HTTP/3 WebTransport")
+			let repeatMigration = self.stateLock.withLock {
+				guard self.core === expectedCore, !self.stopping else {
+					self.migrationGate.reset()
+					return false
+				}
+				return self.migrationGate.completed()
+			}
+			if repeatMigration {
+				self.scheduleNetworkMigration(for: expectedCore)
+			}
+		}
+	}
 
     private func terminateAfterRuntimeFailure(_ failedCore: Np2mobileClientCore, error: Error) {
         let shouldTerminate = stateLock.withLock {
@@ -242,6 +297,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             runtimeMonitor = nil
             pathMonitor?.cancel()
             pathMonitor = nil
+			migrationGate.reset()
             return true
         }
         guard shouldTerminate else { return }
@@ -342,6 +398,7 @@ private final class TunnelStopCompletion: @unchecked Sendable {
 
 private enum TunnelProviderError: Error, LocalizedError {
     case invalidConfiguration
+    case alreadyActive
     case missingSecretReference
     case clientCoreUnavailable
     case invalidClientRoutes
@@ -356,6 +413,7 @@ private enum TunnelProviderError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidConfiguration: "Некорректная конфигурация NP/2."
+		case .alreadyActive: "Packet Tunnel уже запускается или подключён."
         case .missingSecretReference: "Ссылка на ключ NP/2 отсутствует."
         case .clientCoreUnavailable: "HTTP/3 ClientCore недоступен."
         case .invalidClientRoutes: "Некорректный снимок маршрутов NP/2."

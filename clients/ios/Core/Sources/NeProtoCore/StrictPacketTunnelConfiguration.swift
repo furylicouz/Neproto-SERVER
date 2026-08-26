@@ -25,7 +25,10 @@ public struct StrictPacketTunnelConfiguration: Sendable {
         providerConfiguration: [String: Any],
         credentialReference: Data
     ) throws {
-        guard providerConfiguration["carrier_policy"] as? String == "http3-only" else {
+        guard let providerCarrierPolicy = providerConfiguration["carrier_policy"] as? String else {
+			throw StrictPacketTunnelConfigurationError.invalidProviderConfiguration
+		}
+		guard providerCarrierPolicy == "http3-only" else {
             throw StrictPacketTunnelConfigurationError.alternateCarrierConfigured
         }
         guard let profileID = providerConfiguration["profile_id"] as? String,

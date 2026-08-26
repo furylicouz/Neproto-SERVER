@@ -6,7 +6,9 @@ import Foundation
 
 let repositoryCorePath = "../../../../ios/Core"
 let generatedCorePath = "../../../../../../../../ios/Core"
-let corePath = FileManager.default.fileExists(atPath: repositoryCorePath + "/Package.swift")
+let manifestDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let repositoryCoreURL = manifestDirectory.appendingPathComponent(repositoryCorePath)
+let corePath = FileManager.default.fileExists(atPath: repositoryCoreURL.appendingPathComponent("Package.swift").path)
     ? repositoryCorePath
     : generatedCorePath
 
