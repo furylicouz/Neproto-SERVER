@@ -93,6 +93,11 @@ The first candidate must support only:
 - No launch of the Windows NeProto app, service, setup program, Wintun adapter
   or route-changing smoke test on the development machine.
 
+The generated first-candidate client configuration contains only the HTTP/3
+WebTransport endpoint and timeout. It must omit HTTPS/WebSocket and WebRTC
+endpoint/timeout fields; strict mobile validation rejects those alternate
+fields when `carrier_policy` is `http3-only`.
+
 The existing WPF and SwiftUI clients remain available during development and
 rollback. They are not deleted until the replacement passes the release gates.
 

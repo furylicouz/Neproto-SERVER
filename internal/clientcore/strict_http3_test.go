@@ -110,6 +110,8 @@ func TestStrictHTTP3ConnectorRejectsNonStrictConfigurationBeforeDial(t *testing.
 		{},
 		{CarrierPolicy: config.CarrierPolicyPerformance, HTTP3URL: "https://vpn.example.test/http3", MaxParallelCarriers: 1},
 		{CarrierPolicy: config.CarrierPolicyHTTP3Only, HTTP3URL: "https://vpn.example.test/http3", MaxParallelCarriers: 2},
+		{CarrierPolicy: config.CarrierPolicyHTTP3Only, HTTP3URL: "https://vpn.example.test/http3", MaxParallelCarriers: 1,
+			HTTPSURL: "wss://vpn.example.test/private/https/session"},
 	} {
 		if _, connectErr := connector(context.Background(), candidate); !errors.Is(connectErr, ErrStrictHTTP3Required) {
 			t.Fatalf("config %+v error = %v", candidate, connectErr)

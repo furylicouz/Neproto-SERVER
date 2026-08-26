@@ -166,13 +166,14 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
 		parallelCarriers: Int
 	) throws -> Data {
         let normalizedHTTP3Path = effectiveHTTP3Path
+		let compatibilityCarriersEnabled = carrierPolicy != "http3-only"
         let configuration = ClientConfiguration(
             serverIdentity: serverIdentity,
             deviceID: deviceID?.uuidString.lowercased(),
             serverAddresses: effectiveServerAddresses,
             secretFile: "keychain",
-            httpsURL: "wss://\(serverIdentity)\(httpsPath)",
-            webRTCSignalingURL: "https://\(serverIdentity)\(webRTCPath)",
+            httpsURL: compatibilityCarriersEnabled ? "wss://\(serverIdentity)\(httpsPath)" : nil,
+            webRTCSignalingURL: compatibilityCarriersEnabled ? "https://\(serverIdentity)\(webRTCPath)" : nil,
             http3URL: normalizedHTTP3Path.map { "https://\(serverIdentity)\($0)" },
             // "web" is the backward-compatible wire value for Mosaic's
             // automatic runtime web/realtime/stream classification.
@@ -185,8 +186,8 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
             requireDatagrams: requireDatagrams,
             enableConstellation: enableConstellation,
             enableForwardSecrecy: enableForwardSecrecy,
-            webRTCTimeout: "5s",
-            httpsTimeout: "10s",
+            webRTCTimeout: compatibilityCarriersEnabled ? "5s" : nil,
+            httpsTimeout: compatibilityCarriersEnabled ? "10s" : nil,
             http3Timeout: normalizedHTTP3Path == nil ? nil : "5s",
             carrierCacheTTL: "10m"
         )
@@ -361,8 +362,8 @@ private struct ClientConfiguration: Codable {
     let deviceID: String?
     let serverAddresses: [String]
     let secretFile: String
-    let httpsURL: String
-    let webRTCSignalingURL: String
+    let httpsURL: String?
+    let webRTCSignalingURL: String?
     let http3URL: String?
     let profile: String
     let carrierPolicy: String
@@ -373,8 +374,8 @@ private struct ClientConfiguration: Codable {
     let requireDatagrams: Bool
     let enableConstellation: Bool
     let enableForwardSecrecy: Bool
-    let webRTCTimeout: String
-    let httpsTimeout: String
+    let webRTCTimeout: String?
+    let httpsTimeout: String?
     let http3Timeout: String?
     let carrierCacheTTL: String
 

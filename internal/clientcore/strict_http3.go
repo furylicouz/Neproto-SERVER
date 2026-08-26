@@ -34,7 +34,9 @@ func NewStrictHTTP3Connector(dependencies StrictHTTP3Dependencies) (Connector, e
 	}
 	return func(ctx context.Context, clientConfig config.Client) (Runtime, error) {
 		if ctx == nil || clientConfig.CarrierPolicy != config.CarrierPolicyHTTP3Only ||
-			!clientConfig.HTTP3Configured() || clientConfig.MaxParallelCarriers != 1 {
+			!clientConfig.HTTP3Configured() || clientConfig.MaxParallelCarriers != 1 ||
+			clientConfig.HTTPSURL != "" || clientConfig.WebRTCSignalingURL != "" ||
+			clientConfig.HTTPSTimeout.Duration != 0 || clientConfig.WebRTCTimeout.Duration != 0 {
 			return nil, ErrStrictHTTP3Required
 		}
 		connection, err := dependencies.DialHTTP3(ctx, clientConfig)

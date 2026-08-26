@@ -68,6 +68,10 @@ struct ServerProfileTests {
 		#expect(object["carrier_policy"] as? String == "http3-only")
 		#expect(object["max_parallel_carriers"] as? Int == 1)
 		#expect(object["http3_url"] as? String == "https://vpn.example.com/private/http3/session")
+		#expect(object["https_url"] == nil)
+		#expect(object["https_timeout"] == nil)
+		#expect(object["webrtc_signaling_url"] == nil)
+		#expect(object["webrtc_timeout"] == nil)
 		#expect(profile.maxParallelCarriers == 3)
 	}
 

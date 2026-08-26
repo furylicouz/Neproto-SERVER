@@ -63,8 +63,8 @@ type CarrierPolicy string
 const (
 	CarrierPolicyPerformance CarrierPolicy = "performance"
 	CarrierPolicyUDPFirst    CarrierPolicy = "udp-first"
-	// CarrierPolicyHTTP3Only is a bounded diagnostic policy. It intentionally
-	// disables carrier racing and fallback without removing server transports.
+	// CarrierPolicyHTTP3Only is the first cross-platform candidate policy. Its
+	// client configuration contains no alternate carrier endpoints or timers.
 	CarrierPolicyHTTP3Only CarrierPolicy = "http3-only"
 )
 
@@ -440,6 +440,7 @@ func scanUniqueJSONValue(decoder *json.Decoder) error {
 }
 
 func validateClient(config Client) error {
+	strictHTTP3 := config.CarrierPolicy == CarrierPolicyHTTP3Only
 	if !validIdentity(config.ServerIdentity) || config.ProfileID() == 0 ||
 		(config.CarrierPolicy != CarrierPolicyPerformance && config.CarrierPolicy != CarrierPolicyUDPFirst &&
 			config.CarrierPolicy != CarrierPolicyHTTP3Only) ||
@@ -449,13 +450,25 @@ func validateClient(config Client) error {
 		config.MaxStreams <= 0 || config.MaxStreams > maxStreams ||
 		config.MaxParallelCarriers <= 0 || config.MaxParallelCarriers > 3 ||
 		config.MaxSOCKSConnections <= 0 || config.MaxSOCKSConnections > config.MaxStreams ||
-		!validDuration(config.WebRTCTimeout.Duration, 100*time.Millisecond, 30*time.Second) ||
-		!validDuration(config.HTTPSTimeout.Duration, 100*time.Millisecond, 60*time.Second) ||
 		!validDuration(config.CarrierCacheTTL.Duration, time.Second, 24*time.Hour) {
 		return ErrInvalidConfig
 	}
 	if err := validateLoopback(config.SOCKSListen, true); err != nil {
 		return err
+	}
+	if strictHTTP3 {
+		if config.HTTPSURL != "" || config.WebRTCSignalingURL != "" ||
+			config.HTTPSTimeout.Duration != 0 || config.WebRTCTimeout.Duration != 0 ||
+			!config.HTTP3Configured() || config.MaxParallelCarriers != 1 ||
+			!validDuration(config.HTTP3Timeout.Duration, 100*time.Millisecond, 30*time.Second) {
+			return ErrInvalidConfig
+		}
+		_, err := validateEndpointURL(config.HTTP3URL, "https", config.ServerIdentity)
+		return err
+	}
+	if !validDuration(config.WebRTCTimeout.Duration, 100*time.Millisecond, 30*time.Second) ||
+		!validDuration(config.HTTPSTimeout.Duration, 100*time.Millisecond, 60*time.Second) {
+		return ErrInvalidConfig
 	}
 	httpsPath, err := validateEndpointURL(config.HTTPSURL, "wss", config.ServerIdentity)
 	if err != nil {
@@ -466,9 +479,6 @@ func validateClient(config Client) error {
 		return ErrInvalidConfig
 	}
 	if !config.HTTP3Configured() {
-		if config.CarrierPolicy == CarrierPolicyHTTP3Only {
-			return ErrInvalidConfig
-		}
 		if config.HTTP3Timeout.Duration != 0 {
 			return ErrInvalidConfig
 		}

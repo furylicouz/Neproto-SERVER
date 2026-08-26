@@ -106,11 +106,10 @@ func strictClientCoreProfile(t *testing.T) (string, string) {
 	t.Helper()
 	secret := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x42}, 32))
 	profile := `{"server_identity":"vpn.example.com","server_addresses":["8.8.8.8"],` +
-		`"secret_file":"keychain","https_url":"wss://vpn.example.com/private/https/session",` +
-		`"webrtc_signaling_url":"https://vpn.example.com/private/webrtc/offer",` +
+		`"secret_file":"keychain",` +
 		`"http3_url":"https://vpn.example.com/private/http3/session","profile":"web",` +
 		`"carrier_policy":"http3-only","max_cover_overhead_percent":30,"initial_window_bytes":2097152,` +
-		`"max_streams":128,"max_parallel_carriers":1,"webrtc_timeout":"5s","https_timeout":"10s",` +
+		`"max_streams":128,"max_parallel_carriers":1,` +
 		`"http3_timeout":"5s","carrier_cache_ttl":"10m"}`
 	return profile, secret
 }

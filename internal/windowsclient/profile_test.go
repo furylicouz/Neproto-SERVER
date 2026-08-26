@@ -65,6 +65,11 @@ func TestImportURIProducesDirectNP2Configuration(t *testing.T) {
 	if _, ok := raw["secret"]; ok {
 		t.Fatal("secret serialized into client configuration")
 	}
+	for _, alternate := range []string{"https_url", "https_timeout", "webrtc_signaling_url", "webrtc_timeout"} {
+		if _, ok := raw[alternate]; ok {
+			t.Fatalf("strict HTTP/3 candidate serialized alternate field %q", alternate)
+		}
+	}
 }
 
 func TestImportURIRejectsMalformedDeviceID(t *testing.T) {

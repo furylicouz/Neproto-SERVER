@@ -41,8 +41,6 @@ type directClientConfig struct {
 	DeviceID                string   `json:"device_id"`
 	ServerAddresses         []string `json:"server_addresses"`
 	SecretFile              string   `json:"secret_file"`
-	HTTPSURL                string   `json:"https_url"`
-	WebRTCSignalingURL      string   `json:"webrtc_signaling_url"`
 	HTTP3URL                string   `json:"http3_url,omitempty"`
 	Profile                 string   `json:"profile"`
 	CarrierPolicy           string   `json:"carrier_policy"`
@@ -53,8 +51,6 @@ type directClientConfig struct {
 	RequireDatagrams        bool     `json:"require_datagrams,omitempty"`
 	EnableConstellation     bool     `json:"enable_constellation,omitempty"`
 	EnableForwardSecrecy    bool     `json:"enable_forward_secrecy,omitempty"`
-	WebRTCTimeout           string   `json:"webrtc_timeout"`
-	HTTPSTimeout            string   `json:"https_timeout"`
 	HTTP3Timeout            string   `json:"http3_timeout,omitempty"`
 	CarrierCacheTTL         string   `json:"carrier_cache_ttl"`
 }
@@ -86,13 +82,11 @@ func profileFromOnboarding(source onboarding.Profile, deviceID string) (Profile,
 	client := directClientConfig{
 		ServerIdentity: source.ServerIdentity, DeviceID: deviceID,
 		ServerAddresses: append([]string(nil), source.ServerAddresses...), SecretFile: "dpapi",
-		HTTPSURL:           "wss://" + source.ServerIdentity + source.HTTPSPath,
-		WebRTCSignalingURL: "https://" + source.ServerIdentity + source.WebRTCPath,
-		Profile:            "web", CarrierPolicy: string(config.CarrierPolicyHTTP3Only), MaxCoverOverheadPercent: 30,
+		Profile: "web", CarrierPolicy: string(config.CarrierPolicyHTTP3Only), MaxCoverOverheadPercent: 30,
 		InitialWindowBytes: 2_097_152, MaxStreams: 128, MaxParallelCarriers: parallel,
 		RequireDatagrams: source.RequireDatagrams, EnableConstellation: source.EnableConstellation,
-		EnableForwardSecrecy: source.EnableForwardSecrecy, WebRTCTimeout: "5s", HTTPSTimeout: "10s",
-		CarrierCacheTTL: "10m",
+		EnableForwardSecrecy: source.EnableForwardSecrecy,
+		CarrierCacheTTL:      "10m",
 	}
 	if source.HTTP3Path != "" {
 		client.HTTP3URL = "https://" + source.ServerIdentity + source.HTTP3Path

@@ -490,19 +490,18 @@ func TestParseMobileClientBytesAcceptsHTTP3OnlyWithConfiguredHTTP3(t *testing.T)
   "server_identity":"vpn.example.com","secret_file":"keychain",
   "device_id":"10223344-5566-7788-99aa-bbccddeef001",
   "server_addresses":["104.171.136.10"],
-  "https_url":"wss://vpn.example.com/private/https/session",
-  "webrtc_signaling_url":"https://vpn.example.com/private/webrtc/offer",
   "http3_url":"https://vpn.example.com/private/http3/session",
   "profile":"web","carrier_policy":"http3-only",
   "max_cover_overhead_percent":30,"initial_window_bytes":262144,"max_streams":128,
-  "max_parallel_carriers":1,"webrtc_timeout":"5s","https_timeout":"10s",
+  "max_parallel_carriers":1,
   "http3_timeout":"5s","carrier_cache_ttl":"10m"
 }`)
 	client, err := ParseMobileClientBytes(raw, secret)
 	if err != nil {
 		t.Fatalf("parse HTTP/3-only Windows profile: %v", err)
 	}
-	if client.CarrierPolicy != CarrierPolicyHTTP3Only || !client.HTTP3Configured() || client.MaxParallelCarriers != 1 {
+	if client.CarrierPolicy != CarrierPolicyHTTP3Only || !client.HTTP3Configured() ||
+		client.MaxParallelCarriers != 1 || client.HTTPSURL != "" || client.WebRTCSignalingURL != "" {
 		t.Fatalf("unexpected HTTP/3-only profile: %+v", client)
 	}
 
@@ -511,6 +510,12 @@ func TestParseMobileClientBytesAcceptsHTTP3OnlyWithConfiguredHTTP3(t *testing.T)
 	withoutHTTP3 = bytes.Replace(withoutHTTP3, []byte(`  "http3_timeout":"5s",`), nil, 1)
 	if _, err := ParseMobileClientBytes(withoutHTTP3, secret); !errors.Is(err, ErrInvalidConfig) {
 		t.Fatalf("HTTP/3-only profile without HTTP/3 error=%v", err)
+	}
+
+	withCompatibilityURL := bytes.Replace(raw, []byte(`  "http3_url"`),
+		[]byte(`  "https_url":"wss://vpn.example.com/private/https/session",`+"\n"+`  "http3_url"`), 1)
+	if _, err := ParseMobileClientBytes(withCompatibilityURL, secret); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("HTTP/3-only profile with compatibility URL error=%v", err)
 	}
 }
 
