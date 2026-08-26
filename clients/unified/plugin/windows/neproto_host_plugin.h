@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "windows_client_host.h"
+#include "client_host_api.g.h"
 
 namespace neproto_host {
 
@@ -29,7 +29,7 @@ class NeprotoHostPlugin : public flutter::Plugin {
 
  private:
   flutter::BinaryMessenger* messenger_ = nullptr;
-  std::unique_ptr<WindowsClientHost> host_;
+  std::unique_ptr<ClientHostApi> host_;
 };
 
 }  // namespace neproto_host

@@ -13,6 +13,11 @@
 #include <memory>
 #include <sstream>
 
+#include "async_client_host.h"
+#include "service_client.h"
+#include "windows_client_host.h"
+#include "windows_reply_dispatcher.h"
+
 namespace neproto_host {
 
 // static
@@ -24,6 +29,10 @@ void NeprotoHostPlugin::RegisterWithRegistrar(
           &flutter::StandardMethodCodec::GetInstance());
 
   auto plugin = std::make_unique<NeprotoHostPlugin>();
+  plugin->host_ = std::make_unique<AsyncClientHost>(
+      std::make_unique<WindowsClientHost>(
+          std::make_unique<ServiceClient>(CreatePipeServiceTransport())),
+      CreateSerialExecutor(), CreateWindowsReplyDispatcher(registrar));
 
   plugin->messenger_ = registrar->messenger();
   ClientHostApi::SetUp(plugin->messenger_, plugin->host_.get());
@@ -36,9 +45,7 @@ void NeprotoHostPlugin::RegisterWithRegistrar(
   registrar->AddPlugin(std::move(plugin));
 }
 
-NeprotoHostPlugin::NeprotoHostPlugin()
-    : host_(std::make_unique<WindowsClientHost>(
-          std::make_unique<ServiceClient>(CreatePipeServiceTransport()))) {}
+NeprotoHostPlugin::NeprotoHostPlugin() = default;
 
 NeprotoHostPlugin::~NeprotoHostPlugin() {
   if (messenger_ != nullptr) {

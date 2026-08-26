@@ -243,12 +243,12 @@ The produced executable is not launched locally.
 
 ### Task C1 — Implement bounded Windows plugin IPC
 
-**Status:** 🔄 In progress. The injectable RAII named-pipe transport,
-service-free framing tests and strict bounded JSON codec are implemented with
-1.5-second connect, 12-second request and 256-KiB bounds. All nine Pigeon
-methods now validate and map `host.v1.*` requests/results fail-closed. Portable
-local C++17 compile/smoke checks pass. Moving blocking IPC off the UI thread and
-the Visual Studio Windows release compilation remain.
+**Status:** ✅ Completed on the implementation branch. The injectable RAII
+named-pipe transport, strict bounded JSON codec and all nine Pigeon methods use
+1.5-second connect, 12-second request and 256-KiB bounds. IPC runs on a bounded
+serial worker and replies marshal to the Flutter platform thread. A portable
+Windows DLL compile and 18 service-free C++ tests pass. The full Flutter runner
+build remains external because this PC has no Visual Studio; no client ran.
 
 **Acceptance criteria:**
 

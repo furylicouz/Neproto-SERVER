@@ -18,6 +18,8 @@ set(PLUGIN_NAME "neproto_host_plugin")
 
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
+  "async_client_host.cpp"
+  "async_client_host.h"
   "client_host_api.g.cpp"
   "json_value.cpp"
   "json_value.h"
@@ -29,6 +31,8 @@ list(APPEND PLUGIN_SOURCES
   "service_client.h"
   "windows_client_host.cpp"
   "windows_client_host.h"
+  "windows_reply_dispatcher.cpp"
+  "windows_reply_dispatcher.h"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -91,6 +95,7 @@ FetchContent_MakeAvailable(googletest)
 # The plugin's C API is not very useful for unit testing, so build the sources
 # directly into the test binary rather than using the DLL.
 add_executable(${TEST_RUNNER}
+  test/async_client_host_test.cpp
   test/neproto_host_plugin_test.cpp
   test/json_value_test.cpp
   test/pipe_client_test.cpp
