@@ -2,7 +2,7 @@
 
 ## Stack
 
-- Go 1.26.5
+- Go 1.26.7
 - Pion WebRTC v4.2.16
 - Coder WebSocket v1.8.15
 - uTLS v1.8.0, optional and isolated
