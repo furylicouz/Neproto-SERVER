@@ -104,6 +104,10 @@ CGO disabled.
 
 ### Task A6 — Introduce instance-owned ClientCore lifecycle
 
+**Status:** ✅ Completed on the implementation branch. Independent instance,
+cancellation, terminal idempotent close and legacy gomobile compatibility tests
+pass; race execution remains a CI gate on a CGO-enabled runner.
+
 **Acceptance criteria:**
 
 - Two instances do not share session state or cancellation.
