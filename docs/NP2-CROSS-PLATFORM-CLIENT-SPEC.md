@@ -524,6 +524,13 @@ Flutter never calls the gomobile API directly.
   service-controlled data directory.
 - Rollback to the legacy UI must not require credential reimport.
 
+The first replacement candidate does not change the Windows store schema: it
+performs an idempotent read-through of v1 metadata and the existing protected
+blob. Therefore startup does not rewrite or re-encrypt a valid legacy file;
+the backup rule activates only when a future schema version actually changes
+metadata. Host API summaries derive only a credential-presence boolean and
+never serialize the credential ID or protected bytes.
+
 ### 9.2 iOS migration
 
 - Existing profile metadata is read through the current Swift model/store.

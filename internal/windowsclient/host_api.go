@@ -217,7 +217,7 @@ func (a *API) hostProfile(profile Profile) hostProfileSummary {
 	return hostProfileSummary{
 		ID: profile.ID, DisplayName: profile.Name, ServerIdentity: profile.ServerIdentity,
 		Host: profile.ServerIdentity, Selected: profile.ID == a.store.SelectedProfileID(),
-		HasCredential: true, Origin: origin, CatalogManaged: profile.ManagedByCluster,
+		HasCredential: a.store.HasCredential(profile.ID), Origin: origin, CatalogManaged: profile.ManagedByCluster,
 	}
 }
 

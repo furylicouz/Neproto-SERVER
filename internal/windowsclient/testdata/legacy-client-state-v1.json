@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "device_id": "00112233-4455-4677-8899-aabbccddeeff",
+  "selected_profile_id": "legacy-primary",
+  "profiles": [
+    {
+      "profile": {
+        "id": "legacy-primary",
+        "credential_id": "legacy-credential-fixture",
+        "name": "Legacy Primary",
+        "server_identity": "legacy.example.com",
+        "server_addresses": [
+          "1.1.1.1"
+        ],
+        "https_path": "/private/https/session",
+        "webrtc_path": "/private/webrtc/offer",
+        "http3_path": "/private/http3/session",
+        "require_datagrams": true,
+        "max_parallel_carriers": 1,
+        "enable_constellation": false,
+        "enable_forward_secrecy": true,
+        "cluster_available": true,
+        "profile": "web"
+      },
+      "protected_secret": "AQIDBA"
+    }
+  ],
+  "catalogs": {},
+  "suppressed_nodes": {}
+}

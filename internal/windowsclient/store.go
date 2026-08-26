@@ -122,6 +122,17 @@ func (s *Store) SelectedProfileID() string {
 	return s.state.SelectedProfileID
 }
 
+func (s *Store) HasCredential(profileID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	profile, ok := s.profileLocked(profileID)
+	if !ok || profile.ProtectedSecret == "" {
+		return false
+	}
+	ciphertext, err := base64.RawURLEncoding.DecodeString(profile.ProtectedSecret)
+	return err == nil && len(ciphertext) > 0 && len(ciphertext) <= 8192
+}
+
 func (s *Store) CatalogRevision(profileID string) uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

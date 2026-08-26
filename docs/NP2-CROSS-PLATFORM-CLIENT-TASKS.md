@@ -283,6 +283,13 @@ remains for Windows CI/external-PC verification.
 
 ### Task C3 — Adapt Windows profile lifecycle
 
+**Status:** ✅ Completed on the implementation branch. The replacement Host API
+reuses the existing v1 store and Protector without rewriting or re-encrypting
+valid records. A sanitized legacy fixture opens idempotently byte-for-byte,
+retains selection, decrypts through the existing credential source, adapts to
+`http3-only`, and exposes only redacted summaries. Focused and full package
+tests plus vet pass.
+
 **Acceptance criteria:**
 
 - Existing `%ProgramData%\NeProto` profiles and DPAPI records remain readable.
