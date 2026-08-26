@@ -1,7 +1,7 @@
 name: neproto_client
 description: Shared Windows and iOS application layer for NeProto.
 publish_to: 'none'
-version: 0.5.18+18
+version: 0.5.19+19
 
 environment:
   sdk: ^3.12.2

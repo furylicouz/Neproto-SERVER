@@ -1,0 +1,61 @@
+name: Unified Windows HTTP3 Candidate
+
+on:
+  push:
+    branches:
+      - codex/cross-platform-client
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unified-windows-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Download verified Flutter SDK
+        shell: pwsh
+        run: |
+          $versions = Get-Content -Raw -LiteralPath clients/unified/tool/versions.json | ConvertFrom-Json
+          $archive = Join-Path $env:RUNNER_TEMP "flutter-windows.zip"
+          $sdkParent = Join-Path $env:RUNNER_TEMP "neproto-flutter"
+          curl.exe --fail --location --retry 3 --output $archive $versions.flutter_windows_archive
+          if ($LASTEXITCODE -ne 0) { throw "Flutter SDK download failed" }
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $versions.flutter_windows_sha256) {
+            throw "Flutter SDK checksum mismatch: $actual"
+          }
+          New-Item -ItemType Directory -Force -Path $sdkParent | Out-Null
+          Expand-Archive -LiteralPath $archive -DestinationPath $sdkParent
+          $flutterRoot = Join-Path $sdkParent "flutter"
+          if (-not (Test-Path -LiteralPath (Join-Path $flutterRoot "bin\flutter.bat") -PathType Leaf)) {
+            throw "Flutter SDK archive layout is invalid"
+          }
+          Add-Content -LiteralPath $env:GITHUB_ENV -Value "NEPROTO_FLUTTER_ROOT=$flutterRoot" -Encoding utf8
+
+      - name: Build manifest-verified HTTP3-only candidate
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw -LiteralPath VERSION).Trim()
+          ./clients/unified/tool/build-windows-candidate.ps1 -Version $version -Commit $env:GITHUB_SHA
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: neproto-windows-http3-candidate-${{ github.sha }}
+          path: |
+            dist/windows-unified/NeProto-Windows-Candidate-*.zip
+            dist/windows-unified/NeProto-Windows-Candidate-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

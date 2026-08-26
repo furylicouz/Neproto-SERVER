@@ -1,5 +1,7 @@
 {
   "flutter": "3.44.7",
   "dart": "3.12.2",
-  "pigeon": "28.0.0"
+  "pigeon": "28.0.0",
+  "flutter_windows_archive": "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_3.44.7-stable.zip",
+  "flutter_windows_sha256": "327b89c2ff612418c1d756efc9636d7811c50e4b50a916d07bc3bdc317ba25e5"
 }

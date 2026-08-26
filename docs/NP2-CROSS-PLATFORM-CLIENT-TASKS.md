@@ -323,6 +323,11 @@ Windows client, service, setup, Wintun or route workflow.
 
 ### Task C5 — Package and verify on the external Windows PC
 
+**Status:** 🚧 In progress. The first package remains a separate, unpublished
+manifest-verified overlay over the stable Windows service installation; the
+stable WPF installer is not rewritten. Runtime acceptance remains external-PC
+only.
+
 **Acceptance criteria:**
 
 - Candidate installer preserves legacy profiles and rollback data.

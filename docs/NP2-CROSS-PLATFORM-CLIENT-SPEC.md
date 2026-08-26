@@ -848,6 +848,30 @@ correlated with server-side timestamps without embedding credentials.
 The implementation proceeds only after approval of this specification. The
 subsequent plan must split work into independently verified vertical slices.
 
+### 17.1 Windows first-candidate distribution
+
+The first external-PC build is an unpublished, checksum-verified ZIP overlay;
+it does not replace or expand the stable WPF installer. The test PC must first
+have the matching stable NeProto release installed. The overlay contains the
+Flutter release directory, the strict ClientCore Windows service, Wintun, a
+bounded manifest verifier, and administrator-only install/rollback scripts.
+
+The candidate installer must:
+
+- verify the SHA-256 and size of every regular payload file before mutation;
+- reject links, traversal, alternate carrier policy, extra files and malformed
+  version/commit metadata;
+- preserve `%ProgramData%\NeProto` profiles and DPAPI records;
+- back up the installed service and Wintun before replacing either file;
+- install the Flutter UI under a separate `NeProto Candidate` directory;
+- restore the previous service automatically if candidate startup/probe fails;
+- never launch the UI, connect a tunnel or change routes during packaging;
+- leave a bounded rollback record and require explicit rollback before another
+  candidate overlay is installed.
+
+The server web update page does not install this client overlay. A GitHub
+candidate artifact is transferred to the separate Windows test PC explicitly.
+
 Cutover is allowed only when:
 
 - existing profile migration passes on both platforms;
