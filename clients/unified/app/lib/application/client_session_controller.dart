@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:neproto_host/neproto_host.dart';
@@ -10,6 +11,7 @@ final class ClientSessionState {
   const ClientSessionState({
     required this.loading,
     required this.ready,
+    required this.commandPending,
     required this.status,
     this.capabilities,
     this.error,
@@ -19,6 +21,7 @@ final class ClientSessionState {
     return ClientSessionState(
       loading: false,
       ready: false,
+      commandPending: false,
       status: TunnelStatus(
         state: TunnelState.disconnected,
         carrier: CarrierKind.none,
@@ -34,6 +37,7 @@ final class ClientSessionState {
 
   final bool loading;
   final bool ready;
+  final bool commandPending;
   final HostCapabilities? capabilities;
   final TunnelStatus status;
   final HostError? error;
@@ -41,6 +45,7 @@ final class ClientSessionState {
   ClientSessionState copyWith({
     bool? loading,
     bool? ready,
+    bool? commandPending,
     HostCapabilities? capabilities,
     TunnelStatus? status,
     HostError? error,
@@ -49,6 +54,7 @@ final class ClientSessionState {
     return ClientSessionState(
       loading: loading ?? this.loading,
       ready: ready ?? this.ready,
+      commandPending: commandPending ?? this.commandPending,
       capabilities: capabilities ?? this.capabilities,
       status: status ?? this.status,
       error: clearError ? null : error ?? this.error,
@@ -64,8 +70,53 @@ final class ClientSessionController extends ChangeNotifier {
   StreamSubscription<TunnelStatus>? _statusSubscription;
   bool _started = false;
   bool _disposed = false;
+  int _operationSequence = 0;
 
   ClientSessionState get state => _state;
+
+  Future<void> connect(String profileId) async {
+    if (!_state.ready ||
+        _state.commandPending ||
+        (_state.status.state != TunnelState.disconnected &&
+            _state.status.state != TunnelState.failed)) {
+      return;
+    }
+    if (profileId.isEmpty || utf8.encode(profileId).length > 128) {
+      throw ArgumentError.value(profileId, 'profileId', 'invalid profile ID');
+    }
+    final operationId = _nextOperationId('connect');
+    _setState(_state.copyWith(commandPending: true, clearError: true));
+    try {
+      _applyStatus(
+        await _host.connect(
+          ConnectRequest(profileId: profileId, operationId: operationId),
+        ),
+      );
+    } catch (_) {
+      _setCommandError(operationId);
+    } finally {
+      _setState(_state.copyWith(commandPending: false));
+    }
+  }
+
+  Future<void> disconnect() async {
+    if (!_state.ready ||
+        _state.commandPending ||
+        _state.status.state != TunnelState.connected) {
+      return;
+    }
+    final operationId = _nextOperationId('disconnect');
+    _setState(_state.copyWith(commandPending: true, clearError: true));
+    try {
+      _applyStatus(
+        await _host.disconnect(DisconnectRequest(operationId: operationId)),
+      );
+    } catch (_) {
+      _setCommandError(operationId);
+    } finally {
+      _setState(_state.copyWith(commandPending: false));
+    }
+  }
 
   Future<void> start() async {
     if (_started || _disposed) {
@@ -140,6 +191,25 @@ final class ClientSessionController extends ChangeNotifier {
     }
     _state = next;
     notifyListeners();
+  }
+
+  String _nextOperationId(String action) {
+    _operationSequence++;
+    return '$action-$_operationSequence';
+  }
+
+  void _setCommandError(String operationId) {
+    _setState(
+      _state.copyWith(
+        error: HostError(
+          code: HostErrorCode.hostUnavailable,
+          stage: ErrorStage.hostIpc,
+          message: 'Native host command failed.',
+          retryable: true,
+          operationId: operationId,
+        ),
+      ),
+    );
   }
 
   @override

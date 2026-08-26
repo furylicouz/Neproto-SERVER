@@ -176,6 +176,10 @@ at the C1/D1 platform checkpoints because this PC has no Visual Studio toolchain
 
 ### Task B2 — Implement Home lifecycle slice
 
+**Status:** ✅ Completed on the implementation branch. All lifecycle states,
+guarded accessible actions, live traffic and a single visible HTTP/3 carrier
+pass controller/widget tests at 320, 768 and 1440 logical pixels.
+
 **Acceptance criteria:**
 
 - Home renders all six cross-platform tunnel states.

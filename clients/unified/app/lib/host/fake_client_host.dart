@@ -22,6 +22,8 @@ final class FakeClientHost implements ClientHost {
   TunnelStatus status;
   final List<String> callOrder = <String>[];
   final List<ProfileSummary> profiles = <ProfileSummary>[];
+  final List<ConnectRequest> connectRequests = <ConnectRequest>[];
+  final List<DisconnectRequest> disconnectRequests = <DisconnectRequest>[];
   final StreamController<TunnelStatus> _statusController =
       StreamController<TunnelStatus>.broadcast(sync: true);
   bool _disposed = false;
@@ -66,15 +68,28 @@ final class FakeClientHost implements ClientHost {
   }
 
   @override
-  Future<TunnelStatus> connect(ConnectRequest request) {
-    throw UnimplementedError('Fake connection is added with the home slice.');
+  Future<TunnelStatus> connect(ConnectRequest request) async {
+    callOrder.add('connect');
+    connectRequests.add(request);
+    status = _copyStatus(
+      status,
+      state: TunnelState.connecting,
+      profileId: request.profileId,
+      carrier: CarrierKind.none,
+    );
+    return status;
   }
 
   @override
-  Future<TunnelStatus> disconnect(DisconnectRequest request) {
-    throw UnimplementedError(
-      'Fake disconnection is added with the home slice.',
+  Future<TunnelStatus> disconnect(DisconnectRequest request) async {
+    callOrder.add('disconnect');
+    disconnectRequests.add(request);
+    status = _copyStatus(
+      status,
+      state: TunnelState.disconnecting,
+      carrier: CarrierKind.http3WebTransport,
     );
+    return status;
   }
 
   @override
@@ -117,5 +132,25 @@ TunnelStatus _disconnectedStatus() {
     uploadTotalBytes: 0,
     downloadTotalBytes: 0,
     sequence: 0,
+  );
+}
+
+TunnelStatus _copyStatus(
+  TunnelStatus source, {
+  required TunnelState state,
+  required CarrierKind carrier,
+  String? profileId,
+}) {
+  return TunnelStatus(
+    state: state,
+    profileId: profileId ?? source.profileId,
+    carrier: carrier,
+    connectedAtUnixMs: source.connectedAtUnixMs,
+    uploadBytesPerSecond: source.uploadBytesPerSecond,
+    downloadBytesPerSecond: source.downloadBytesPerSecond,
+    uploadTotalBytes: source.uploadTotalBytes,
+    downloadTotalBytes: source.downloadTotalBytes,
+    sequence: source.sequence + 1,
+    lastError: source.lastError,
   );
 }

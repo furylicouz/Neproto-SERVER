@@ -13,6 +13,6 @@ void main() {
 
     expect(host.callOrder, <String>['getCapabilities', 'getStatus']);
     expect(find.text('NeProto'), findsOneWidget);
-    expect(find.text('disconnected'), findsOneWidget);
+    expect(find.text('Отключено'), findsNWidgets(2));
   });
 }
