@@ -3,6 +3,17 @@
 This unsigned QA overlay is for the separate Windows test PC only. It does not
 modify the server and it is not installed by NeProto Web.
 
+## Recommended standalone EXE
+
+For a clean or existing Windows test PC, run
+`NeProto-Setup-<version>-x64.exe` as Administrator. The standalone installer
+contains the Flutter application, NP/2 service, Wintun, VC runtime, verified
+manifest, and uninstaller. It preserves `%ProgramData%\NeProto`, replaces an
+older legacy installation transactionally, creates the Start menu shortcut,
+starts the service, and does not launch the VPN UI automatically.
+
+The ZIP/PowerShell overlay below remains available for rollback-focused QA.
+
 ## Prerequisite
 
 Install a stable NeProto Windows package from the same major/minor release line

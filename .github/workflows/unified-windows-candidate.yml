@@ -60,5 +60,7 @@ jobs:
           path: |
             dist/windows-unified/NeProto-Windows-Candidate-*.zip
             dist/windows-unified/NeProto-Windows-Candidate-*.zip.sha256
+            dist/windows-unified/NeProto-Setup-*.exe
+            dist/windows-unified/NeProto-Setup-*.exe.sha256
           if-no-files-found: error
           retention-days: 14

@@ -75,10 +75,14 @@ $serviceDestination = Join-Path $candidateRoot "service"
 $output = Join-Path $root "dist\windows-unified"
 $archive = Join-Path $output "$candidateName.zip"
 $checksum = "$archive.sha256"
+$setup = Join-Path $output "NeProto-Setup-$Version-x64.exe"
+$setupChecksum = "$setup.sha256"
 
 Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $checksum -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $setup -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $setupChecksum -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $appDestination, $serviceDestination, $output | Out-Null
 
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "verify-windows.ps1")
@@ -160,5 +164,51 @@ Compress-Archive -Path (Join-Path $candidateRoot "*") -DestinationPath $archive 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
 Set-Content -LiteralPath $checksum -Value "$hash  $([System.IO.Path]::GetFileName($archive))" -Encoding ascii
 
+$setupBase = Join-Path $work "NeProto.Unified.Setup.base.exe"
+$setupPayload = Join-Path $work "setup-payload"
+$setupPayloadArchive = Join-Path $work "setup-payload.zip"
+Push-Location $root
+try {
+    Invoke-Checked {
+        & $go build -trimpath -ldflags "-s -w -H windowsgui -X neproto.local/chameleon/internal/buildinfo.Version=$Version -X main.setupMode=unified" -o $setupBase ./cmd/neproto-windows-setup
+    } "Unified Windows setup bootstrap build failed"
+} finally {
+    Pop-Location
+}
+New-Item -ItemType Directory -Path $setupPayload | Out-Null
+Copy-Item -Path (Join-Path $candidateRoot "*") -Destination $setupPayload -Recurse -Force
+Copy-Item -LiteralPath $setupBase -Destination (Join-Path $setupPayload "NeProto.Uninstall.exe") -Force
+Remove-Item -LiteralPath (Join-Path $setupPayload "candidate-manifest.json") -Force
+Invoke-Checked {
+    & $verifierBinary -mode create -root $setupPayload -version $Version -commit $Commit
+} "Unified Windows setup manifest creation failed"
+Invoke-Checked {
+    & $verifierBinary -mode verify -root $setupPayload
+} "Unified Windows setup manifest verification failed"
+Compress-Archive -Path (Join-Path $setupPayload "*") -DestinationPath $setupPayloadArchive -CompressionLevel Optimal
+Copy-Item -LiteralPath $setupBase -Destination $setup -Force
+
+$archiveBytes = [System.IO.File]::ReadAllBytes($setupPayloadArchive)
+$stream = [System.IO.File]::Open($setup, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+try {
+    $stream.Write($archiveBytes, 0, $archiveBytes.Length)
+    $length = [System.BitConverter]::GetBytes([UInt64]$archiveBytes.Length)
+    $stream.Write($length, 0, $length.Length)
+    $magic = [byte[]](0x4e,0x50,0x32,0x57,0x49,0x4e,0x53,0x45,0x54,0x55,0x50,0x56,0x31,0,0,0)
+    $stream.Write($magic, 0, $magic.Length)
+    $stream.Flush($true)
+} finally {
+    $stream.Dispose()
+}
+
+$setupVerification = Start-Process -FilePath $setup -ArgumentList "--verify" -WindowStyle Hidden -PassThru -Wait
+if ($setupVerification.ExitCode -ne 0) {
+    throw "Unified Windows setup self-verification failed with exit code $($setupVerification.ExitCode)"
+}
+$setupHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $setup).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $setupChecksum -Value "$setupHash  $([System.IO.Path]::GetFileName($setup))" -Encoding ascii
+
 Write-Host "Built $archive"
 Write-Host "SHA256 $hash"
+Write-Host "Built $setup"
+Write-Host "SHA256 $setupHash"
