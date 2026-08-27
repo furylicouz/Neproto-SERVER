@@ -3,6 +3,8 @@ param()
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "flutter-version-output.ps1")
+
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
 $versionConfig = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "versions.json") |
     ConvertFrom-Json
@@ -26,8 +28,12 @@ if ([string]::IsNullOrWhiteSpace($flutter)) {
     throw "Flutter $($versionConfig.flutter) was not found. Set NEPROTO_FLUTTER_ROOT."
 }
 
-$version = & $flutter --version --machine | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0 -or $version.frameworkVersion -ne $versionConfig.flutter) {
+$versionOutput = @(& $flutter --version --machine 2>&1)
+if ($LASTEXITCODE -ne 0) {
+    throw "Flutter --version --machine failed"
+}
+$version = ConvertFrom-FlutterMachineVersionOutput -Output $versionOutput
+if ($version.frameworkVersion -ne $versionConfig.flutter) {
     throw "Expected Flutter $($versionConfig.flutter), got $($version.frameworkVersion)."
 }
 if ($version.dartSdkVersion -notlike "$($versionConfig.dart)*") {

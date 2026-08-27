@@ -84,6 +84,9 @@ New-Item -ItemType Directory -Force -Path $appDestination, $serviceDestination, 
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "verify-windows.ps1")
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "Install-Candidate.ps1")
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "Rollback-Candidate.ps1")
+Assert-PowerShellSyntax (Join-Path $PSScriptRoot "flutter-version-output.ps1")
+Assert-PowerShellSyntax (Join-Path $PSScriptRoot "verify-flutter-version-output.ps1")
+Invoke-Checked { & (Join-Path $PSScriptRoot "verify-flutter-version-output.ps1") } "Flutter version output parser verification failed"
 Invoke-Checked { & (Join-Path $PSScriptRoot "verify-windows.ps1") -BuildOnly } "Unified Windows build verification failed"
 
 if (-not (Test-Path -LiteralPath $windowsBuild -PathType Container)) {
