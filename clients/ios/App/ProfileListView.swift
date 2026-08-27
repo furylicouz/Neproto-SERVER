@@ -6,29 +6,20 @@ struct ProfileListView: View {
     @EnvironmentObject private var profileStore: ProfileStore
     @EnvironmentObject private var vpnService: VPNService
 
-    @State private var selectedSection = NeProtoSection.home
     @State private var selectedProfileID: UUID?
-    @State private var isShowingServers = false
-    @State private var isAddingProfile = false
     @State private var isScanningQR = false
     @State private var clusterCatalogRefreshGate = ClusterCatalogRefreshGate()
 
     var body: some View {
-        ZStack {
-            NeProtoTheme.background
-                .ignoresSafeArea()
-
-            nativeTabs
-        }
-        .tint(NeProtoTheme.purple)
-        .animation(.easeInOut(duration: 0.18), value: selectedSection)
-        .sheet(isPresented: $isAddingProfile) {
-            ProfileEditorView { profile, secret in
-                try profileStore.save(profile: profile, secret: secret)
-                selectedProfileID = profile.id
-                vpnService.reload()
-            }
-        }
+        NativeHomeView(
+            subscriptions: NativeHomePresentation.subscriptions(from: profileStore.profiles),
+            selectedProfileID: selectedProfile?.id,
+            selectedStatus: selectedStatus,
+            isConnectionBusy: selectedProfile.map { vpnService.isBusy(profileID: $0.id) } ?? false,
+            onConnectionChange: { _ in toggleSelectedProfile() },
+            onSelectProfile: selectProfile,
+            onScanQR: { isScanningQR = true }
+        )
         .sheet(isPresented: $isScanningQR) {
             QRScannerView(completion: handleQRResult)
         }
@@ -56,134 +47,6 @@ struct ProfileListView: View {
             Button("ОК", role: .cancel) { vpnService.lastError = nil }
         } message: {
             Text(vpnService.lastError ?? "Неизвестная ошибка")
-        }
-    }
-
-    @ViewBuilder
-    private var nativeTabs: some View {
-        if #available(iOS 26.0, *) {
-            tabView
-                .tabBarMinimizeBehavior(.onScrollDown)
-        } else {
-            tabView
-        }
-    }
-
-    private var tabView: some View {
-        TabView(selection: $selectedSection) {
-            navigationPage(for: .home) {
-                homeContent
-            }
-            .tabItem {
-                Label(NeProtoSection.home.title, systemImage: NeProtoSection.home.systemImage)
-            }
-            .tag(NeProtoSection.home)
-
-            navigationPage(for: .routes) {
-                ClusterRoutesView(profile: selectedProfile) { error in
-                    vpnService.lastError = error.localizedDescription
-                }
-            }
-            .tabItem {
-                Label(NeProtoSection.routes.title, systemImage: NeProtoSection.routes.systemImage)
-            }
-            .tag(NeProtoSection.routes)
-
-            navigationPage(for: .diagnostics) {
-                diagnosticsContent
-            }
-            .tabItem {
-                Label(NeProtoSection.diagnostics.title, systemImage: NeProtoSection.diagnostics.systemImage)
-            }
-            .tag(NeProtoSection.diagnostics)
-        }
-    }
-
-    private func navigationPage<Content: View>(
-        for section: NeProtoSection,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        NavigationStack {
-            content()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, section == .routes ? 0 : 24)
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    leadingNavigationTitle(section == .home ? "NeProto" : section.title)
-                    ToolbarItem(placement: .topBarTrailing) {
-                        AddServerMenu(
-                            onAddServer: { isAddingProfile = true },
-                            onScanQR: { isScanningQR = true }
-                        )
-                    }
-                }
-        }
-    }
-
-    @ViewBuilder
-    private var homeContent: some View {
-        VPNHomeView(
-            profile: selectedProfile,
-            status: selectedStatus,
-            isBusy: selectedProfile.map { vpnService.isBusy(profileID: $0.id) } ?? false,
-            traffic: selectedProfile.map { vpnService.traffic(for: $0.id) } ?? LiveTrafficMetrics(),
-            connectedSince: selectedProfile.flatMap { vpnService.connectedSince(profileID: $0.id) },
-            onChooseServer: showServerPicker,
-            onToggle: toggleSelectedProfile
-        )
-        .navigationDestination(isPresented: $isShowingServers) {
-            serversContent
-                .navigationTitle("")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    leadingNavigationTitle("Серверы")
-                    ToolbarItem(placement: .topBarTrailing) {
-                        AddServerMenu(
-                            onAddServer: { isAddingProfile = true },
-                            onScanQR: { isScanningQR = true }
-                        )
-                    }
-                }
-        }
-    }
-
-    private var serversContent: some View {
-        ServerProfilesView(
-            profiles: profileStore.profiles,
-            selectedProfileID: selectedProfile?.id,
-            status: { vpnService.status(for: $0) },
-            isBusy: { vpnService.isBusy(profileID: $0) },
-            onSelect: selectProfile,
-            onToggle: {
-                vpnService.toggle(
-                    profile: $0,
-                    clientRoutes: profileStore.effectiveRoutes(for: $0.id)
-                )
-            },
-            onDelete: deleteProfile,
-            onAdd: { isAddingProfile = true }
-        )
-    }
-
-    private var diagnosticsContent: some View {
-        DiagnosticsView(
-            lines: vpnService.diagnosticLog,
-            onRefresh: vpnService.refreshProviderDiagnostics
-        )
-    }
-
-    @ToolbarContentBuilder
-    private func leadingNavigationTitle(_ title: String) -> some ToolbarContent {
-        if #available(iOS 26.0, *) {
-            ToolbarItem(placement: .topBarLeading) {
-                Text(title)
-            }
-            .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .topBarLeading) {
-                Text(title)
-            }
         }
     }
 
@@ -218,35 +81,20 @@ struct ProfileListView: View {
         selectedProfileID = profileStore.profiles.first?.id
     }
 
-    private func showServerPicker() {
-        isShowingServers = true
-    }
-
     private func selectProfile(_ profile: ServerProfile) {
+        guard profile.clusterAvailable else { return }
         selectedProfileID = profile.id
-        isShowingServers = false
     }
 
     private func toggleSelectedProfile() {
         guard let selectedProfile else {
-            isAddingProfile = true
+            isScanningQR = true
             return
         }
         vpnService.toggle(
             profile: selectedProfile,
             clientRoutes: profileStore.effectiveRoutes(for: selectedProfile.id)
         )
-    }
-
-    private func deleteProfile(_ profile: ServerProfile) {
-        clusterCatalogRefreshGate.reset(profileID: profile.id)
-        vpnService.removeConfiguration(profileID: profile.id)
-        do {
-            try profileStore.remove(profileID: profile.id)
-            synchronizeSelection()
-        } catch {
-            vpnService.lastError = error.localizedDescription
-        }
     }
 
     private func handleQRResult(_ result: Result<String, Error>) {
@@ -256,7 +104,6 @@ struct ProfileListView: View {
             case let .success(uri):
                 let profile = try profileStore.importOnboardingURI(uri)
                 selectedProfileID = profile.id
-                selectedSection = .home
                 vpnService.reload {
                     synchronizeConnectedClusters()
                 }
