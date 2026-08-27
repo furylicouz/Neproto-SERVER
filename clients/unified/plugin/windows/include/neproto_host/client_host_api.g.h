@@ -83,7 +83,8 @@ enum class TunnelState {
 enum class CarrierKind {
   kUnknown = 0,
   kNone = 1,
-  kHttp3WebTransport = 2
+  kHttp3WebTransport = 2,
+  kHttpsWebSocket = 3
 };
 
 enum class HostErrorCode {

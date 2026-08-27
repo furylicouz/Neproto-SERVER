@@ -30,7 +30,7 @@ struct IOSHostAdapterTests {
     #expect(defaults.string(forKey: IOSProfileRepository.selectedProfileKey) == nil)
   }
 
-  @Test("provider configuration contains strict HTTP3 but no credential")
+  @Test("provider configuration contains strict HTTPS but no credential")
   func strictProviderConfigurationIsSecretFree() throws {
     let suite = "neproto-host-tests-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suite))
@@ -43,8 +43,11 @@ struct IOSHostAdapterTests {
     let configuration = try repository.strictProviderConfiguration(profile: profile)
     let raw = try #require(configuration["client_configuration"] as? Data)
     let object = try #require(JSONSerialization.jsonObject(with: raw) as? [String: Any])
-    #expect(object["carrier_policy"] as? String == "http3-only")
+    #expect(object["carrier_policy"] as? String == "https-only")
     #expect(object["max_parallel_carriers"] as? Int == 1)
+	#expect(object["https_url"] as? String == "wss://vpn.example.com/private/https/session")
+	#expect(object["http3_url"] == nil)
+	#expect(object["webrtc_signaling_url"] == nil)
     #expect(configuration["secret"] == nil)
     #expect(configuration["credential"] == nil)
   }
@@ -56,7 +59,7 @@ struct IOSHostAdapterTests {
     #expect(IOSVPNStatusMapper.state(.connected) == .connected)
     #expect(IOSVPNStatusMapper.state(.reasserting) == .reconnecting)
     #expect(IOSVPNStatusMapper.state(.disconnecting) == .disconnecting)
-    #expect(IOSVPNStatusMapper.carrier(.connected) == .http3WebTransport)
+    #expect(IOSVPNStatusMapper.carrier(.connected) == .httpsWebSocket)
     #expect(IOSVPNStatusMapper.carrier(.connecting) == .none)
     #expect(IOSVPNStatusMapper.carrier(.failed) == .none)
   }
@@ -83,13 +86,13 @@ struct IOSHostAdapterTests {
 
   @Test("packet tunnel runtime health is bounded and destination free")
   func parsesPacketTunnelRuntimeHealth() throws {
-    let raw = Data(#"{"state":"connected","carrier":"http3-webtransport","upload_bytes_per_second":125000,"download_bytes_per_second":250000,"upload_total_bytes":1000000,"download_total_bytes":2000000,"quic_smoothed_rtt_ms":84,"quic_packets_sent":2000,"quic_packets_lost":40,"quic_bytes_sent":1800000,"quic_bytes_lost":36000}"#.utf8)
+    let raw = Data(#"{"state":"connected","carrier":"https_websocket","upload_bytes_per_second":125000,"download_bytes_per_second":250000,"upload_total_bytes":1000000,"download_total_bytes":2000000,"quic_smoothed_rtt_ms":0,"quic_packets_sent":0,"quic_packets_lost":0,"quic_bytes_sent":0,"quic_bytes_lost":0}"#.utf8)
     let health = try #require(IOSRuntimeHealth.decode(raw))
     #expect(health.downloadBytesPerSecond == 250_000)
-    #expect(health.quicSmoothedRTTMS == 84)
-    #expect(health.quicPacketsSent == 2_000)
-    #expect(health.quicPacketsLost == 40)
-    #expect(health.diagnosticMessage.contains("2.00%"))
+	#expect(health.carrier == "https_websocket")
+	#expect(health.diagnosticMessage.contains("HTTPS/TLS health"))
+	#expect(!health.diagnosticMessage.contains("RTT"))
+	#expect(!health.diagnosticMessage.contains("packet loss"))
     #expect(!health.diagnosticMessage.contains("telegram"))
 
     #expect(IOSRuntimeHealth.decode(Data(repeating: 0x41, count: 16_385)) == nil)

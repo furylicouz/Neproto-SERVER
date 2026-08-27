@@ -133,6 +133,7 @@ enum CarrierKind {
   unknown,
   none,
   http3WebTransport,
+  httpsWebSocket,
 }
 
 enum HostErrorCode {

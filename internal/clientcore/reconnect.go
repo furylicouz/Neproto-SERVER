@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	ErrReconnectExhausted = errors.New("HTTP/3 reconnect attempts exhausted")
+	ErrReconnectExhausted = errors.New("strict carrier reconnect attempts exhausted")
 	ErrProbeUnavailable   = errors.New("authenticated session probe is unavailable")
 	ErrSessionEnded       = errors.New("authenticated session ended during probe")
 )
@@ -79,7 +79,7 @@ func normalizeReconnectPolicy(policy ReconnectPolicy) (ReconnectPolicy, error) {
 
 // NetworkChanged probes the current authenticated session, then performs at
 // most six replacements through the same Core connector. A production Core's
-// connector contains only HTTP/3 WebTransport dependencies.
+// connector contains only the dependencies of its selected strict carrier.
 func (c *Core) NetworkChanged(
 	ctx context.Context,
 	operationID string,
@@ -106,6 +106,7 @@ func (c *Core) NetworkChanged(
 	}
 	generation := c.generation
 	current := c.runtime
+	currentCarrier := current.runtime.Carrier()
 	currentCancel := c.activeCancel
 	request := c.request
 	policy := c.reconnect
@@ -169,7 +170,7 @@ func (c *Core) NetworkChanged(
 			continue
 		}
 		owned := &ownedRuntime{runtime: replacement}
-		if replacement.Carrier() != clienthost.CarrierHTTP3WebTransport {
+		if replacement.Carrier() != currentCarrier || !supportedStrictCarrier(currentCarrier) {
 			_ = owned.Close()
 			lastErr = ErrUnexpectedCarrier
 			continue
@@ -193,7 +194,7 @@ func (c *Core) NetworkChanged(
 		c.activeCancel = sessionCancel
 		c.activeDone = sessionDone
 		c.snapshot.State = clienthost.StateConnected
-		c.snapshot.Carrier = clienthost.CarrierHTTP3WebTransport
+		c.snapshot.Carrier = currentCarrier
 		c.snapshot.ConnectedAtUnixMS = c.now().UnixMilli()
 		c.snapshot.LastError = nil
 		c.snapshot.Sequence++
@@ -213,13 +214,7 @@ func (c *Core) NetworkChanged(
 	}
 
 	if lastErr == nil {
-		lastErr = clienthost.WrapError(
-			clienthost.CodeHTTP3Timeout,
-			clienthost.StageWebTransportConnect,
-			"HTTP/3 reconnect attempts exhausted.",
-			true,
-			ErrReconnectExhausted,
-		)
+		lastErr = reconnectExhaustedError(currentCarrier)
 	}
 	if currentCancel != nil {
 		currentCancel()
@@ -228,7 +223,7 @@ func (c *Core) NetworkChanged(
 	c.mu.Lock()
 	if !c.closed && c.generation == generation && c.runtime == current &&
 		c.snapshot.State == clienthost.StateReconnecting {
-		mapped := clienthost.MapError(operationID, clienthost.StageWebTransportConnect, lastErr)
+		mapped := clienthost.MapError(operationID, reconnectStage(currentCarrier), lastErr)
 		c.runtime = nil
 		c.activeCancel = nil
 		c.activeDone = nil
@@ -244,6 +239,32 @@ func (c *Core) NetworkChanged(
 	}
 	c.mu.Unlock()
 	return c.Snapshot(), context.Canceled
+}
+
+func reconnectExhaustedError(carrier clienthost.Carrier) error {
+	if carrier == clienthost.CarrierHTTP3WebTransport {
+		return clienthost.WrapError(
+			clienthost.CodeHTTP3Timeout,
+			clienthost.StageWebTransportConnect,
+			"HTTP/3 reconnect attempts exhausted.",
+			true,
+			ErrReconnectExhausted,
+		)
+	}
+	return clienthost.WrapError(
+		clienthost.CodeHostUnavailable,
+		clienthost.StageTLSHandshake,
+		"HTTPS carrier reconnect attempts exhausted.",
+		true,
+		ErrReconnectExhausted,
+	)
+}
+
+func reconnectStage(carrier clienthost.Carrier) clienthost.Stage {
+	if carrier == clienthost.CarrierHTTP3WebTransport {
+		return clienthost.StageWebTransportConnect
+	}
+	return clienthost.StageTLSHandshake
 }
 
 func reconnectBackoff(attempt int, policy ReconnectPolicy) time.Duration {

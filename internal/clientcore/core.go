@@ -1,6 +1,6 @@
 // Package clientcore owns one bounded NP/2 client lifecycle per Core instance.
 // It contains no UI or platform tunnel integration and accepts only an
-// HTTP/3 WebTransport runtime.
+// explicitly strict single-carrier runtime.
 package clientcore
 
 import (
@@ -21,7 +21,7 @@ var (
 	ErrNotConnected      = errors.New("client core is not connected")
 	ErrReconnectActive   = errors.New("client core reconnect is already active")
 	ErrNoRuntime         = errors.New("client connector returned no runtime")
-	ErrUnexpectedCarrier = errors.New("client connector returned a non-HTTP/3 runtime")
+	ErrUnexpectedCarrier = errors.New("client connector returned an unsupported runtime carrier")
 )
 
 // Runtime is an authenticated NP/2 session whose carrier has already been
@@ -146,7 +146,8 @@ func (c *Core) Connect(ctx context.Context, request ConnectRequest) (clienthost.
 	}
 
 	owned := &ownedRuntime{runtime: runtime}
-	if runtime.Carrier() != clienthost.CarrierHTTP3WebTransport {
+	runtimeCarrier := runtime.Carrier()
+	if !supportedStrictCarrier(runtimeCarrier) {
 		_ = owned.Close()
 		c.finishConnectFailure(generation, connectDone, request.OperationID, ErrUnexpectedCarrier)
 		return c.Snapshot(), ErrUnexpectedCarrier
@@ -166,7 +167,7 @@ func (c *Core) Connect(ctx context.Context, request ConnectRequest) (clienthost.
 	c.runtime = owned
 	c.request = request
 	c.snapshot.State = clienthost.StateConnected
-	c.snapshot.Carrier = clienthost.CarrierHTTP3WebTransport
+	c.snapshot.Carrier = runtimeCarrier
 	c.snapshot.ConnectedAtUnixMS = c.now().UnixMilli()
 	c.snapshot.LastError = nil
 	c.snapshot.Sequence++
@@ -180,6 +181,11 @@ func (c *Core) Connect(ctx context.Context, request ConnectRequest) (clienthost.
 		c.monitor(generation, sessionContext, sessionDone, owned, request.OperationID)
 	}()
 	return result, nil
+}
+
+func supportedStrictCarrier(carrier clienthost.Carrier) bool {
+	return carrier == clienthost.CarrierHTTP3WebTransport ||
+		carrier == clienthost.CarrierHTTPSWebSocket
 }
 
 func (c *Core) finishConnectFailure(

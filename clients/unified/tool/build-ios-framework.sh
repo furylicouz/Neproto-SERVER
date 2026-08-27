@@ -50,4 +50,4 @@ if [[ -e "$IOS_DIR/Frameworks/NP2Mobile.xcframework" ]]; then
 fi
 mv "$STAGED_FRAMEWORK" "$IOS_DIR/Frameworks/NP2Mobile.xcframework"
 rmdir "$STAGE_DIR"
-echo "NP2Mobile.xcframework built for the strict HTTP/3 iOS candidate."
+echo "NP2Mobile.xcframework built for the strict HTTPS/TLS iOS A/B candidate."

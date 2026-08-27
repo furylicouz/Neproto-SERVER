@@ -1,10 +1,19 @@
+#if os(iOS)
 import Flutter
+#elseif os(macOS)
+import FlutterMacOS
+#endif
 
 public class NeprotoHostPlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     MainActor.assumeIsolated {
-      let host = IOSClientHost(binaryMessenger: registrar.messenger())
-      ClientHostApiSetup.setUp(binaryMessenger: registrar.messenger(), api: host)
+#if os(iOS)
+	  let messenger = registrar.messenger()
+#else
+	  let messenger = registrar.messenger
+#endif
+	  let host = IOSClientHost(binaryMessenger: messenger)
+	  ClientHostApiSetup.setUp(binaryMessenger: messenger, api: host)
     }
   }
 }

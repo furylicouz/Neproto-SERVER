@@ -26,7 +26,7 @@ enum TunnelState {
   failed,
 }
 
-enum CarrierKind { unknown, none, http3WebTransport }
+enum CarrierKind { unknown, none, http3WebTransport, httpsWebSocket }
 
 enum HostErrorCode {
   unknown,

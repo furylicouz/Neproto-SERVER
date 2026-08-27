@@ -160,21 +160,30 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
 		return try clientConfigurationJSON(deviceID: deviceID, carrierPolicy: "http3-only", parallelCarriers: 1)
 	}
 
+	/// Builds the iOS TCP/TLS A/B candidate without rewriting the persisted
+	/// profile. Only HTTPS WebSocket is eligible and datagrams are disabled.
+	public func strictHTTPSClientConfigurationJSON(deviceID: UUID? = nil) throws -> Data {
+		try clientConfigurationJSON(deviceID: deviceID, carrierPolicy: "https-only", parallelCarriers: 1)
+	}
+
 	private func clientConfigurationJSON(
 		deviceID: UUID?,
 		carrierPolicy: String,
 		parallelCarriers: Int
 	) throws -> Data {
-        let normalizedHTTP3Path = effectiveHTTP3Path
-		let compatibilityCarriersEnabled = carrierPolicy != "http3-only"
+		let normalizedHTTP3Path = effectiveHTTP3Path
+		let includeHTTPS = carrierPolicy != "http3-only"
+		let includeWebRTC = carrierPolicy != "http3-only" && carrierPolicy != "https-only"
+		let includeHTTP3 = carrierPolicy != "https-only"
+		let strictHTTPS = carrierPolicy == "https-only"
         let configuration = ClientConfiguration(
             serverIdentity: serverIdentity,
             deviceID: deviceID?.uuidString.lowercased(),
             serverAddresses: effectiveServerAddresses,
             secretFile: "keychain",
-            httpsURL: compatibilityCarriersEnabled ? "wss://\(serverIdentity)\(httpsPath)" : nil,
-            webRTCSignalingURL: compatibilityCarriersEnabled ? "https://\(serverIdentity)\(webRTCPath)" : nil,
-            http3URL: normalizedHTTP3Path.map { "https://\(serverIdentity)\($0)" },
+			httpsURL: includeHTTPS ? "wss://\(serverIdentity)\(httpsPath)" : nil,
+			webRTCSignalingURL: includeWebRTC ? "https://\(serverIdentity)\(webRTCPath)" : nil,
+			http3URL: includeHTTP3 ? normalizedHTTP3Path.map { "https://\(serverIdentity)\($0)" } : nil,
             // "web" is the backward-compatible wire value for Mosaic's
             // automatic runtime web/realtime/stream classification.
             profile: CoverProfile.web.rawValue,
@@ -183,12 +192,12 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
             initialWindowBytes: 2_097_152,
             maxStreams: 128,
 			maxParallelCarriers: parallelCarriers,
-            requireDatagrams: requireDatagrams,
+			requireDatagrams: strictHTTPS ? false : requireDatagrams,
             enableConstellation: enableConstellation,
             enableForwardSecrecy: enableForwardSecrecy,
-            webRTCTimeout: compatibilityCarriersEnabled ? "5s" : nil,
-            httpsTimeout: compatibilityCarriersEnabled ? "10s" : nil,
-            http3Timeout: normalizedHTTP3Path == nil ? nil : "5s",
+			webRTCTimeout: includeWebRTC ? "5s" : nil,
+			httpsTimeout: includeHTTPS ? "10s" : nil,
+			http3Timeout: includeHTTP3 && normalizedHTTP3Path != nil ? "5s" : nil,
             carrierCacheTTL: "10m"
         )
         let encoder = JSONEncoder()

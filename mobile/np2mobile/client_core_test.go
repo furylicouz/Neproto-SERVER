@@ -39,6 +39,17 @@ func TestInstanceClientCoreAppliesRoutesAfterStrictAuthentication(t *testing.T) 
 	}
 }
 
+func TestNewStrictHTTPSClientCoreConstructsDisconnected(t *testing.T) {
+	core, err := NewStrictHTTPSClientCore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close()
+	if got := core.SnapshotJSON(); !strings.Contains(got, `"state":"disconnected"`) {
+		t.Fatalf("snapshot = %s", got)
+	}
+}
+
 func TestInstanceClientCoreCloseCancelsInFlightConnect(t *testing.T) {
 	started := make(chan struct{})
 	fake := &fakeStrictCore{connect: func(ctx context.Context) error {

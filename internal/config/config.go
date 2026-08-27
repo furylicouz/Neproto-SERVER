@@ -66,6 +66,9 @@ const (
 	// CarrierPolicyHTTP3Only is the first cross-platform candidate policy. Its
 	// client configuration contains no alternate carrier endpoints or timers.
 	CarrierPolicyHTTP3Only CarrierPolicy = "http3-only"
+	// CarrierPolicyHTTPSOnly is the single-carrier TCP/TLS A/B policy. It keeps
+	// HTTP/3 and WebRTC endpoints out of the runtime configuration entirely.
+	CarrierPolicyHTTPSOnly CarrierPolicy = "https-only"
 )
 
 type Client struct {
@@ -441,9 +444,10 @@ func scanUniqueJSONValue(decoder *json.Decoder) error {
 
 func validateClient(config Client) error {
 	strictHTTP3 := config.CarrierPolicy == CarrierPolicyHTTP3Only
+	strictHTTPS := config.CarrierPolicy == CarrierPolicyHTTPSOnly
 	if !validIdentity(config.ServerIdentity) || config.ProfileID() == 0 ||
 		(config.CarrierPolicy != CarrierPolicyPerformance && config.CarrierPolicy != CarrierPolicyUDPFirst &&
-			config.CarrierPolicy != CarrierPolicyHTTP3Only) ||
+			config.CarrierPolicy != CarrierPolicyHTTP3Only && config.CarrierPolicy != CarrierPolicyHTTPSOnly) ||
 		len(config.ServerAddresses) > 8 || !validServerAddresses(config.ServerAddresses) ||
 		config.MaxCoverOverheadPercent > 100 ||
 		config.InitialWindowBytes < 16*1024 || config.InitialWindowBytes > session.MaxInitialWindow ||
@@ -464,6 +468,16 @@ func validateClient(config Client) error {
 			return ErrInvalidConfig
 		}
 		_, err := validateEndpointURL(config.HTTP3URL, "https", config.ServerIdentity)
+		return err
+	}
+	if strictHTTPS {
+		if config.WebRTCSignalingURL != "" || config.HTTP3URL != "" ||
+			config.WebRTCTimeout.Duration != 0 || config.HTTP3Timeout.Duration != 0 ||
+			config.MaxParallelCarriers != 1 || config.RequireDatagrams ||
+			!validDuration(config.HTTPSTimeout.Duration, 100*time.Millisecond, 60*time.Second) {
+			return ErrInvalidConfig
+		}
+		_, err := validateEndpointURL(config.HTTPSURL, "wss", config.ServerIdentity)
 		return err
 	}
 	if !validDuration(config.WebRTCTimeout.Duration, 100*time.Millisecond, 30*time.Second) ||

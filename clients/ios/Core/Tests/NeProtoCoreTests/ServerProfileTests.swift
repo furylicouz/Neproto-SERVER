@@ -90,6 +90,35 @@ struct ServerProfileTests {
 		}
 	}
 
+	@Test("iOS A/B candidate adapts a stored profile to HTTPS only")
+	func emitsHTTPSOnlyCandidateConfiguration() throws {
+		let profile = ServerProfile(
+			name: "Primary",
+			serverIdentity: "vpn.example.com",
+			serverAddress: "8.8.8.8",
+			httpsPath: "/private/https/session",
+			webRTCPath: "/private/webrtc/offer",
+			http3Path: "/private/http3/session",
+			requireDatagrams: true,
+			maxParallelCarriers: 3,
+			coverProfile: .web
+		)
+
+		let raw = try profile.strictHTTPSClientConfigurationJSON()
+		let object = try #require(JSONSerialization.jsonObject(with: raw) as? [String: Any])
+		#expect(object["carrier_policy"] as? String == "https-only")
+		#expect(object["max_parallel_carriers"] as? Int == 1)
+		#expect(object["https_url"] as? String == "wss://vpn.example.com/private/https/session")
+		#expect(object["https_timeout"] as? String == "10s")
+		#expect(object["require_datagrams"] as? Bool == false)
+		#expect(object["http3_url"] == nil)
+		#expect(object["http3_timeout"] == nil)
+		#expect(object["webrtc_signaling_url"] == nil)
+		#expect(object["webrtc_timeout"] == nil)
+		#expect(profile.requireDatagrams)
+		#expect(profile.maxParallelCarriers == 3)
+	}
+
     @Test("provider payload round-trips without credentials")
     func providerPayloadRoundTrips() throws {
         let profile = ServerProfile(

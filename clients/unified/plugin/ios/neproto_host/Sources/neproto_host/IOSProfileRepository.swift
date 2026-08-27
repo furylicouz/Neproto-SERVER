@@ -133,9 +133,9 @@ final class IOSProfileRepository {
       "profile_id": profile.id.uuidString.lowercased(),
       "device_id": deviceID.uuidString.lowercased(),
       "profile_payload": try profile.providerPayload(),
-      "client_configuration": try profile.strictHTTP3ClientConfigurationJSON(deviceID: deviceID),
+      "client_configuration": try profile.strictHTTPSClientConfigurationJSON(deviceID: deviceID),
       "client_routes": Data("[]".utf8),
-      "carrier_policy": "http3-only",
+      "carrier_policy": "https-only",
     ]
   }
 

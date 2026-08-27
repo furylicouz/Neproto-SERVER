@@ -47,6 +47,14 @@ func NewStrictHTTP3ClientCore() (*ClientCore, error) {
 	return newStrictClientCore(core), nil
 }
 
+func NewStrictHTTPSClientCore() (*ClientCore, error) {
+	core, err := clientcore.NewProductionStrictHTTPSCore()
+	if err != nil {
+		return nil, err
+	}
+	return newStrictClientCore(core), nil
+}
+
 func newStrictClientCore(core strictClientCoreAPI) *ClientCore {
 	return &ClientCore{core: core}
 }

@@ -230,6 +230,7 @@ private final class IOSRuntimeHealthReply: @unchecked Sendable {
 struct IOSRuntimeHealth: Decodable, Equatable, Sendable {
   static let maximumSnapshotBytes = 16 * 1024
 
+  let carrier: String
   let uploadBytesPerSecond: Int64
   let downloadBytesPerSecond: Int64
   let uploadTotalBytes: Int64
@@ -241,6 +242,7 @@ struct IOSRuntimeHealth: Decodable, Equatable, Sendable {
   let quicBytesLost: UInt64
 
   enum CodingKeys: String, CodingKey {
+    case carrier
     case uploadBytesPerSecond = "upload_bytes_per_second"
     case downloadBytesPerSecond = "download_bytes_per_second"
     case uploadTotalBytes = "upload_total_bytes"
@@ -255,6 +257,7 @@ struct IOSRuntimeHealth: Decodable, Equatable, Sendable {
   static func decode(_ data: Data) -> IOSRuntimeHealth? {
     guard !data.isEmpty, data.count <= maximumSnapshotBytes,
           let value = try? JSONDecoder().decode(IOSRuntimeHealth.self, from: data),
+		  value.carrier == "https_websocket" || value.carrier == "http3_webtransport",
           value.uploadBytesPerSecond >= 0, value.downloadBytesPerSecond >= 0,
           value.uploadTotalBytes >= 0, value.downloadTotalBytes >= 0,
           value.quicSmoothedRTTMS >= 0, value.quicSmoothedRTTMS <= 10 * 60 * 1_000,
@@ -266,6 +269,13 @@ struct IOSRuntimeHealth: Decodable, Equatable, Sendable {
   }
 
   var diagnosticMessage: String {
+	if carrier == "https_websocket" {
+	  return String(
+		format: "HTTPS/TLS health: upload %lld B/s, download %lld B/s.",
+		uploadBytesPerSecond,
+		downloadBytesPerSecond
+	  )
+	}
     let lossPercent = quicPacketsSent == 0
       ? 0
       : Double(quicPacketsLost) * 100 / Double(quicPacketsSent)
@@ -295,7 +305,7 @@ enum IOSVPNStatusMapper {
 
 	static func carrier(_ state: TunnelState) -> CarrierKind {
 		switch state {
-		case .connected, .reconnecting, .disconnecting: .http3WebTransport
+		case .connected, .reconnecting, .disconnecting: .httpsWebSocket
 		default: .none
 		}
 	}

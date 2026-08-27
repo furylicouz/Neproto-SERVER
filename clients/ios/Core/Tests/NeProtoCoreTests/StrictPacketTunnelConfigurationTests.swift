@@ -4,7 +4,7 @@ import Testing
 
 @Suite("Strict Packet Tunnel bootstrap")
 struct StrictPacketTunnelConfigurationTests {
-    @Test("accepts one bounded HTTP/3-only snapshot without secret material")
+    @Test("accepts one bounded HTTPS-only snapshot without secret material")
     func acceptsStrictSnapshot() throws {
         let provider = try validProviderConfiguration()
         let reference = Data([0x01, 0x02, 0x03])
@@ -17,20 +17,24 @@ struct StrictPacketTunnelConfigurationTests {
         #expect(parsed.profileID == "79d6ac07-a320-42d7-8f8f-1b8576ee7bd1")
         #expect(parsed.clientRoutesJSON == "[]")
         #expect(parsed.credentialReference == reference)
-        #expect(!parsed.clientConfigurationJSON.lowercased().contains("secret"))
+		let parsedData = Data(parsed.clientConfigurationJSON.utf8)
+		let parsedObject = try #require(
+			JSONSerialization.jsonObject(with: parsedData) as? [String: Any]
+		)
+		#expect(parsedObject["secret"] == nil)
+		#expect(parsedObject["credential"] == nil)
         #expect(!parsed.clientConfigurationJSON.contains("webrtc"))
-        #expect(!parsed.clientConfigurationJSON.contains("https_url"))
+        #expect(parsed.clientConfigurationJSON.contains("https_url"))
+		#expect(!parsed.clientConfigurationJSON.contains("http3"))
     }
 
-    @Test("rejects alternate carrier fields even under an HTTP/3-only label")
+    @Test("rejects alternate carrier fields even under an HTTPS-only label")
     func rejectsAlternateCarrierFields() throws {
         var provider = try validProviderConfiguration()
-        var client = try #require(
-            JSONSerialization.jsonObject(
-                with: #require(provider["client_configuration"] as? Data)
-            ) as? [String: Any]
-        )
-        client["webrtc_signaling_url"] = "https://vpn.example.com/private/webrtc/offer"
+		let clientData = try #require(provider["client_configuration"] as? Data)
+		let decoded = try JSONSerialization.jsonObject(with: clientData)
+		var client = try #require(decoded as? [String: Any])
+        client["http3_url"] = "https://vpn.example.com/private/http3/session"
         provider["client_configuration"] = try JSONSerialization.data(withJSONObject: client)
 
         #expect(throws: StrictPacketTunnelConfigurationError.alternateCarrierConfigured) {
@@ -78,9 +82,9 @@ struct StrictPacketTunnelConfigurationTests {
         )
         return [
             "profile_id": profile.id.uuidString.lowercased(),
-            "client_configuration": try profile.strictHTTP3ClientConfigurationJSON(),
+            "client_configuration": try profile.strictHTTPSClientConfigurationJSON(),
             "client_routes": Data("[]".utf8),
-            "carrier_policy": "http3-only",
+            "carrier_policy": "https-only",
         ]
     }
 }

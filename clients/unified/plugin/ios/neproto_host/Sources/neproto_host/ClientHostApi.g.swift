@@ -214,6 +214,7 @@ enum CarrierKind: Int, CaseIterable {
   case unknown = 0
   case none = 1
   case http3WebTransport = 2
+  case httpsWebSocket = 3
 }
 
 enum HostErrorCode: Int, CaseIterable {

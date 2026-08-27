@@ -1,4 +1,8 @@
+#if os(iOS)
 import Flutter
+#elseif os(macOS)
+import FlutterMacOS
+#endif
 import Foundation
 import NeProtoCore
 
@@ -115,7 +119,7 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
       let profile = try profiles.profile(id: request.profileId)
       let credential = try profiles.persistentCredentialReference(profileID: profile.id)
       let configuration = try profiles.strictProviderConfiguration(profile: profile)
-      record(level: .info, stage: .webTransportConnect, code: nil, message: "Connecting with HTTP/3 WebTransport.", operationID: request.operationId)
+      record(level: .info, stage: .tlsHandshake, code: nil, message: "Connecting with HTTPS/TLS WebSocket.", operationID: request.operationId)
       return try await tunnel.connect(
         profile: profile,
         providerConfiguration: configuration,
@@ -127,8 +131,8 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
       record(level: .error, stage: .credentialLoad, code: .credentialUnavailable, message: "Credential is unavailable.", operationID: request.operationId)
       throw Self.pigeonError(code: "CREDENTIAL_UNAVAILABLE", message: "The profile credential is unavailable.")
     } catch is ProfileValidationError {
-      record(level: .error, stage: .profileValidation, code: .invalidProfile, message: "The profile cannot use strict HTTP/3.", operationID: request.operationId)
-      throw Self.pigeonError(code: "INVALID_PROFILE", message: "The profile does not contain a valid HTTP/3 endpoint.")
+      record(level: .error, stage: .profileValidation, code: .invalidProfile, message: "The profile cannot use strict HTTPS/TLS.", operationID: request.operationId)
+      throw Self.pigeonError(code: "INVALID_PROFILE", message: "The profile does not contain a valid HTTPS endpoint.")
     } catch {
       record(level: .error, stage: .hostIpc, code: .hostUnavailable, message: "The VPN request failed.", operationID: request.operationId)
       throw Self.pigeonError(code: "HOST_UNAVAILABLE", message: "The iOS VPN host rejected the request.")
@@ -160,7 +164,7 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
       events.append(DiagnosticEvent(
         unixMs: Int64(Date().timeIntervalSince1970 * 1_000),
         level: .info,
-        stage: .webTransportConnect,
+        stage: .tlsHandshake,
         code: nil,
         message: health.diagnosticMessage,
         operationId: "runtime-health",
@@ -171,7 +175,7 @@ final class IOSClientHost: @preconcurrency ClientHostApi {
       appVersion: Self.bundleVersion(),
       hostVersion: Self.bundleVersion(),
       coreVersion: Self.bundleVersion(),
-      carrierPolicy: "http3-only",
+      carrierPolicy: "https-only",
       currentCarrier: status.carrier,
       reconnectCount: 0,
       events: Array(events.suffix(Int(request.limit)))

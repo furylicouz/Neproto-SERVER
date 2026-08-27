@@ -102,6 +102,10 @@ func TestSnapshotValidationRejectsUnknownSuccessAndNegativeCounters(t *testing.T
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid snapshot: %v", err)
 	}
+	validHTTPS := Snapshot{State: StateConnected, Carrier: CarrierHTTPSWebSocket, Sequence: 1}
+	if err := validHTTPS.Validate(); err != nil {
+		t.Fatalf("valid HTTPS snapshot: %v", err)
+	}
 	for _, snapshot := range []Snapshot{
 		{State: StateConnected, Carrier: CarrierUnknown, Sequence: 1},
 		{State: StateUnknown, Carrier: CarrierHTTP3WebTransport, Sequence: 1},

@@ -23,6 +23,7 @@ const (
 	CarrierUnknown           Carrier = "unknown"
 	CarrierNone              Carrier = "none"
 	CarrierHTTP3WebTransport Carrier = "http3_webtransport"
+	CarrierHTTPSWebSocket    Carrier = "https_websocket"
 )
 
 type Snapshot struct {
@@ -45,7 +46,7 @@ func (s Snapshot) Validate() error {
 		return ErrInvalidInput
 	}
 	if (s.State == StateConnected || s.State == StateReconnecting) &&
-		s.Carrier != CarrierHTTP3WebTransport {
+		s.Carrier != CarrierHTTP3WebTransport && s.Carrier != CarrierHTTPSWebSocket {
 		return ErrInvalidInput
 	}
 	if s.State == StateDisconnected && s.Carrier != CarrierNone {
@@ -68,5 +69,6 @@ func validState(state State) bool {
 }
 
 func validCarrier(carrier Carrier) bool {
-	return carrier == CarrierNone || carrier == CarrierHTTP3WebTransport
+	return carrier == CarrierNone || carrier == CarrierHTTP3WebTransport ||
+		carrier == CarrierHTTPSWebSocket
 }

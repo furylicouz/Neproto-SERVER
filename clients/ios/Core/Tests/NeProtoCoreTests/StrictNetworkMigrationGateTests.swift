@@ -7,24 +7,33 @@ struct StrictNetworkMigrationGateTests {
     func coalescesPathFlapping() {
         var gate = StrictNetworkMigrationGate()
 
-        #expect(gate.pathChanged())
+		let firstChange = gate.pathChanged()
+		#expect(firstChange)
         for _ in 0..<100 {
-            #expect(!gate.pathChanged())
+			let queued = gate.pathChanged()
+			#expect(!queued)
         }
-        #expect(gate.completed())
-        #expect(!gate.completed())
-        #expect(gate.pathChanged())
+		let replay = gate.completed()
+		#expect(replay)
+		let drained = gate.completed()
+		#expect(!drained)
+		let nextChange = gate.pathChanged()
+		#expect(nextChange)
     }
 
     @Test("reset discards pending work during tunnel teardown")
     func resetsPendingWork() {
         var gate = StrictNetworkMigrationGate()
-        #expect(gate.pathChanged())
-        #expect(!gate.pathChanged())
+		let firstChange = gate.pathChanged()
+		#expect(firstChange)
+		let queued = gate.pathChanged()
+		#expect(!queued)
 
         gate.reset()
 
-        #expect(!gate.completed())
-        #expect(gate.pathChanged())
+		let drained = gate.completed()
+		#expect(!drained)
+		let nextChange = gate.pathChanged()
+		#expect(nextChange)
     }
 }

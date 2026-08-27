@@ -28,7 +28,7 @@ public struct StrictPacketTunnelConfiguration: Sendable {
         guard let providerCarrierPolicy = providerConfiguration["carrier_policy"] as? String else {
 			throw StrictPacketTunnelConfigurationError.invalidProviderConfiguration
 		}
-		guard providerCarrierPolicy == "http3-only" else {
+		guard providerCarrierPolicy == "https-only" else {
             throw StrictPacketTunnelConfigurationError.alternateCarrierConfigured
         }
         guard let profileID = providerConfiguration["profile_id"] as? String,
@@ -47,15 +47,17 @@ public struct StrictPacketTunnelConfiguration: Sendable {
               let clientObject = try? JSONSerialization.jsonObject(with: clientData) as? [String: Any] else {
             throw StrictPacketTunnelConfigurationError.invalidClientConfiguration
         }
-        guard clientObject["carrier_policy"] as? String == "http3-only",
+        guard clientObject["carrier_policy"] as? String == "https-only",
               clientObject["max_parallel_carriers"] as? Int == 1,
-              let rawHTTP3URL = clientObject["http3_url"] as? String,
-              let http3URL = URL(string: rawHTTP3URL),
-              http3URL.scheme == "https",
-              http3URL.host != nil else {
+			  clientObject["require_datagrams"] as? Bool == false,
+			  let rawHTTPSURL = clientObject["https_url"] as? String,
+			  let httpsURL = URL(string: rawHTTPSURL),
+			  httpsURL.scheme == "wss",
+			  httpsURL.host != nil,
+			  clientObject["https_timeout"] is String else {
             throw StrictPacketTunnelConfigurationError.invalidClientConfiguration
         }
-        for field in ["https_url", "https_timeout", "webrtc_signaling_url", "webrtc_timeout"]
+        for field in ["http3_url", "http3_timeout", "webrtc_signaling_url", "webrtc_timeout"]
         where clientObject[field] != nil {
             throw StrictPacketTunnelConfigurationError.alternateCarrierConfigured
         }

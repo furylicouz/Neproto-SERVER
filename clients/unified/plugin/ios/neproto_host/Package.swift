@@ -15,7 +15,8 @@ let corePath = FileManager.default.fileExists(atPath: repositoryCoreURL.appendin
 let package = Package(
     name: "neproto_host",
     platforms: [
-		.iOS("16.0")
+		.iOS("16.0"),
+		.macOS(.v13)
     ],
     products: [
         .library(name: "neproto-host", targets: ["neproto_host"])

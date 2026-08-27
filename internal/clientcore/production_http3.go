@@ -103,7 +103,7 @@ func newAuthenticatedRuntime(
 	authenticated *session.Authenticated,
 	quicStats func() http3wt.ConnectionStats,
 ) (*authenticatedRuntime, error) {
-	if authenticated == nil || authenticated.Mux == nil || authenticated.Carrier != protocol.CarrierHTTP3 {
+	if authenticated == nil || authenticated.Mux == nil || !supportedAuthenticatedCarrier(authenticated.Carrier) {
 		return nil, ErrNoRuntime
 	}
 	maximumPayload, datagrams, err := authenticatedRoute(authenticated)
@@ -135,10 +135,25 @@ func (r *authenticatedRuntime) Carrier() clienthost.Carrier {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.closed || r.authenticated == nil || r.authenticated.Carrier != protocol.CarrierHTTP3 {
+	if r.closed || r.authenticated == nil {
 		return clienthost.CarrierUnknown
 	}
-	return clienthost.CarrierHTTP3WebTransport
+	return hostCarrier(r.authenticated.Carrier)
+}
+
+func supportedAuthenticatedCarrier(kind protocol.CarrierKind) bool {
+	return kind == protocol.CarrierHTTP3 || kind == protocol.CarrierHTTPS
+}
+
+func hostCarrier(kind protocol.CarrierKind) clienthost.Carrier {
+	switch kind {
+	case protocol.CarrierHTTP3:
+		return clienthost.CarrierHTTP3WebTransport
+	case protocol.CarrierHTTPS:
+		return clienthost.CarrierHTTPSWebSocket
+	default:
+		return clienthost.CarrierUnknown
+	}
 }
 
 func (r *authenticatedRuntime) Wait(ctx context.Context) error {
@@ -197,7 +212,7 @@ func (r *authenticatedRuntime) Close() error {
 
 // HandoverPacketPathTo keeps the platform-owned TUN device and its bounded
 // packet-processing goroutines alive while atomically switching new flows to
-// an authenticated HTTP/3 replacement. The replacement then owns the router
+// an authenticated replacement using the same strict carrier. The replacement then owns the router
 // and stack; closing the old runtime only closes the obsolete carrier mux.
 func (r *authenticatedRuntime) HandoverPacketPathTo(replacement Runtime) error {
 	next, ok := replacement.(*authenticatedRuntime)
@@ -210,7 +225,8 @@ func (r *authenticatedRuntime) HandoverPacketPathTo(replacement Runtime) error {
 	next.mu.Lock()
 	defer next.mu.Unlock()
 	if r.closed || next.closed || r.authenticated == nil || next.authenticated == nil ||
-		r.router == nil || next.router == nil {
+		r.router == nil || next.router == nil ||
+		r.authenticated.Carrier != next.authenticated.Carrier {
 		return ErrNotConnected
 	}
 	maximumPayload, datagrams, err := authenticatedRoute(next.authenticated)
@@ -287,6 +303,10 @@ func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 	stack := r.stack
 	router := r.router
 	closed := r.closed
+	var carrierKind protocol.CarrierKind
+	if r.authenticated != nil {
+		carrierKind = r.authenticated.Carrier
+	}
 	addresses := append([]string(nil), r.addresses...)
 	quicStats := r.quicStats
 	r.mu.Unlock()
@@ -294,7 +314,7 @@ func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 		return RuntimeSnapshot{Carrier: clienthost.CarrierNone}
 	}
 	result := RuntimeSnapshot{
-		Carrier: clienthost.CarrierHTTP3WebTransport, ServerAddresses: addresses,
+		Carrier: hostCarrier(carrierKind), ServerAddresses: addresses,
 		CarrierPoolTarget: 1,
 	}
 	healthy, assignments := router.PoolStats()

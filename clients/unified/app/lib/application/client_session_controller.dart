@@ -482,7 +482,8 @@ bool _validProfileId(String value) {
 }
 
 bool _validDiagnostics(DiagnosticsSnapshot snapshot, int requestedLimit) {
-  if (snapshot.carrierPolicy != 'http3-only' ||
+  if ((snapshot.carrierPolicy != 'http3-only' &&
+          snapshot.carrierPolicy != 'https-only') ||
       snapshot.reconnectCount < 0 ||
       snapshot.events.length > requestedLimit ||
       snapshot.events.length > HostInputValidator.maxDiagnosticsEntries ||

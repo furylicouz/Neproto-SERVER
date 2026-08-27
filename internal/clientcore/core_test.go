@@ -111,6 +111,24 @@ func TestCoreCloseCancelsConnectorAndWaitsForOwnedWork(t *testing.T) {
 	}
 }
 
+func TestCoreConnectPublishesAuthenticatedHTTPSnapshot(t *testing.T) {
+	runtime := newFakeRuntime()
+	runtime.carrier = clienthost.CarrierHTTPSWebSocket
+	core, err := New(Options{Connect: connectorReturning(runtime)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer core.Close(context.Background())
+
+	snapshot, err := core.Connect(context.Background(), validRequest("https"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.State != clienthost.StateConnected || snapshot.Carrier != clienthost.CarrierHTTPSWebSocket {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+}
+
 func TestCoreRejectsNonHTTP3Runtime(t *testing.T) {
 	runtime := newFakeRuntime()
 	runtime.carrier = clienthost.CarrierNone
