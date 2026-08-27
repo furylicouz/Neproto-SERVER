@@ -48,6 +48,7 @@ assert_unsupported ubuntu 25.10
 udp_sysctl=$package_dir/performance/90-neproto-udp.conf
 udp_unit=$package_dir/systemd/neproto-udp-buffers.service
 server_unit=$package_dir/systemd/neproto-server.service
+update_unit=$package_dir/systemd/neproto-update.service
 installer=$package_dir/install.sh
 [[ -s $udp_sysctl ]]
 grep -qx 'net.core.rmem_max=7500000' "$udp_sysctl"
@@ -59,6 +60,7 @@ grep -q '^CapabilityBoundingSet=CAP_NET_ADMIN CAP_SYS_ADMIN$' "$udp_unit"
 ! grep -q '^ConditionPathExists=' "$udp_unit"
 grep -q '^Requires=neproto-udp-buffers.service$' "$server_unit"
 grep -q '^After=.*neproto-udp-buffers.service' "$server_unit"
+grep -qx 'Environment=DOCKER_CONFIG=/var/lib/neproto/update/docker-config' "$update_unit"
 grep -Fq 'neproto-udp-buffers.service' "$installer"
 grep -Fq '90-neproto-udp.conf' "$installer"
 grep -q 'required_commands=.*sysctl' "$installer"

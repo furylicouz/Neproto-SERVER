@@ -6,6 +6,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/neproto-updater apply
+Environment=DOCKER_CONFIG=/var/lib/neproto/update/docker-config
 TimeoutStartSec=30min
 UMask=0027
 NoNewPrivileges=true
