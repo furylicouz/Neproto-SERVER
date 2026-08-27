@@ -3,8 +3,8 @@
 Run as root on Ubuntu 22.04/24.04/26.04 or Debian 12/13:
 
 ```bash
-tar -xzf neproto-server-bundle-np2-0.5.21.tar.gz
-cd neproto-server-bundle-np2-0.5.21
+tar -xzf neproto-server-bundle-np2-0.5.22.tar.gz
+cd neproto-server-bundle-np2-0.5.22
 ./install.sh
 ```
 
