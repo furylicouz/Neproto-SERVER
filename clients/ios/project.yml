@@ -45,7 +45,7 @@ targets:
         PRODUCT_NAME: NeProto
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: NO
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   PacketTunnel:
     type: app-extension
     platform: iOS
