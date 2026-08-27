@@ -155,6 +155,7 @@ test_mode() {
     grep -q 'cap_drop: \[ALL\]' "$root/opt/neproto/compose.yml"
     ! grep -q 'cap_add:' "$root/opt/neproto/compose.yml"
     grep -q '/etc/neproto/geodata:/etc/neproto/geodata:rw' "$root/opt/neproto/compose.yml"
+    grep -q '/etc/neproto/users/active:/etc/neproto/users/active:rw' "$root/opt/neproto/compose.yml"
     grep -q '/var/lib/neproto/usage:/var/lib/neproto/usage:rw' "$root/opt/neproto/compose.yml"
     grep -qx 'net.ipv4.ip_unprivileged_port_start=0' "$root/etc/sysctl.d/91-neproto-docker-ports.conf"
     if grep -q '__SERVICE_GID__' "$root/opt/neproto/compose.yml"; then

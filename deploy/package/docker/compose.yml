@@ -14,6 +14,7 @@ services:
     security_opt: [no-new-privileges:true]
     volumes:
       - /etc/neproto:/etc/neproto:ro
+      - /etc/neproto/users/active:/etc/neproto/users/active:rw
       - /etc/neproto/geodata:/etc/neproto/geodata:rw
       - /var/lib/neproto/usage:/var/lib/neproto/usage:rw
     tmpfs:
