@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 
 	"neproto.local/chameleon/internal/buildinfo"
+	"neproto.local/chameleon/internal/windowscandidate"
 )
 
 const (
@@ -31,6 +34,69 @@ const (
 )
 
 var payloadMagic = [16]byte{'N', 'P', '2', 'W', 'I', 'N', 'S', 'E', 'T', 'U', 'P', 'V', '1', 0, 0, 0}
+var setupMode = "legacy"
+
+type setupLayout struct {
+	application string
+	service     string
+	wintun      string
+	uninstaller string
+	unified     bool
+}
+
+func setupLayoutForMode(mode string) (setupLayout, error) {
+	switch mode {
+	case "legacy":
+		return setupLayout{application: "NeProto.exe", service: "NeProto.Service.exe", wintun: "wintun.dll", uninstaller: "NeProto.Uninstall.exe"}, nil
+	case "unified":
+		return setupLayout{application: `app\neproto_client.exe`, service: `service\NeProto.Service.exe`, wintun: `service\wintun.dll`, uninstaller: "NeProto.Uninstall.exe", unified: true}, nil
+	default:
+		return setupLayout{}, errors.New("unsupported Windows setup mode")
+	}
+}
+
+func safePayloadPath(root, name string) (string, error) {
+	if name == "" || len(name) > 240 || strings.ContainsAny(name, `\:`) {
+		return "", errors.New("установочный payload содержит некорректный путь")
+	}
+	clean := path.Clean(name)
+	if clean == "." || path.IsAbs(clean) || !fs.ValidPath(clean) {
+		return "", errors.New("установочный payload содержит небезопасный путь")
+	}
+	destination := filepath.Join(root, filepath.FromSlash(clean))
+	relative, err := filepath.Rel(root, destination)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, `..`+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return "", errors.New("установочный payload выходит за каталог установки")
+	}
+	return destination, nil
+}
+
+func verifyPayloadForMode(directory, mode, expectedVersion string) error {
+	layout, err := setupLayoutForMode(mode)
+	if err != nil {
+		return err
+	}
+	required := []string{layout.application, layout.service, layout.wintun, layout.uninstaller}
+	if layout.unified {
+		manifest, err := windowscandidate.LoadAndVerify(directory)
+		if err != nil {
+			return fmt.Errorf("проверка manifest установщика: %w", err)
+		}
+		if manifest.Version != expectedVersion {
+			return errors.New("версия payload не совпадает с версией установщика")
+		}
+		required = append(required, `app\flutter_windows.dll`, `app\data\icudtl.dat`, `app\data\app.so`, `app\data\flutter_assets\AssetManifest.bin`)
+	} else {
+		required = append(required, "WINTUN-LICENSE.txt")
+	}
+	for _, name := range required {
+		info, err := os.Stat(filepath.Join(directory, name))
+		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+			return fmt.Errorf("в payload отсутствует %s", name)
+		}
+	}
+	return nil
+}
 
 func main() {
 	uninstall := hasArgument("/uninstall") || hasArgument("--uninstall")
@@ -74,6 +140,10 @@ func main() {
 }
 
 func installApplication() error {
+	layout, err := setupLayoutForMode(setupMode)
+	if err != nil {
+		return err
+	}
 	programFiles := os.Getenv("ProgramFiles")
 	programData := os.Getenv("ProgramData")
 	if programFiles == "" || programData == "" {
@@ -85,12 +155,6 @@ func installApplication() error {
 		return err
 	}
 	_ = configureDataACL(data)
-	if err := stopAndDeleteService(); err != nil {
-		return err
-	}
-	if currentService := filepath.Join(target, "NeProto.Service.exe"); fileExists(currentService) {
-		_ = exec.Command(currentService, "--cleanup", "--data-dir", data).Run()
-	}
 
 	staging := target + ".new"
 	backup := target + ".previous"
@@ -104,29 +168,39 @@ func installApplication() error {
 		_ = os.RemoveAll(staging)
 		return err
 	}
+	previousService := installedServiceRelative(target)
+	if err := stopAndDeleteService(); err != nil {
+		_ = os.RemoveAll(staging)
+		return err
+	}
+	cleanupInstalledRuntime(target, data)
 	if pathExists(target) {
 		if err := os.Rename(target, backup); err != nil {
+			restorePreviousService(target, data, previousService)
 			return fmt.Errorf("не удалось подготовить обновление: %w", err)
 		}
 	}
 	if err := os.Rename(staging, target); err != nil {
 		_ = os.Rename(backup, target)
+		restorePreviousService(target, data, previousService)
 		return fmt.Errorf("не удалось установить файлы: %w", err)
 	}
 	rollback := true
 	defer func() {
 		if rollback {
+			_ = stopAndDeleteService()
 			_ = os.RemoveAll(target)
 			_ = os.Rename(backup, target)
+			restorePreviousService(target, data, previousService)
 		}
 	}()
-	if err := registerService(target, data); err != nil {
+	if err := registerService(target, data, layout.service); err != nil {
 		return err
 	}
-	if err := createShortcut(target); err != nil {
+	if err := createShortcut(target, layout.application); err != nil {
 		return err
 	}
-	if err := writeUninstallRegistry(target); err != nil {
+	if err := writeUninstallRegistry(target, layout); err != nil {
 		return err
 	}
 	rollback = false
@@ -142,26 +216,53 @@ func uninstallApplication(purge bool) error {
 	if err := stopAndDeleteService(); err != nil {
 		return err
 	}
-	servicePath := filepath.Join(target, "NeProto.Service.exe")
-	if fileExists(servicePath) {
-		_ = exec.Command(servicePath, "--cleanup", "--data-dir", data).Run()
-	}
+	cleanupInstalledRuntime(target, data)
 	_ = os.Remove(filepath.Join(programData, `Microsoft\Windows\Start Menu\Programs\NeProto.lnk`))
 	_ = registry.DeleteKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NeProto`)
 	self, _ := os.Executable()
-	for _, name := range []string{"NeProto.exe", "NeProto.Service.exe", "wintun.dll", "WINTUN-LICENSE.txt"} {
-		_ = os.Remove(filepath.Join(target, name))
-	}
 	if purge {
 		_ = os.RemoveAll(data)
 	}
 	if strings.EqualFold(filepath.Dir(self), target) {
-		path, _ := windows.UTF16PtrFromString(self)
-		_ = windows.MoveFileEx(path, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
+		entries, _ := os.ReadDir(target)
+		for _, entry := range entries {
+			entryPath := filepath.Join(target, entry.Name())
+			if !strings.EqualFold(entryPath, self) {
+				_ = os.RemoveAll(entryPath)
+			}
+		}
+		selfPath, _ := windows.UTF16PtrFromString(self)
+		targetPath, _ := windows.UTF16PtrFromString(target)
+		_ = windows.MoveFileEx(selfPath, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
+		_ = windows.MoveFileEx(targetPath, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
 	} else {
 		_ = os.RemoveAll(target)
 	}
 	return nil
+}
+
+func cleanupInstalledRuntime(target, data string) {
+	for _, relative := range []string{"NeProto.Service.exe", `service\NeProto.Service.exe`} {
+		servicePath := filepath.Join(target, relative)
+		if fileExists(servicePath) {
+			_ = exec.Command(servicePath, "--cleanup", "--data-dir", data).Run()
+		}
+	}
+}
+
+func installedServiceRelative(target string) string {
+	for _, relative := range []string{`service\NeProto.Service.exe`, "NeProto.Service.exe"} {
+		if fileExists(filepath.Join(target, relative)) {
+			return relative
+		}
+	}
+	return ""
+}
+
+func restorePreviousService(target, data, serviceRelative string) {
+	if serviceRelative != "" && fileExists(filepath.Join(target, serviceRelative)) {
+		_ = registerService(target, data, serviceRelative)
+	}
 }
 
 func extractPayload(destination string) error {
@@ -193,28 +294,71 @@ func extractPayload(destination string) error {
 	if err != nil {
 		return errors.New("установочный payload повреждён")
 	}
+	return extractArchive(reader, destination, setupMode)
+}
+
+func extractArchive(reader *zip.Reader, destination, mode string) error {
+	if _, err := setupLayoutForMode(mode); err != nil {
+		return err
+	}
+	if len(reader.File) == 0 || len(reader.File) > 4096 {
+		return errors.New("установочный payload содержит некорректное число файлов")
+	}
 	if err := os.MkdirAll(destination, 0o755); err != nil {
 		return err
 	}
-	allowed := map[string]bool{"NeProto.exe": true, "NeProto.Service.exe": true, "wintun.dll": true, "WINTUN-LICENSE.txt": true, "NeProto.Uninstall.exe": true}
+	legacyAllowed := map[string]bool{"NeProto.exe": true, "NeProto.Service.exe": true, "wintun.dll": true, "WINTUN-LICENSE.txt": true, "NeProto.Uninstall.exe": true}
+	seen := make(map[string]struct{}, len(reader.File))
+	var total uint64
 	for _, entry := range reader.File {
-		name := filepath.Clean(entry.Name)
-		if !allowed[name] || filepath.Base(name) != name || entry.FileInfo().IsDir() || entry.UncompressedSize64 > 300<<20 {
+		outputPath, err := safePayloadPath(destination, entry.Name)
+		if err != nil {
+			return err
+		}
+		cleanName := path.Clean(entry.Name)
+		folded := strings.ToLower(cleanName)
+		if _, exists := seen[folded]; exists {
+			return errors.New("установочный payload содержит повторяющийся путь")
+		}
+		seen[folded] = struct{}{}
+		info := entry.FileInfo()
+		if info.Mode()&os.ModeSymlink != 0 || (!info.Mode().IsRegular() && !info.IsDir()) {
 			return errors.New("установочный payload содержит неожиданный файл")
+		}
+		if mode == "legacy" && (!legacyAllowed[cleanName] || info.IsDir()) {
+			return errors.New("установочный payload содержит неожиданный файл")
+		}
+		if info.IsDir() {
+			if err := os.MkdirAll(outputPath, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if entry.UncompressedSize64 == 0 || entry.UncompressedSize64 > 512<<20 || total > (1<<30)-entry.UncompressedSize64 {
+			return errors.New("установочный payload превышает допустимый размер")
+		}
+		total += entry.UncompressedSize64
+		if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+			return err
 		}
 		input, err := entry.Open()
 		if err != nil {
 			return err
 		}
-		output, err := os.OpenFile(filepath.Join(destination, name), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+		output, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o755)
 		if err == nil {
-			_, err = io.CopyN(output, input, int64(entry.UncompressedSize64))
+			var written int64
+			written, err = io.Copy(output, io.LimitReader(input, int64(entry.UncompressedSize64)+1))
+			if err == nil && uint64(written) != entry.UncompressedSize64 {
+				err = errors.New("размер файла в payload не совпадает с архивом")
+			}
 			if closeErr := output.Close(); err == nil {
 				err = closeErr
 			}
 		}
 		_ = input.Close()
 		if err != nil {
+			_ = os.Remove(outputPath)
 			return err
 		}
 	}
@@ -222,22 +366,16 @@ func extractPayload(destination string) error {
 }
 
 func verifyPayload(directory string) error {
-	for _, name := range []string{"NeProto.exe", "NeProto.Service.exe", "wintun.dll", "WINTUN-LICENSE.txt", "NeProto.Uninstall.exe"} {
-		info, err := os.Stat(filepath.Join(directory, name))
-		if err != nil || info.Size() == 0 {
-			return fmt.Errorf("в payload отсутствует %s", name)
-		}
-	}
-	return nil
+	return verifyPayloadForMode(directory, setupMode, buildinfo.Version)
 }
 
-func registerService(target, data string) error {
+func registerService(target, data, serviceRelative string) error {
 	manager, err := mgr.Connect()
 	if err != nil {
 		return err
 	}
 	defer manager.Disconnect()
-	service, err := manager.CreateService(serviceName, filepath.Join(target, "NeProto.Service.exe"), mgr.Config{
+	service, err := manager.CreateService(serviceName, filepath.Join(target, serviceRelative), mgr.Config{
 		DisplayName: "NeProto NP/2 VPN", Description: "NeProto NP/2 system tunnel service",
 		StartType: mgr.StartAutomatic, DelayedAutoStart: true, ErrorControl: mgr.ErrorNormal,
 		Dependencies: []string{"Tcpip", "Dnscache"}, SidType: windows.SERVICE_SID_TYPE_UNRESTRICTED,
@@ -309,19 +447,20 @@ func stopAndDeleteService() error {
 	return service.Delete()
 }
 
-func createShortcut(target string) error {
+func createShortcut(target, applicationRelative string) error {
 	shortcut := filepath.Join(os.Getenv("ProgramData"), `Microsoft\Windows\Start Menu\Programs\NeProto.lnk`)
-	script := "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('" + psQuote(shortcut) + "');$s.TargetPath='" + psQuote(filepath.Join(target, "NeProto.exe")) + "';$s.WorkingDirectory='" + psQuote(target) + "';$s.Description='NeProto NP/2 VPN';$s.Save()"
+	application := filepath.Join(target, applicationRelative)
+	script := "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('" + psQuote(shortcut) + "');$s.TargetPath='" + psQuote(application) + "';$s.WorkingDirectory='" + psQuote(filepath.Dir(application)) + "';$s.Description='NeProto NP/2 VPN';$s.Save()"
 	return runPowerShell(script)
 }
 
-func writeUninstallRegistry(target string) error {
+func writeUninstallRegistry(target string, layout setupLayout) error {
 	key, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NeProto`, registry.SET_VALUE)
 	if err != nil {
 		return err
 	}
 	defer key.Close()
-	values := map[string]string{"DisplayName": "NeProto", "DisplayVersion": strings.TrimPrefix(buildinfo.Version, "np2-"), "Publisher": "NeProto", "InstallLocation": target, "UninstallString": `"` + filepath.Join(target, "NeProto.Uninstall.exe") + `" /uninstall`, "DisplayIcon": filepath.Join(target, "NeProto.exe")}
+	values := map[string]string{"DisplayName": "NeProto", "DisplayVersion": strings.TrimPrefix(buildinfo.Version, "np2-"), "Publisher": "NeProto", "InstallLocation": target, "UninstallString": `"` + filepath.Join(target, layout.uninstaller) + `" /uninstall`, "DisplayIcon": filepath.Join(target, layout.application)}
 	for name, value := range values {
 		if err := key.SetStringValue(name, value); err != nil {
 			return err
