@@ -2,7 +2,7 @@
 📊 NP/2 MOSAIC v2.3 IMPLEMENTATION REPORT
 ━━━━━━━━━━━━━━━━━━━━
 
-Date: 2026-08-27  
+Date: 2026-08-27
 Branch: `codex/mosaic-v2-polymorphic`
 
 ## 📌 Executive Summary
@@ -114,4 +114,3 @@ CPU microbenchmarks.
 | P1 | Generate approved fixed-vs-v2.3 metadata traces and evaluator report | ⏳ Pending |
 | P1 | Review actual overhead and tune only if stream/media performance regresses | ⏳ Pending |
 | P2 | Free C: space and run a 30-second parser fuzz campaign | ⏳ Pending |
-
