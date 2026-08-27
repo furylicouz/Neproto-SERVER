@@ -62,6 +62,7 @@ type Engine struct {
 	baselineProfile    ProfileID
 	activeProfile      ProfileID
 	profile            profileDefinition
+	profiles           profileSet
 	maxOverheadPercent uint64
 	maxCreditUnits     uint64
 	creditUnits        uint64
@@ -79,6 +80,10 @@ func NewEngine(config Config) (*Engine, error) {
 	if config.MaxBudgetBytes < 0 || config.MaxBudgetBytes > MaxWireCellBytes {
 		return nil, ErrInvalidConfig
 	}
+	profiles, err := deriveProfileSet(config.Seed)
+	if err != nil {
+		return nil, err
+	}
 	maxBudgetBytes := config.MaxBudgetBytes
 	if maxBudgetBytes == 0 {
 		maxBudgetBytes = defaultMaxBudgetBytes
@@ -87,6 +92,7 @@ func NewEngine(config Config) (*Engine, error) {
 		baselineProfile:    config.Profile,
 		activeProfile:      config.Profile,
 		profile:            profile,
+		profiles:           profiles,
 		maxOverheadPercent: uint64(config.MaxOverheadPercent),
 		maxCreditUnits:     uint64(maxBudgetBytes) * 100,
 		random:             newCoverRandom(config.Seed),

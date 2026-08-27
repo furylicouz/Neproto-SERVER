@@ -150,7 +150,12 @@ func (e *Engine) setMosaicClass(class TrafficClass) {
 		profile = ProfileStream
 	}
 	e.activeProfile = profile
-	e.profile = profileDefinitions[profile]
+	derived, ok := e.profiles.definition(profile)
+	if !ok {
+		e.profile = profileDefinitions[profile]
+		return
+	}
+	e.profile = derived.definition
 }
 
 func (s *mosaicState) resetWindow(now time.Time) {
