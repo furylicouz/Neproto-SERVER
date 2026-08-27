@@ -139,8 +139,12 @@ The repository must provide an offline evaluator that accepts metadata-only
 JSONL traces with the following bounded fields:
 
 ```text
-trace_id | label | relative_time_us | direction | wire_bytes
+trace_id | label | relative_time_us | direction | wire_bytes | added_delay_us (optional)
 ```
+
+`direction` is `up` or `down`. Identifiers use bounded safe labels. Relative
+time is monotonic within a trace; wire size and optional planned delay are
+bounded by the NP/2 cell and Mosaic delay limits.
 
 The evaluator must reject invalid/unbounded input, split training and test data
 by trace rather than packet, and report at minimum:
@@ -154,6 +158,16 @@ by trace rather than packet, and report at minimum:
 The classifier is a regression instrument, not proof of invisibility. A change
 must also preserve the configured overhead and latency budgets and the stream
 throughput fast path.
+
+The repository evaluator is invoked as:
+
+```text
+neproto-coverlab evaluate --input trace.jsonl --json report.json --markdown report.md
+```
+
+Production clients do not write these traces automatically. Captures must be
+collected deliberately for an approved lab run and must contain no payload or
+destination fields.
 
 ## Deterministic Classifier
 
