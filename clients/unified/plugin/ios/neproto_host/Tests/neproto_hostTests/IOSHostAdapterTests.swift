@@ -64,6 +64,26 @@ struct IOSHostAdapterTests {
     #expect(IOSVPNStatusMapper.carrier(.failed) == .none)
   }
 
+  @Test("packet tunnel protocol enforces routes over app interface scoping")
+  func enforcesPacketTunnelRoutes() {
+    let profile = makeProfile()
+    let configuration = ["carrier_policy": "https-only"]
+    let reference = Data([0x01, 0x02, 0x03])
+
+    let tunnelProtocol = IOSVPNProtocolFactory.make(
+      profile: profile,
+      providerConfiguration: configuration,
+      credentialReference: reference,
+      providerBundleID: "com.neproto.ios.PacketTunnel"
+    )
+
+    #expect(tunnelProtocol.enforceRoutes)
+    #expect(!tunnelProtocol.includeAllNetworks)
+    let policy = tunnelProtocol.providerConfiguration?["carrier_policy"] as? String
+    #expect(policy == "https-only")
+    #expect(tunnelProtocol.passwordReference == reference)
+  }
+
   @Test("profile import failures keep their stable boundary")
   func classifiesProfileImportFailures() {
     let invalid = IOSClientHost.importFailure(for: OnboardingProfileError.malformedPayload)

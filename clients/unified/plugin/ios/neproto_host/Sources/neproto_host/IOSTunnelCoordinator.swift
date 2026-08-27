@@ -18,6 +18,24 @@ protocol IOSTunnelManaging: AnyObject {
   func status(selectedProfileID: UUID?) async throws -> TunnelStatus
 }
 
+enum IOSVPNProtocolFactory {
+  static func make(
+    profile: ServerProfile,
+    providerConfiguration: [String: Any],
+    credentialReference: Data,
+    providerBundleID: String
+  ) -> NETunnelProviderProtocol {
+    let tunnelProtocol = NETunnelProviderProtocol()
+    tunnelProtocol.providerBundleIdentifier = providerBundleID
+    tunnelProtocol.serverAddress = profile.serverIdentity
+    tunnelProtocol.passwordReference = credentialReference
+    tunnelProtocol.providerConfiguration = providerConfiguration
+    tunnelProtocol.includeAllNetworks = false
+    tunnelProtocol.enforceRoutes = true
+    return tunnelProtocol
+  }
+}
+
 /// Owns NetworkExtension configuration and status mapping for the Flutter
 /// container. The Packet Tunnel extension remains a separate process and does
 /// not contain a Flutter engine.
@@ -67,11 +85,12 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
     }
 
     let manager = managers[profile.id] ?? NETunnelProviderManager()
-    let tunnelProtocol = NETunnelProviderProtocol()
-    tunnelProtocol.providerBundleIdentifier = providerBundleID
-    tunnelProtocol.serverAddress = profile.serverIdentity
-    tunnelProtocol.passwordReference = credentialReference
-    tunnelProtocol.providerConfiguration = providerConfiguration
+		let tunnelProtocol = IOSVPNProtocolFactory.make(
+		  profile: profile,
+		  providerConfiguration: providerConfiguration,
+		  credentialReference: credentialReference,
+		  providerBundleID: providerBundleID
+		)
     manager.localizedDescription = "NeProto — \(profile.name)"
     manager.protocolConfiguration = tunnelProtocol
     manager.isEnabled = true

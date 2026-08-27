@@ -32,6 +32,13 @@ not retain or invoke HTTP/3 or WebRTC dialers. TLS certificate and hostname
 verification remain mandatory. NP/2 authentication MUST complete before the
 Packet Tunnel installs its default route.
 
+The saved `NETunnelProviderProtocol` MUST set `enforceRoutes` to `true`. This
+ensures the default IPv4/IPv6 tunnel routes and the explicit NP/2 server
+exclusion take precedence over interface scoping performed by applications.
+The candidate MUST NOT enable `includeAllNetworks`; route ownership remains
+defined by the bounded included and excluded route sets installed by the
+Packet Tunnel.
+
 The first candidate remains a single authenticated session. Imported
 Constellation metadata may remain stored, but the strict runtime does not
 advertise Constellation until its control exchange is implemented. Forward
