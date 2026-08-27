@@ -10,6 +10,7 @@ struct OnboardingProfileTests {
             "version": 2,
             "credential_id": "ABEiM0RVZneImaq7zN3u_w",
             "name": "Production iPhone",
+            "region": "Russia",
             "server_identity": "vpn.example.com",
             "server_addresses": ["8.8.8.8"],
             "https_path": "/private/https/session",
@@ -29,6 +30,7 @@ struct OnboardingProfileTests {
         let profile = try onboarding.serverProfile()
         #expect(profile.http3Path == "/private/http3/session")
         #expect(profile.requireDatagrams)
+        #expect(profile.region == "Russia")
         #expect(profile.maxParallelCarriers == 3)
         #expect(profile.enableConstellation)
         #expect(profile.enableForwardSecrecy)

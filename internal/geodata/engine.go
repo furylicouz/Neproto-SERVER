@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -150,6 +151,28 @@ func (engine *Engine) HasGeoIP(country string) bool {
 	}
 	_, ok := engine.geoIP[strings.ToLower(strings.TrimSpace(country))]
 	return ok
+}
+
+// CountryCode returns the deterministic two-letter ISO country code whose
+// installed GeoIP prefix set contains address. Aggregate and provider-specific
+// GeoIP groups are intentionally ignored.
+func (engine *Engine) CountryCode(address netip.Addr) (string, bool) {
+	if engine == nil || !address.IsValid() {
+		return "", false
+	}
+	address = address.Unmap()
+	matches := make([]string, 0, 1)
+	for code, rules := range engine.geoIP {
+		if len(code) != 2 || code[0] < 'a' || code[0] > 'z' || code[1] < 'a' || code[1] > 'z' || !rules.contains(address) {
+			continue
+		}
+		matches = append(matches, strings.ToUpper(code))
+	}
+	if len(matches) == 0 {
+		return "", false
+	}
+	sort.Strings(matches)
+	return matches[0], true
 }
 
 func (engine *Engine) HasGeoSite(category string) bool {

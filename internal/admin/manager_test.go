@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protowire"
+
 	"neproto.local/chameleon/internal/cluster"
 	"neproto.local/chameleon/internal/onboarding"
 )
@@ -64,6 +66,56 @@ func TestManagerAddsListsAndExportsIndependentUser(t *testing.T) {
 	users, err := manager.ListUsers()
 	if err != nil || len(users) != 1 || users[0].ID != user.ID {
 		t.Fatalf("list users=%#v err=%v", users, err)
+	}
+}
+
+func TestManagerExportsConfiguredServerRegion(t *testing.T) {
+	root := t.TempDir()
+	writeInstallation(t, root)
+	manager, err := Open(root, bytes.NewReader(bytes.Repeat([]byte{0x52}, 512)), func() time.Time {
+		return time.Date(2026, time.August, 27, 18, 0, 0, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := manager.AddUser("Region profile", "web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := manager.EnsureLocalCluster()
+	if err != nil {
+		t.Fatal(err)
+	}
+	master := state.Nodes[0]
+	master.Region = "Moscow"
+	if _, err := manager.UpsertClusterNode(master); err != nil {
+		t.Fatal(err)
+	}
+	profile, err := manager.ExportUserProfile(user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if profile.Region != "Moscow" {
+		t.Fatalf("region=%q", profile.Region)
+	}
+}
+
+func TestManagerDetectsDefaultServerRegionFromLocalGeoIP(t *testing.T) {
+	root := t.TempDir()
+	writeInstallation(t, root)
+	writeCountryGeodata(t, root, "RU", []byte{8, 8, 8, 0}, 24)
+	manager, err := Open(root, bytes.NewReader(bytes.Repeat([]byte{0x62}, 512)), func() time.Time {
+		return time.Date(2026, time.August, 27, 18, 30, 0, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := manager.EnsureLocalCluster()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Nodes[0].Region != "RU" {
+		t.Fatalf("region=%q", state.Nodes[0].Region)
 	}
 }
 
@@ -393,6 +445,30 @@ func writeRuntimeConfigs(t *testing.T, root string) {
 	if err := os.WriteFile(filepath.Join(caddyDirectory, "Caddyfile"), []byte(caddyfile), 0o640); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func writeCountryGeodata(t *testing.T, root, country string, cidrAddress []byte, prefix uint64) {
+	t.Helper()
+	directory := filepath.Join(root, "etc", "neproto", "geodata")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	cidr := appendProtoBytes(nil, 1, cidrAddress)
+	cidr = protowire.AppendTag(cidr, 2, protowire.VarintType)
+	cidr = protowire.AppendVarint(cidr, prefix)
+	entry := appendProtoBytes(nil, 1, []byte(country))
+	entry = appendProtoBytes(entry, 2, cidr)
+	if err := os.WriteFile(filepath.Join(directory, "geoip.dat"), appendProtoBytes(nil, 1, entry), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "geosite.dat"), []byte{}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func appendProtoBytes(raw []byte, number protowire.Number, value []byte) []byte {
+	raw = protowire.AppendTag(raw, number, protowire.BytesType)
+	return protowire.AppendBytes(raw, value)
 }
 
 func writeInstallation(t *testing.T, root string) {

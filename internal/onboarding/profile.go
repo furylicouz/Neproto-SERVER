@@ -28,6 +28,7 @@ type Profile struct {
 	Version              int      `json:"version"`
 	CredentialID         string   `json:"credential_id"`
 	Name                 string   `json:"name"`
+	Region               string   `json:"region,omitempty"`
 	ServerIdentity       string   `json:"server_identity"`
 	ServerAddresses      []string `json:"server_addresses"`
 	HTTPSPath            string   `json:"https_path"`
@@ -97,6 +98,7 @@ func DecodeURI(uri string) (Profile, error) {
 
 func (p Profile) Validate() error {
 	if (p.Version != 1 && p.Version != 2) || !validCredentialID(p.CredentialID) || !validName(p.Name) ||
+		(p.Region != "" && !validName(p.Region)) ||
 		!validIdentity(p.ServerIdentity) || !validAddresses(p.ServerAddresses) ||
 		!validPrivatePath(p.HTTPSPath) || !validPrivatePath(p.WebRTCPath) ||
 		p.HTTPSPath == p.WebRTCPath || !validProfile(p.Profile) {
@@ -104,7 +106,7 @@ func (p Profile) Validate() error {
 	}
 	if p.Version == 1 {
 		if p.HTTP3Path != "" || p.RequireDatagrams || p.MaxParallelCarriers != 0 ||
-			p.EnableConstellation || p.EnableForwardSecrecy || p.ClusterID != "" || p.CatalogPublicKey != "" {
+			p.EnableConstellation || p.EnableForwardSecrecy || p.ClusterID != "" || p.CatalogPublicKey != "" || p.Region != "" {
 			return ErrInvalidProfile
 		}
 	} else if !validPrivatePath(p.HTTP3Path) || p.HTTP3Path == p.HTTPSPath || p.HTTP3Path == p.WebRTCPath ||

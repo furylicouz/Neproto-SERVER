@@ -7,19 +7,23 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"time"
 
 	"neproto.local/chameleon/internal/cluster"
+	"neproto.local/chameleon/internal/geodata"
 )
+
+const historicalLocalRegion = "Primary"
 
 // EnsureLocalCluster initializes this installation as the authoritative
 // master on first use and returns the existing state on subsequent calls.
 func (m *Manager) EnsureLocalCluster() (cluster.State, error) {
 	state, err := m.ClusterState()
 	if err == nil {
-		return state, nil
+		return m.ensureDetectedLocalRegion(state)
 	}
 	if !errors.Is(err, cluster.ErrStateNotFound) {
 		return cluster.State{}, err
@@ -30,14 +34,49 @@ func (m *Manager) EnsureLocalCluster() (cluster.State, error) {
 	}
 	installation := m.Installation()
 	now := m.now().UTC()
+	region := m.detectInstallationRegion()
+	if region == "" {
+		region = historicalLocalRegion
+	}
 	master := cluster.Node{
-		ID: "master", Name: "Primary", Region: "Primary", Roles: []cluster.NodeRole{cluster.RoleMaster, cluster.RoleIngress, cluster.RoleRelay, cluster.RoleEgress},
+		ID: "master", Name: "Primary", Region: region, Roles: []cluster.NodeRole{cluster.RoleMaster, cluster.RoleIngress, cluster.RoleRelay, cluster.RoleEgress},
 		PublicIdentity: installation.Domain, PublicAddresses: append([]string(nil), installation.ServerAddresses...), NP2Endpoint: installation.Domain + ":443",
 		HTTPSPath: installation.HTTPSPath, WebRTCPath: installation.WebRTCPath, HTTP3Path: installation.HTTP3Path,
 		RequireDatagrams: installation.RequireDatagrams, Enabled: true, ClientVisible: true,
 		CredentialID: "local-master", HostKeySHA256: "SHA256:local-controller", ProvisionedAt: now, UpdatedAt: now,
 	}
 	return m.InitializeCluster("np2-"+hex.EncodeToString(randomID), master)
+}
+
+func (m *Manager) ensureDetectedLocalRegion(state cluster.State) (cluster.State, error) {
+	for _, node := range state.Nodes {
+		if node.ClientVisible && node.PublicIdentity == m.installation.Domain && node.Region == historicalLocalRegion {
+			region := m.detectInstallationRegion()
+			if region == "" {
+				return state, nil
+			}
+			node.Region = region
+			return m.UpsertClusterNode(node)
+		}
+	}
+	return state, nil
+}
+
+func (m *Manager) detectInstallationRegion() string {
+	engine, err := geodata.Load(m.GeodataDirectory())
+	if err != nil {
+		return ""
+	}
+	for _, rawAddress := range m.installation.ServerAddresses {
+		address, err := netip.ParseAddr(rawAddress)
+		if err != nil {
+			continue
+		}
+		if country, ok := engine.CountryCode(address); ok {
+			return country
+		}
+	}
+	return ""
 }
 
 func (m *Manager) ClusterBootstrap() (string, string, error) {

@@ -26,6 +26,7 @@ public struct OnboardingProfile: Codable, Equatable, Sendable {
     public let version: Int
     public let credentialID: String
     public let name: String
+    public let region: String?
     public let serverIdentity: String
     public let serverAddresses: [String]
     public let httpsPath: String
@@ -44,6 +45,7 @@ public struct OnboardingProfile: Codable, Equatable, Sendable {
         case version
         case credentialID = "credential_id"
         case name
+        case region
         case serverIdentity = "server_identity"
         case serverAddresses = "server_addresses"
         case httpsPath = "https_path"
@@ -104,11 +106,21 @@ public struct OnboardingProfile: Codable, Equatable, Sendable {
             guard let http3Path, !http3Path.isEmpty else {
                 throw OnboardingProfileError.invalidProfile
             }
+            if let region {
+                let trimmed = region.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty,
+                      trimmed == region,
+                      region.unicodeScalars.count <= 64,
+                      !region.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+                    throw OnboardingProfileError.invalidProfile
+                }
+            }
             if let maxParallelCarriers, !(1...3).contains(maxParallelCarriers) {
                 throw OnboardingProfileError.invalidProfile
             }
         } else if http3Path != nil || requireDatagrams != nil || maxParallelCarriers != nil ||
-                    enableConstellation != nil || enableForwardSecrecy != nil || clusterID != nil || catalogPublicKey != nil {
+                    enableConstellation != nil || enableForwardSecrecy != nil || clusterID != nil ||
+                    catalogPublicKey != nil || region != nil {
             throw OnboardingProfileError.invalidProfile
         }
         if (clusterID == nil) != (catalogPublicKey == nil) {
@@ -128,6 +140,7 @@ public struct OnboardingProfile: Codable, Equatable, Sendable {
             enableForwardSecrecy: enableForwardSecrecy ?? false,
             clusterID: clusterID,
             catalogPublicKey: catalogPublicKey,
+            region: region,
             coverProfile: cover
         )
         do {
@@ -156,6 +169,7 @@ public struct OnboardingProfile: Codable, Equatable, Sendable {
             enableForwardSecrecy: enableForwardSecrecy ?? false,
             clusterID: clusterID,
             catalogPublicKey: catalogPublicKey,
+            region: region,
             coverProfile: cover
         )
     }
@@ -188,6 +202,7 @@ public struct OnboardingProfile: Codable, Equatable, Sendable {
             allowed.insert(CodingKeys.enableForwardSecrecy.rawValue)
             allowed.insert(CodingKeys.clusterID.rawValue)
             allowed.insert(CodingKeys.catalogPublicKey.rawValue)
+            allowed.insert(CodingKeys.region.rawValue)
         }
         let actual = Set(object.keys)
         guard required.isSubset(of: actual), actual.isSubset(of: allowed) else {

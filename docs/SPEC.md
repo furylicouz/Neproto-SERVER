@@ -84,6 +84,26 @@ rollout gates are tracked in
 [`NP2-2.2-PRODUCTION-PLAN.md`](NP2-2.2-PRODUCTION-PLAN.md). An unchecked gate is
 not described as production-proven.
 
+### Onboarding v2 location metadata
+
+An `np2://import/v2/` profile may include an optional `region` string. The
+server copies this value from the client-visible cluster node whose public
+identity matches `server_identity`. Clients use it only for presentation, such
+as a localized location title or country flag; it never participates in
+authentication, routing, carrier selection, or TLS verification.
+
+For a newly created local master, the server should replace its historical
+`Primary` placeholder with a two-letter ISO country code determined locally
+from the installed, verified GeoIP database and the configured public server
+address. This lookup must not call an external geolocation service. An explicit
+administrator region always takes precedence.
+
+`region` is UTF-8, trimmed, contains no control characters, and is limited to
+64 Unicode scalar values. Version 1 onboarding profiles do not accept the
+field. Clients must remain compatible with version 2 profiles that omit it and
+must use a neutral location fallback when the value cannot be mapped to a
+country.
+
 ### Post-v2.2 capability-gated development
 
 NP/2 Constellation is an additive continuity-first multi-carrier extension. Its

@@ -43,6 +43,7 @@ func TestProductionProfileV2RoundTripIncludesHTTP3Policy(t *testing.T) {
 		Version:              2,
 		CredentialID:         "ABEiM0RVZneImaq7zN3u_w",
 		Name:                 "Alice production iPhone",
+		Region:               "Moscow",
 		ServerIdentity:       "vpn.example.com",
 		ServerAddresses:      []string{"8.8.8.8"},
 		HTTPSPath:            "/private_https_route_0123456789",
@@ -70,6 +71,25 @@ func TestProductionProfileV2RoundTripIncludesHTTP3Policy(t *testing.T) {
 	}
 	if !reflect.DeepEqual(decoded, profile) {
 		t.Fatalf("round trip mismatch: %#v", decoded)
+	}
+}
+
+func TestProfileRejectsInvalidOrLegacyRegion(t *testing.T) {
+	profile := Profile{
+		Version: 2, CredentialID: "ABEiM0RVZneImaq7zN3u_w", Name: "Phone",
+		Region: " Moscow\n", ServerIdentity: "vpn.example.com", ServerAddresses: []string{"8.8.8.8"},
+		HTTPSPath: "/private_https_route_0123456789", WebRTCPath: "/private_webrtc_route_0123456789",
+		HTTP3Path: "/private_http3_route_01234567890", Profile: "web",
+		Secret: "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo",
+	}
+	if _, err := EncodeURI(profile); err == nil {
+		t.Fatal("accepted untrimmed region")
+	}
+	profile.Region = "Moscow"
+	profile.Version = 1
+	profile.HTTP3Path = ""
+	if _, err := EncodeURI(profile); err == nil {
+		t.Fatal("legacy profile accepted region")
 	}
 }
 

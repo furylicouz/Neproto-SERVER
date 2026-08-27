@@ -44,6 +44,13 @@ func TestEngineMatchesOfficialV2FlyWireShape(t *testing.T) {
 	if engine.Match(context.Background(), cluster.RouteMatch{GeoIPCountries: []string{"nl"}}, cluster.Target{Address: netip.MustParseAddr("198.51.100.9")}) {
 		t.Fatal("GeoIP CIDR matched unrelated address")
 	}
+	country, ok := engine.CountryCode(netip.MustParseAddr("203.0.113.9"))
+	if !ok || country != "NL" {
+		t.Fatalf("CountryCode()=(%q, %v)", country, ok)
+	}
+	if _, ok := engine.CountryCode(netip.MustParseAddr("198.51.100.9")); ok {
+		t.Fatal("CountryCode() matched unrelated address")
+	}
 }
 
 func TestEngineLoadsCurrentV2FlyRelease(t *testing.T) {

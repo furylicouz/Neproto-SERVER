@@ -488,14 +488,20 @@ func (m *Manager) ExportUserProfile(identifier string) (onboarding.Profile, erro
 	}
 	onboardingVersion := 1
 	maxParallelCarriers := 0
+	region := ""
 	if m.installation.HTTP3Path != "" {
 		onboardingVersion = 2
 		maxParallelCarriers = 3
+		region, err = m.exportServerRegion()
+		if err != nil {
+			return onboarding.Profile{}, fmt.Errorf("load server region: %w", err)
+		}
 	}
 	return onboarding.Profile{
 		Version:              onboardingVersion,
 		CredentialID:         user.ID,
 		Name:                 user.Name,
+		Region:               region,
 		ServerIdentity:       m.installation.Domain,
 		ServerAddresses:      append([]string(nil), m.installation.ServerAddresses...),
 		HTTPSPath:            m.installation.HTTPSPath,
@@ -510,6 +516,27 @@ func (m *Manager) ExportUserProfile(identifier string) (onboarding.Profile, erro
 		Profile:              "web",
 		Secret:               encodedSecret,
 	}, nil
+}
+
+func (m *Manager) exportServerRegion() (string, error) {
+	state, err := m.ClusterState()
+	if errors.Is(err, cluster.ErrStateNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	for _, node := range state.Nodes {
+		if node.ClientVisible && node.PublicIdentity == m.installation.Domain {
+			if node.Region == historicalLocalRegion {
+				if region := m.detectInstallationRegion(); region != "" {
+					return region, nil
+				}
+			}
+			return node.Region, nil
+		}
+	}
+	return "", nil
 }
 
 func (m *Manager) ExportUserURI(identifier string) (string, error) {
