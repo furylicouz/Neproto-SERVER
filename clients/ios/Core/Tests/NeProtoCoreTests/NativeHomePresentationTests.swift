@@ -76,6 +76,20 @@ struct NativeHomePresentationTests {
         #expect(state.isExpanded(subscriptionID: "cluster:one"))
     }
 
+    @Test("automatic ping includes only available subscription servers")
+    func automaticPingProfiles() {
+        let available = profile(name: "Moscow", identity: "one.example.com", region: "RU")
+        var unavailable = profile(name: "Amsterdam", identity: "two.example.com", region: "NL")
+        unavailable.clusterAvailable = false
+        let subscription = NativeSubscriptionSection(
+            id: "cluster:test",
+            title: "Test",
+            profiles: [available, unavailable]
+        )
+
+        #expect(NativeHomePresentation.pingableProfiles(in: subscription).map(\.id) == [available.id])
+    }
+
     private func profile(
         name: String,
         identity: String,

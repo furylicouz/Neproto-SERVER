@@ -110,8 +110,11 @@ struct NativeHomeView: View {
                 }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "rectangle.stack.fill")
-                        .foregroundStyle(Color.accentColor)
+                    Image(systemName: disclosureState.isExpanded(subscriptionID: subscription.id)
+                        ? "chevron.down"
+                        : "chevron.right")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(NeProtoTheme.purple)
                         .frame(width: 28)
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -127,12 +130,6 @@ struct NativeHomeView: View {
                     }
 
                     Spacer(minLength: 4)
-
-                    Image(systemName: disclosureState.isExpanded(subscriptionID: subscription.id)
-                        ? "chevron.up"
-                        : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
                 }
                 .contentShape(Rectangle())
             }
@@ -263,7 +260,7 @@ private struct NativeServerRow: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(NeProtoTheme.purple)
                         .accessibilityHidden(true)
                 }
             }

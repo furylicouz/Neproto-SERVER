@@ -72,6 +72,10 @@ public enum NativeHomePresentation {
         return ServerLocationPresentation.flag(forRegion: nil, fallbackCountryCode: fallbackCountryCode) ?? "🌐"
     }
 
+    public static func pingableProfiles(in subscription: NativeSubscriptionSection) -> [ServerProfile] {
+        subscription.profiles.filter(\.clusterAvailable)
+    }
+
     private static func preferredClusterTitles(in profiles: [ServerProfile]) -> [String: String] {
         var firstNames: [String: String] = [:]
         var bootstrapNames: [String: String] = [:]

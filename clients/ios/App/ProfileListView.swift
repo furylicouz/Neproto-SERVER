@@ -34,6 +34,7 @@ struct ProfileListView: View {
                     Label(NeProtoSection.diagnostics.title, systemImage: NeProtoSection.diagnostics.systemImage)
                 }
         }
+        .tint(NeProtoTheme.purple)
         .sheet(isPresented: $isScanningQR) {
             QRScannerView(completion: handleQRResult)
         }
@@ -56,6 +57,9 @@ struct ProfileListView: View {
                 vpnService.refreshLiveMetrics(profileID: profileID)
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
+        }
+        .task(id: automaticPingTaskID) {
+            await measureLatencies(for: subscriptions)
         }
         .alert("Ошибка", isPresented: errorIsPresented) {
             Button("ОК", role: .cancel) { vpnService.lastError = nil }
@@ -118,6 +122,12 @@ struct ProfileListView: View {
 
     private var subscriptions: [NativeSubscriptionSection] {
         NativeHomePresentation.subscriptions(from: profileStore.profiles)
+    }
+
+    private var automaticPingTaskID: String {
+        profileStore.profiles.map { profile in
+            "\(profile.id.uuidString):\(profile.serverIdentity):\(profile.clusterAvailable)"
+        }.joined(separator: "|")
     }
 
     private var selectedProfile: ServerProfile? {
@@ -219,25 +229,32 @@ struct ProfileListView: View {
     }
 
     private func pingSubscription(_ subscription: NativeSubscriptionSection) {
-        guard !pingingSubscriptionIDs.contains(subscription.id) else { return }
-        let profiles = subscription.profiles.filter(\.clusterAvailable)
-        guard !profiles.isEmpty else { return }
-
-        pingingSubscriptionIDs.insert(subscription.id)
         Task { @MainActor in
-            let measurements = await ServerLatencyProbe.measure(profiles: profiles)
-            guard !Task.isCancelled else {
-                pingingSubscriptionIDs.remove(subscription.id)
-                return
+            await measureLatencies(for: [subscription])
+        }
+    }
+
+    @MainActor
+    private func measureLatencies(for requestedSubscriptions: [NativeSubscriptionSection]) async {
+        let pending = requestedSubscriptions.filter { subscription in
+            !pingingSubscriptionIDs.contains(subscription.id) &&
+                !NativeHomePresentation.pingableProfiles(in: subscription).isEmpty
+        }
+        guard !pending.isEmpty else { return }
+
+        let subscriptionIDs = Set(pending.map(\.id))
+        let profiles = pending.flatMap(NativeHomePresentation.pingableProfiles)
+        pingingSubscriptionIDs.formUnion(subscriptionIDs)
+        defer { pingingSubscriptionIDs.subtract(subscriptionIDs) }
+
+        let measurements = await ServerLatencyProbe.measure(profiles: profiles)
+        guard !Task.isCancelled else { return }
+        for profile in profiles {
+            if let latency = measurements[profile.id] {
+                latencyMilliseconds[profile.id] = latency
+            } else {
+                latencyMilliseconds.removeValue(forKey: profile.id)
             }
-            for profile in profiles {
-                if let latency = measurements[profile.id] {
-                    latencyMilliseconds[profile.id] = latency
-                } else {
-                    latencyMilliseconds.removeValue(forKey: profile.id)
-                }
-            }
-            pingingSubscriptionIDs.remove(subscription.id)
         }
     }
 

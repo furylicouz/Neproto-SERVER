@@ -10,6 +10,7 @@ struct NeProtoApp: App {
             ProfileListView()
                 .environmentObject(profileStore)
                 .environmentObject(vpnService)
+                .tint(NeProtoTheme.purple)
         }
     }
 }
