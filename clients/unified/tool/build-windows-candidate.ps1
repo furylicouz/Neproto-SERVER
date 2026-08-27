@@ -84,8 +84,11 @@ New-Item -ItemType Directory -Force -Path $appDestination, $serviceDestination, 
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "verify-windows.ps1")
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "Install-Candidate.ps1")
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "Rollback-Candidate.ps1")
+Assert-PowerShellSyntax (Join-Path $PSScriptRoot "candidate-service-version.ps1")
+Assert-PowerShellSyntax (Join-Path $PSScriptRoot "verify-candidate-service-version.ps1")
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "flutter-version-output.ps1")
 Assert-PowerShellSyntax (Join-Path $PSScriptRoot "verify-flutter-version-output.ps1")
+& (Join-Path $PSScriptRoot "verify-candidate-service-version.ps1")
 & (Join-Path $PSScriptRoot "verify-flutter-version-output.ps1")
 Invoke-Checked { & (Join-Path $PSScriptRoot "verify-windows.ps1") -BuildOnly } "Unified Windows build verification failed"
 
@@ -138,6 +141,7 @@ Copy-Item -LiteralPath (Join-Path $root "clients\windows\ThirdParty\wintun\wintu
 Copy-Item -LiteralPath (Join-Path $root "clients\windows\ThirdParty\wintun\LICENSE.txt") -Destination (Join-Path $serviceDestination "WINTUN-LICENSE.txt")
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Install-Candidate.ps1") -Destination $candidateRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot "Rollback-Candidate.ps1") -Destination $candidateRoot
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot "candidate-service-version.ps1") -Destination $candidateRoot
 Copy-Item -LiteralPath (Join-Path $root "clients\unified\WINDOWS-CANDIDATE.md") -Destination $candidateRoot
 
 Invoke-Checked {

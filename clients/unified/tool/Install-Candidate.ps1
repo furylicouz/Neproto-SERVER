@@ -17,6 +17,7 @@ $requiredPayload = @(
     "app\data\app.so",
     "service\NeProto.Service.exe",
     "service\wintun.dll",
+    "candidate-service-version.ps1",
     "Rollback-Candidate.ps1"
 )
 
@@ -44,13 +45,6 @@ function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-function Assert-ServiceVersion([string]$Path, [string]$ExpectedVersion) {
-    $output = & $Path --version 2>&1
-    if ($LASTEXITCODE -ne 0 -or ($output -join "`n").Trim() -ne "NeProto Windows Service $ExpectedVersion") {
-        throw "Windows service version mismatch at $Path"
-    }
 }
 
 function Write-StateAtomic([object]$State, [string]$Path) {
@@ -90,6 +84,7 @@ if ($VerifyOnly) {
     Write-Host "Candidate payload verified: $($manifest.version) $($manifest.commit) http3-only"
     exit 0
 }
+. (Join-Path $candidateRoot "candidate-service-version.ps1")
 
 if (-not (Test-IsAdministrator)) {
     throw "Run Install-Candidate.ps1 from an elevated PowerShell window"
@@ -123,8 +118,9 @@ $serviceRegistry = Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet
 if ([string]$serviceRegistry.ImagePath -notmatch [regex]::Escape($stableService)) {
     throw "NeProtoService does not point to the stable NeProto installation"
 }
-Assert-ServiceVersion $stableService ([string]$manifest.version)
-Assert-ServiceVersion $serviceSource ([string]$manifest.version)
+$stableVersion = Get-NeProtoServiceVersion $stableService
+Assert-NeProtoStableBaseCompatible -StableVersion $stableVersion -CandidateVersion ([string]$manifest.version)
+Assert-NeProtoServiceVersion -Path $serviceSource -ExpectedVersion ([string]$manifest.version)
 $service = Get-Service -Name "NeProtoService" -ErrorAction Stop
 
 $timestamp = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssZ")
@@ -139,6 +135,7 @@ $state = [ordered]@{
     schema = 1
     phase = "prepared"
     version = [string]$manifest.version
+    base_version = $stableVersion
     commit = [string]$manifest.commit
     carrier_policy = "http3-only"
     installed_at = [DateTime]::UtcNow.ToString("o")

@@ -5,9 +5,11 @@ modify the server and it is not installed by NeProto Web.
 
 ## Prerequisite
 
-Install the stable `NeProto-Setup-<same-version>-x64.exe` that exactly matches
-the `version` field in `candidate-manifest.json`. Keep the candidate ZIP
-extracted on disk until testing and rollback are complete.
+Install a stable NeProto Windows package from the same major/minor release line
+whose service version is not newer than the candidate `version` in
+`candidate-manifest.json`. The installer backs up that exact stable service
+version and restores it during rollback. Keep the candidate ZIP extracted on
+disk until testing and rollback are complete.
 
 ## Install
 

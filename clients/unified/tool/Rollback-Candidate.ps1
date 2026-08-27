@@ -5,17 +5,12 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "candidate-service-version.ps1")
+
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($identity)
     $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-function Assert-ServiceVersion([string]$Path, [string]$ExpectedVersion) {
-    $output = & $Path --version 2>&1
-    if ($LASTEXITCODE -ne 0 -or ($output -join "`n").Trim() -ne "NeProto Windows Service $ExpectedVersion") {
-        throw "Windows service version mismatch at $Path"
-    }
 }
 
 function Stop-ServiceBounded([System.ServiceProcess.ServiceController]$Service) {
@@ -54,6 +49,7 @@ if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) {
     throw "No active NeProto candidate rollback state was found"
 }
 $state = Get-Content -Raw -LiteralPath $statePath | ConvertFrom-Json
+$baseVersion = Get-NeProtoRollbackBaseVersion $state
 
 $stableRoot = Join-Path $env:ProgramFiles "NeProto"
 $expectedService = Join-Path $stableRoot "NeProto.Service.exe"
@@ -64,6 +60,7 @@ $backupDirectory = [System.IO.Path]::GetFullPath([string]$state.backup_directory
 
 if ($state.schema -ne 1 -or $state.phase -notin @("prepared", "active") -or
     [string]$state.version -notmatch '^np2-[0-9]+\.[0-9]+\.[0-9]+$' -or
+    $baseVersion -notmatch '^np2-[0-9]+\.[0-9]+\.[0-9]+$' -or
     [string]$state.commit -notmatch '^[0-9a-f]{40}$' -or
     $state.carrier_policy -ne "http3-only" -or
     [string]$state.stable_service_path -ne $expectedService -or
@@ -85,7 +82,7 @@ if ((Get-FileHash -Algorithm SHA256 -LiteralPath $backupService).Hash.ToLowerInv
 if (Get-Process -Name "NeProto", "neproto_client" -ErrorAction SilentlyContinue) {
     throw "Disconnect and close every NeProto UI before rollback"
 }
-Assert-ServiceVersion $backupService ([string]$state.version)
+Assert-NeProtoServiceVersion -Path $backupService -ExpectedVersion $baseVersion
 
 $service = Get-Service -Name "NeProtoService" -ErrorAction Stop
 Stop-ServiceBounded $service
