@@ -121,13 +121,13 @@ func (e *Engine) PlanReal(now time.Time, wireBytes int) (RealDecision, error) {
 	delay := time.Duration(0)
 	if e.lastRealPlan.IsZero() || now.Before(e.lastRealPlan) ||
 		now.Sub(e.lastRealPlan) >= realBurstIdleThreshold {
-		delay = e.randomDelay(e.profile.limits.MaxRealDelay)
+		delay = e.randomDelayRange(0, e.profile.limits.MaxRealDelay, e.profile.delayShape)
 	}
 	e.lastRealPlan = now
 	return RealDecision{
 		PaddingBytes:  paddingBytes,
 		SendAt:        now.Add(delay),
-		ScheduleDummy: len(e.profile.dummySizes) != 0,
+		ScheduleDummy: e.shouldScheduleDummy(),
 	}, nil
 }
 
@@ -155,7 +155,11 @@ func (e *Engine) PlanDummy(now time.Time) DummyDecision {
 	return DummyDecision{
 		Scheduled: true,
 		Bytes:     size,
-		SendAt:    now.Add(e.randomDelay(e.profile.limits.MaxRealDelay)),
+		SendAt: now.Add(e.randomDelayRange(
+			e.profile.minDummyDelay,
+			e.profile.maxDummyDelay,
+			e.profile.delayShape,
+		)),
 	}
 }
 
@@ -215,17 +219,39 @@ func (e *Engine) desiredPadding(wireBytes int) int {
 	if first == len(e.profile.buckets) {
 		return 0
 	}
-	choices := min(2, len(e.profile.buckets)-first)
+	lookahead := max(1, int(e.profile.bucketLookahead))
+	choices := min(lookahead, len(e.profile.buckets)-first)
 	target := e.profile.buckets[first+int(e.random.uniform(uint64(choices)))]
 	return target - wireBytes
 }
 
-func (e *Engine) randomDelay(maximum time.Duration) time.Duration {
-	if maximum <= 0 {
-		return 0
+func (e *Engine) shouldScheduleDummy() bool {
+	if len(e.profile.dummySizes) == 0 || e.profile.dummyGateNumerator == 0 {
+		return false
 	}
-	slots := uint64(maximum/jitterStep) + 1
-	return time.Duration(e.random.uniform(slots)) * jitterStep
+	if e.profile.dummyGateNumerator >= e.profile.dummyGateDenominator {
+		return true
+	}
+	return e.random.uniform(uint64(e.profile.dummyGateDenominator)) <
+		uint64(e.profile.dummyGateNumerator)
+}
+
+func (e *Engine) randomDelayRange(minimum, maximum time.Duration, shape delayShape) time.Duration {
+	if maximum <= minimum {
+		return minimum
+	}
+	slots := uint64((maximum-minimum)/jitterStep) + 1
+	first := e.random.uniform(slots)
+	selected := first
+	if shape == delayFrontLoaded || shape == delayTailLoaded {
+		second := e.random.uniform(slots)
+		if shape == delayFrontLoaded {
+			selected = min(first, second)
+		} else {
+			selected = max(first, second)
+		}
+	}
+	return minimum + time.Duration(selected)*jitterStep
 }
 
 func saturatingAdd(left, right uint64) uint64 {
