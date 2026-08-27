@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"neproto.local/chameleon/internal/cover"
 	"neproto.local/chameleon/internal/protocol"
 )
 
@@ -448,11 +449,15 @@ func TestAuthenticatedSessionActivatesMosaicOnlyWhenNegotiated(t *testing.T) {
 		name             string
 		serverExtensions bool
 		serverMosaic     bool
+		profileFeature   protocol.FeatureSet
 		wantEnabled      bool
 	}{
-		{name: "both peers", serverExtensions: true, serverMosaic: true, wantEnabled: true},
+		{name: "both peers", serverExtensions: true, serverMosaic: true,
+			profileFeature: protocol.FeatureProfileWeb, wantEnabled: true},
 		{name: "v2.2 server without Mosaic", serverExtensions: true, wantEnabled: false},
 		{name: "v2.1 server without extensions", serverExtensions: false, wantEnabled: false},
+		{name: "quiet profile stays fixed", serverExtensions: true, serverMosaic: true,
+			profileFeature: protocol.FeatureProfileQuiet, wantEnabled: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -468,9 +473,13 @@ func TestAuthenticatedSessionActivatesMosaicOnlyWhenNegotiated(t *testing.T) {
 				offer.Capabilities &^= protocol.CapabilityMosaicCover
 			}
 			secret := [protocol.RootSecretSize]byte{0x6d, 0x6f, 0x73, 0x61, 0x69, 0x63}
+			profileFeature := tt.profileFeature
+			if profileFeature == 0 {
+				profileFeature = protocol.FeatureProfileWeb
+			}
 			serverConfig := AuthenticatedConfig{
 				RootSecret: secret, ServerIdentity: "edge.example",
-				Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+				Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | profileFeature,
 				InitialWindow: 64 * 1024, MaxStreams: 8,
 				ExtensionTimeout: 100 * time.Millisecond,
 			}
@@ -502,11 +511,21 @@ func TestAuthenticatedSessionActivatesMosaicOnlyWhenNegotiated(t *testing.T) {
 				t.Fatalf("wait server extensions: %v", err)
 			}
 
-			if got := client.Cover.Stats().MosaicEnabled; got != tt.wantEnabled {
+			clientStats := client.Cover.Stats()
+			serverStats := server.Cover.Stats()
+			if got := clientStats.MosaicEnabled; got != tt.wantEnabled {
 				t.Fatalf("client Mosaic enabled=%v want=%v", got, tt.wantEnabled)
 			}
-			if got := server.Cover.Stats().MosaicEnabled; got != tt.wantEnabled {
+			if got := serverStats.MosaicEnabled; got != tt.wantEnabled {
 				t.Fatalf("server Mosaic enabled=%v want=%v", got, tt.wantEnabled)
+			}
+			if tt.wantEnabled {
+				if clientStats.VariantID == 0 || serverStats.VariantID == 0 ||
+					clientStats.TrafficClass != cover.TrafficWeb || serverStats.TrafficClass != cover.TrafficWeb {
+					t.Fatalf("polymorphic profiles not active: client=%+v server=%+v", clientStats, serverStats)
+				}
+			} else if clientStats.VariantID != 0 || serverStats.VariantID != 0 {
+				t.Fatalf("unselected session derived active variants: client=%+v server=%+v", clientStats, serverStats)
 			}
 		})
 	}
