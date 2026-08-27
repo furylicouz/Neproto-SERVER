@@ -51,6 +51,31 @@ struct NativeHomePresentationTests {
         #expect(NativeHomePresentation.locationEmoji(for: unknown) == "🌐")
     }
 
+    @Test("bootstrap location emoji falls back to a location in the server name")
+    func bootstrapLocationEmojiFromName() {
+        let moscow = profile(name: "Moscow Edge", identity: "edge.example.org")
+
+        #expect(NativeHomePresentation.locationEmoji(for: moscow) == "🇷🇺")
+    }
+
+    @Test("bootstrap location emoji falls back to an ISO country domain")
+    func bootstrapLocationEmojiFromCountryDomain() {
+        let netherlands = profile(name: "Primary", identity: "edge.example.nl")
+
+        #expect(NativeHomePresentation.locationEmoji(for: netherlands) == "🇳🇱")
+    }
+
+    @Test("subscription disclosure is expanded by default and toggles deterministically")
+    func subscriptionDisclosure() {
+        var state = NativeSubscriptionDisclosureState()
+
+        #expect(state.isExpanded(subscriptionID: "cluster:one"))
+        state.toggle(subscriptionID: "cluster:one")
+        #expect(!state.isExpanded(subscriptionID: "cluster:one"))
+        state.toggle(subscriptionID: "cluster:one")
+        #expect(state.isExpanded(subscriptionID: "cluster:one"))
+    }
+
     private func profile(
         name: String,
         identity: String,

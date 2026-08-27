@@ -86,6 +86,7 @@ public enum ServerLocationPresentation {
     ]
 
     private static let locationSeparators = CharacterSet(charactersIn: "·/,;|-")
+        .union(.whitespacesAndNewlines)
 
     private static let localizedCountryCodes: [String: String] = {
         let locales = [Locale(identifier: "en_US"), Locale(identifier: "ru_RU")]

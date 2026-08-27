@@ -7,19 +7,33 @@ struct ProfileListView: View {
     @EnvironmentObject private var vpnService: VPNService
 
     @State private var selectedProfileID: UUID?
+    @State private var selectedSection = NeProtoSection.home
     @State private var isScanningQR = false
     @State private var clusterCatalogRefreshGate = ClusterCatalogRefreshGate()
+    @State private var latencyMilliseconds: [UUID: Int] = [:]
+    @State private var refreshingSubscriptionIDs: Set<String> = []
+    @State private var pingingSubscriptionIDs: Set<String> = []
 
     var body: some View {
-        NativeHomeView(
-            subscriptions: NativeHomePresentation.subscriptions(from: profileStore.profiles),
-            selectedProfileID: selectedProfile?.id,
-            selectedStatus: selectedStatus,
-            isConnectionBusy: selectedProfile.map { vpnService.isBusy(profileID: $0.id) } ?? false,
-            onConnectionChange: { _ in toggleSelectedProfile() },
-            onSelectProfile: selectProfile,
-            onScanQR: { isScanningQR = true }
-        )
+        TabView(selection: $selectedSection) {
+            homeTab
+                .tag(NeProtoSection.home)
+                .tabItem {
+                    Label(NeProtoSection.home.title, systemImage: NeProtoSection.home.systemImage)
+                }
+
+            profilesTab
+                .tag(NeProtoSection.profiles)
+                .tabItem {
+                    Label(NeProtoSection.profiles.title, systemImage: NeProtoSection.profiles.systemImage)
+                }
+
+            diagnosticsTab
+                .tag(NeProtoSection.diagnostics)
+                .tabItem {
+                    Label(NeProtoSection.diagnostics.title, systemImage: NeProtoSection.diagnostics.systemImage)
+                }
+        }
         .sheet(isPresented: $isScanningQR) {
             QRScannerView(completion: handleQRResult)
         }
@@ -48,6 +62,62 @@ struct ProfileListView: View {
         } message: {
             Text(vpnService.lastError ?? "Неизвестная ошибка")
         }
+    }
+
+    private var homeTab: some View {
+        NativeHomeView(
+            subscriptions: subscriptions,
+            selectedProfileID: selectedProfile?.id,
+            selectedStatus: selectedStatus,
+            isConnectionBusy: selectedProfile.map { vpnService.isBusy(profileID: $0.id) } ?? false,
+            latencyMilliseconds: latencyMilliseconds,
+            refreshingSubscriptionIDs: refreshingSubscriptionIDs,
+            pingingSubscriptionIDs: pingingSubscriptionIDs,
+            onConnectionChange: { _ in toggleSelectedProfile() },
+            onSelectProfile: selectProfile,
+            onRefreshSubscription: refreshSubscription,
+            onPingSubscription: pingSubscription,
+            onScanQR: { isScanningQR = true }
+        )
+    }
+
+    private var profilesTab: some View {
+        NavigationStack {
+            ServerProfilesView(
+                profiles: profileStore.profiles,
+                selectedProfileID: selectedProfile?.id,
+                status: vpnService.status,
+                isBusy: vpnService.isBusy,
+                onSelect: selectProfile,
+                onToggle: toggleProfile,
+                onDelete: deleteProfile,
+                onAdd: { isScanningQR = true }
+            )
+            .navigationTitle("Профили")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { isScanningQR = true } label: {
+                        Image(systemName: "qrcode.viewfinder")
+                    }
+                    .accessibilityLabel("Сканировать QR-код")
+                }
+            }
+        }
+    }
+
+    private var diagnosticsTab: some View {
+        NavigationStack {
+            DiagnosticsView(
+                lines: vpnService.diagnosticLog,
+                onRefresh: vpnService.refreshProviderDiagnostics
+            )
+            .padding(.horizontal, 16)
+            .navigationTitle("Диагностика")
+        }
+    }
+
+    private var subscriptions: [NativeSubscriptionSection] {
+        NativeHomePresentation.subscriptions(from: profileStore.profiles)
     }
 
     private var selectedProfile: ServerProfile? {
@@ -97,6 +167,80 @@ struct ProfileListView: View {
         )
     }
 
+    private func toggleProfile(_ profile: ServerProfile) {
+        selectProfile(profile)
+        vpnService.toggle(
+            profile: profile,
+            clientRoutes: profileStore.effectiveRoutes(for: profile.id)
+        )
+    }
+
+    private func deleteProfile(_ profile: ServerProfile) {
+        do {
+            clusterCatalogRefreshGate.reset(profileID: profile.id)
+            try profileStore.remove(profileID: profile.id)
+            vpnService.removeConfiguration(profileID: profile.id)
+            latencyMilliseconds.removeValue(forKey: profile.id)
+            synchronizeSelection()
+        } catch {
+            vpnService.lastError = error.localizedDescription
+        }
+    }
+
+    private func refreshSubscription(_ subscription: NativeSubscriptionSection) {
+        guard !refreshingSubscriptionIDs.contains(subscription.id) else { return }
+        guard let connectedProfile = subscription.profiles.first(where: {
+            vpnService.status(for: $0.id) == .connected
+        }) else {
+            vpnService.lastError = "Для обновления подписки сначала подключитесь к одному из её серверов."
+            return
+        }
+
+        refreshingSubscriptionIDs.insert(subscription.id)
+        vpnService.recordDiagnostic("Обновление подписки NP/2: \(subscription.title)")
+        vpnService.requestClusterCatalog(profileID: connectedProfile.id) { result in
+            defer { refreshingSubscriptionIDs.remove(subscription.id) }
+            do {
+                let envelope = try result.get()
+                let catalog = try profileStore.applyClusterCatalog(
+                    envelope,
+                    bootstrapProfileID: connectedProfile.id
+                )
+                vpnService.recordDiagnostic(
+                    "Подписка NP/2 обновлена: ревизия \(catalog.revision), серверов \(catalog.servers.count)"
+                )
+                synchronizeSelection()
+                vpnService.reload()
+            } catch {
+                vpnService.recordDiagnostic("Ошибка обновления подписки NP/2: \(error.localizedDescription)")
+                vpnService.lastError = error.localizedDescription
+            }
+        }
+    }
+
+    private func pingSubscription(_ subscription: NativeSubscriptionSection) {
+        guard !pingingSubscriptionIDs.contains(subscription.id) else { return }
+        let profiles = subscription.profiles.filter(\.clusterAvailable)
+        guard !profiles.isEmpty else { return }
+
+        pingingSubscriptionIDs.insert(subscription.id)
+        Task { @MainActor in
+            let measurements = await ServerLatencyProbe.measure(profiles: profiles)
+            guard !Task.isCancelled else {
+                pingingSubscriptionIDs.remove(subscription.id)
+                return
+            }
+            for profile in profiles {
+                if let latency = measurements[profile.id] {
+                    latencyMilliseconds[profile.id] = latency
+                } else {
+                    latencyMilliseconds.removeValue(forKey: profile.id)
+                }
+            }
+            pingingSubscriptionIDs.remove(subscription.id)
+        }
+    }
+
     private func handleQRResult(_ result: Result<String, Error>) {
         defer { isScanningQR = false }
         do {
@@ -104,6 +248,7 @@ struct ProfileListView: View {
             case let .success(uri):
                 let profile = try profileStore.importOnboardingURI(uri)
                 selectedProfileID = profile.id
+                selectedSection = .home
                 vpnService.reload {
                     synchronizeConnectedClusters()
                 }

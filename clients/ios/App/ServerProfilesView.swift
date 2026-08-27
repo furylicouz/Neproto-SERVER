@@ -3,7 +3,7 @@ import NetworkExtension
 import SwiftUI
 import UIKit
 
-private enum ServerLatencyProbe {
+enum ServerLatencyProbe {
     static func measure(profile: ServerProfile) async -> Int? {
         guard let url = URL(string: "https://\(profile.serverIdentity)/") else { return nil }
 
@@ -19,6 +19,33 @@ private enum ServerLatencyProbe {
         } catch {
             return nil
         }
+    }
+
+    static func measure(profiles: [ServerProfile], maximumConcurrent: Int = 4) async -> [UUID: Int] {
+        let concurrency = min(max(1, maximumConcurrent), 8)
+        var result: [UUID: Int] = [:]
+
+        for batchStart in stride(from: 0, to: profiles.count, by: concurrency) {
+            guard !Task.isCancelled else { return result }
+            let batchEnd = min(batchStart + concurrency, profiles.count)
+            let batch = Array(profiles[batchStart..<batchEnd])
+
+            await withTaskGroup(of: (UUID, Int?).self) { group in
+                for profile in batch {
+                    group.addTask {
+                        (profile.id, await measure(profile: profile))
+                    }
+                }
+
+                for await (profileID, latency) in group {
+                    if let latency {
+                        result[profileID] = latency
+                    }
+                }
+            }
+        }
+
+        return result
     }
 }
 
@@ -144,25 +171,12 @@ struct ServerProfilesView: View {
     @MainActor
     private func refreshLatencies() async {
         let availableProfiles = profiles.filter(\.clusterAvailable)
-        for batchStart in stride(from: 0, to: availableProfiles.count, by: 4) {
-            guard !Task.isCancelled else { return }
-            let batchEnd = min(batchStart + 4, availableProfiles.count)
-            let batch = availableProfiles[batchStart..<batchEnd]
-
-            await withTaskGroup(of: (UUID, Int?).self) { group in
-                for profile in batch {
-                    group.addTask {
-                        (profile.id, await ServerLatencyProbe.measure(profile: profile))
-                    }
-                }
-
-                for await (profileID, latency) in group {
-                    if let latency {
-                        latencyMilliseconds[profileID] = latency
-                    } else {
-                        latencyMilliseconds.removeValue(forKey: profileID)
-                    }
-                }
+        let measurements = await ServerLatencyProbe.measure(profiles: availableProfiles)
+        for profile in availableProfiles {
+            if let latency = measurements[profile.id] {
+                latencyMilliseconds[profile.id] = latency
+            } else {
+                latencyMilliseconds.removeValue(forKey: profile.id)
             }
         }
     }

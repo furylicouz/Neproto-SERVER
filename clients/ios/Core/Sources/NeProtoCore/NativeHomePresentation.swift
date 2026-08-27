@@ -12,6 +12,24 @@ public struct NativeSubscriptionSection: Identifiable, Equatable, Sendable {
     }
 }
 
+public struct NativeSubscriptionDisclosureState: Equatable, Sendable {
+    private var collapsedSubscriptionIDs: Set<String> = []
+
+    public init() {}
+
+    public func isExpanded(subscriptionID: String) -> Bool {
+        !collapsedSubscriptionIDs.contains(subscriptionID)
+    }
+
+    public mutating func toggle(subscriptionID: String) {
+        if collapsedSubscriptionIDs.contains(subscriptionID) {
+            collapsedSubscriptionIDs.remove(subscriptionID)
+        } else {
+            collapsedSubscriptionIDs.insert(subscriptionID)
+        }
+    }
+}
+
 public enum NativeHomePresentation {
     public static func subscriptions(from profiles: [ServerProfile]) -> [NativeSubscriptionSection] {
         let clusterTitles = preferredClusterTitles(in: profiles)
@@ -42,11 +60,16 @@ public enum NativeHomePresentation {
     }
 
     public static func locationEmoji(for profile: ServerProfile) -> String {
-        let fallbackCountryCode = profile.serverIdentity == "neproto.lyntragram.ru" ? "RU" : nil
-        return ServerLocationPresentation.flag(
-            forRegion: profile.region,
-            fallbackCountryCode: fallbackCountryCode
-        ) ?? "🌐"
+        for location in [profile.region, profile.name] {
+            if let flag = ServerLocationPresentation.flag(forRegion: location) {
+                return flag
+            }
+        }
+
+        let fallbackCountryCode = profile.serverIdentity == "neproto.lyntragram.ru"
+            ? "RU"
+            : countryCodeFromIdentity(profile.serverIdentity)
+        return ServerLocationPresentation.flag(forRegion: nil, fallbackCountryCode: fallbackCountryCode) ?? "🌐"
     }
 
     private static func preferredClusterTitles(in profiles: [ServerProfile]) -> [String: String] {
@@ -80,5 +103,13 @@ public enum NativeHomePresentation {
     private static func normalizedName(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "Подписка" : trimmed
+    }
+
+    private static func countryCodeFromIdentity(_ identity: String) -> String? {
+        guard let topLevelDomain = identity.split(separator: ".").last,
+              topLevelDomain.utf8.count == 2 else {
+            return nil
+        }
+        return String(topLevelDomain).uppercased()
     }
 }

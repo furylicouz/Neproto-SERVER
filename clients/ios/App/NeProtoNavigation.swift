@@ -2,7 +2,7 @@ import SwiftUI
 
 enum NeProtoSection: String, CaseIterable, Identifiable {
     case home
-    case routes
+    case profiles
     case diagnostics
 
     var id: String { rawValue }
@@ -10,16 +10,16 @@ enum NeProtoSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: "Главная"
-        case .routes: "Маршруты"
-        case .diagnostics: "Журнал"
+        case .profiles: "Профили"
+        case .diagnostics: "Диагностика"
         }
     }
 
     var systemImage: String {
         switch self {
         case .home: "house.fill"
-        case .routes: "point.topleft.down.to.point.bottomright.curvepath"
-        case .diagnostics: "person.crop.circle.fill"
+        case .profiles: "server.rack"
+        case .diagnostics: "waveform.path.ecg"
         }
     }
 }
