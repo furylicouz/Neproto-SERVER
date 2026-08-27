@@ -59,6 +59,102 @@ Compatibility rules:
 The global configured overhead percentage and absolute credit ceiling apply to
 all classes. Switching class does not reset earned credit or accounting.
 
+## Mosaic v2.3 Polymorphic Scheduling
+
+Mosaic v2.3 is a wire-neutral extension of the negotiated
+`CapabilityMosaicCover` behavior. It does not add a capability bit, TLV, cell
+kind, preface, or decoder state. A v2.3 sender remains interoperable with a
+v2.2 receiver because padding and dummy traffic continue to use ordinary,
+authenticated NP/2 cells.
+
+The privacy objective is to reduce repeatable size and timing metadata across
+independent sessions. It is not to make traffic random or to claim resistance
+to a global observer. Destination IP, carrier metadata, aggregate byte counts,
+and connection lifetime remain observable.
+
+### Directional profile derivation
+
+Each sender derives one immutable variant for every eligible Mosaic class from
+its directional cover seed. Derivation uses HMAC-SHA-256 with domain-separated
+labels; it does not introduce a new cryptographic primitive or use payload
+contents.
+
+```text
+variant_material = HMAC-SHA-256(
+    directional_cover_seed,
+    "NP2 Mosaic profile variant" || profile_id
+)
+```
+
+The material independently selects:
+
+- one size-bucket family;
+- one dummy-size family;
+- one bounded delay distribution;
+- one dummy scheduling gate;
+- one bucket look-ahead bound.
+
+All component tables are compile-time bounded and versioned with the
+implementation. Selection performs no allocation on the per-cell path.
+Different session seeds should normally select different component
+combinations, while many sessions intentionally share individual components so
+uniqueness does not become a one-session fingerprint.
+
+`quiet` has one zero-overhead variant. `stream` variants keep zero real-cell
+delay and no dummy cells. No variant may exceed the class limits in the table
+above or the global configured overhead budget.
+
+### Burst and gap behavior
+
+- An outbound burst begins after at least 50 ms without a real cell.
+- Only the first real cell in a burst may receive a bounded delay. Consecutive
+  cells retain the zero-added-delay fast path.
+- Delay samples use the selected bounded distribution; uniform random delay is
+  not the only distribution shared by every session.
+- Dummy scheduling is gated by the selected session variant and available
+  credit. A real cell does not deterministically imply a dummy request.
+- A scheduled dummy uses the selected bounded gap-delay distribution. It
+  remains inside an authenticated `DUMMY` cell and the valid outer carrier.
+- A class transition changes to the pre-derived variant for that class without
+  resetting credit, counters, or session keys.
+
+### Observable diagnostics
+
+Implementations may expose only aggregate, payload-free diagnostics:
+
+- active class and a small local variant identifier;
+- burst count and class-transition count;
+- cumulative added-delay microseconds and maximum planned delay;
+- dummy requests selected and rejected by the budget/gate;
+- real, padding, and dummy byte totals.
+
+The directional seed, random generator state, destinations, payloads, exact
+per-packet timestamps, and full traces must never be emitted by production
+diagnostics.
+
+### Evaluation contract
+
+Mosaic changes are not accepted from visual inspection of packet captures.
+The repository must provide an offline evaluator that accepts metadata-only
+JSONL traces with the following bounded fields:
+
+```text
+trace_id | label | relative_time_us | direction | wire_bytes
+```
+
+The evaluator must reject invalid/unbounded input, split training and test data
+by trace rather than packet, and report at minimum:
+
+- trace count and label balance;
+- size histogram and burst summary;
+- bandwidth overhead and added-delay percentiles when supplied;
+- deterministic baseline classifier accuracy and balanced accuracy;
+- a session-diversity score for repeated identical workloads.
+
+The classifier is a regression instrument, not proof of invisibility. A change
+must also preserve the configured overhead and latency budgets and the stream
+throughput fast path.
+
 ## Deterministic Classifier
 
 The classifier uses no payload contents and retains only bounded counters for
@@ -128,6 +224,16 @@ additive authenticated capability before Mosaic can select it.
 - Authenticated client/server test proving Mosaic activates only when both peers
   negotiate it.
 - Race test and allocation benchmark for the per-cell planner.
+- Deterministic profile-family derivation tests proving the same seed is stable,
+  distinct seeds cover multiple variants, and every derived component remains
+  within its class bounds.
+- Burst/gap tests proving only burst starts are delayed, dummy requests are not
+  deterministic per real cell, and the global overhead budget is preserved.
+- Metadata evaluator parser bounds, trace-level split, deterministic metrics,
+  and malformed-input tests.
+- Before/after planner benchmarks and synthetic repeated-workload diversity
+  tests. Physical-device throughput and classifier evidence remain separate
+  release gates.
 
 ## Design Sources
 

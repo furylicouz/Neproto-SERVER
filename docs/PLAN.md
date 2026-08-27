@@ -85,6 +85,37 @@ cryptographic boundary.
 active-probe tests, throughput/latency captures, and an external security
 review before production enablement.
 
+### Task 25: Add Mosaic v2.3 per-session profile families
+
+**Acceptance criteria:** each directional session deterministically selects a
+bounded overlapping combination of size, delay, and dummy policies; every
+combination preserves class and global budgets; no decoder or wire state is
+added.
+
+**Verification:** derivation corpus tests, deterministic replay, allocation and
+planner benchmarks.
+
+### Task 26: Add burst/gap morphing and diagnostics
+
+**Acceptance criteria:** only burst starts are delayed, dummy scheduling is
+session-gated and budgeted, stream stays zero-delay/dummy-free, and diagnostics
+expose aggregate privacy/performance counters without payload or destinations.
+
+**Verification:** state-machine, transport, budget, stats, and client result
+tests.
+
+### Task 27: Add the metadata trace evaluator
+
+**Acceptance criteria:** bounded JSONL traces are split by trace, transformed
+into deterministic metadata features, and evaluated with reproducible baseline
+accuracy, balanced accuracy, and session-diversity metrics without an external
+ML dependency.
+
+**Verification:** parser/fuzz tests, known-dataset test, and command build.
+
+The detailed implementation contract and checkpoints are in
+`NP2-MOSAIC-V2-IMPLEMENTATION-PLAN.md`.
+
 ## Dependency Graph
 
 ```text
