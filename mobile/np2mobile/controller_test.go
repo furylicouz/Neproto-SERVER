@@ -134,6 +134,11 @@ func TestControllerReportsLiveTrafficOnlyForActiveRuntime(t *testing.T) {
 	runtime.coverPaddingBytes = 250_000
 	runtime.coverDummyWireBytes = 50_000
 	runtime.coverProfileTransitions = 6
+	runtime.coverBurstCount = 700
+	runtime.coverDummySelected = 240
+	runtime.coverDummyRejected = 180
+	runtime.coverAddedDelayMicros = 920_000
+	runtime.coverMaxDelayMicros = 140_000
 	runtime.coverWebSessions = 1
 	runtime.coverRealtimeSessions = 2
 	runtime.coverStreamSessions = 3
@@ -164,6 +169,9 @@ func TestControllerReportsLiveTrafficOnlyForActiveRuntime(t *testing.T) {
 		got.WindowUpdatesSent != 31 || got.WindowUpdatesReceived != 17 ||
 		got.CoverRealWireBytes != 8_500_000 || got.CoverPaddingBytes != 250_000 ||
 		got.CoverDummyWireBytes != 50_000 || got.CoverProfileTransitions != 6 ||
+		got.CoverBurstCount != 700 || got.CoverDummySelected != 240 ||
+		got.CoverDummyRejected != 180 || got.CoverAddedDelayMicros != 920_000 ||
+		got.CoverMaxDelayMicros != 140_000 ||
 		got.CoverWebSessions != 1 || got.CoverRealtimeSessions != 2 || got.CoverStreamSessions != 3 {
 		t.Fatalf("active stats=%+v", got)
 	}
@@ -185,10 +193,16 @@ func TestAggregateProtocolTrafficStatsIsPayloadAndDestinationFree(t *testing.T) 
 		},
 		[]cover.TransportStats{
 			{RealWireBytes: 2_100, PaddingBytes: 100, DummyWireBytes: 50,
-				TrafficClass: cover.TrafficWeb, ProfileTransitions: 2},
+				TrafficClass: cover.TrafficWeb, ProfileTransitions: 2, BurstCount: 4,
+				DummyRequestsSelected: 5, DummyRequestsRejected: 6,
+				AddedDelayMicros: 700, MaxPlannedDelayMicros: 80},
 			{RealWireBytes: 4_200, PaddingBytes: 200, DummyWireBytes: 75,
-				TrafficClass: cover.TrafficStream, ProfileTransitions: 3},
-			{TrafficClass: cover.TrafficRealtime, ProfileTransitions: 1},
+				TrafficClass: cover.TrafficStream, ProfileTransitions: 3, BurstCount: 8,
+				DummyRequestsSelected: 9, DummyRequestsRejected: 10,
+				AddedDelayMicros: 1_100, MaxPlannedDelayMicros: 90},
+			{TrafficClass: cover.TrafficRealtime, ProfileTransitions: 1, BurstCount: 12,
+				DummyRequestsSelected: 13, DummyRequestsRejected: 14,
+				AddedDelayMicros: 1_500, MaxPlannedDelayMicros: 100},
 		},
 	)
 
@@ -198,6 +212,9 @@ func TestAggregateProtocolTrafficStatsIsPayloadAndDestinationFree(t *testing.T) 
 		got.FlowControlStalls != 13 || got.ProtocolErrors != 3 ||
 		got.CoverRealWireBytes != 6_300 || got.CoverPaddingBytes != 300 ||
 		got.CoverDummyWireBytes != 125 || got.CoverProfileTransitions != 6 ||
+		got.CoverBurstCount != 24 || got.CoverDummySelected != 27 ||
+		got.CoverDummyRejected != 30 || got.CoverAddedDelayMicros != 3_300 ||
+		got.CoverMaxDelayMicros != 100 ||
 		got.CoverWebSessions != 1 || got.CoverRealtimeSessions != 1 || got.CoverStreamSessions != 1 {
 		t.Fatalf("aggregate stats=%+v", got)
 	}
@@ -1153,6 +1170,11 @@ type stubRuntime struct {
 	coverPaddingBytes       int64
 	coverDummyWireBytes     int64
 	coverProfileTransitions int64
+	coverBurstCount         int64
+	coverDummySelected      int64
+	coverDummyRejected      int64
+	coverAddedDelayMicros   int64
+	coverMaxDelayMicros     int64
 	coverWebSessions        int64
 	coverRealtimeSessions   int64
 	coverStreamSessions     int64
@@ -1329,6 +1351,11 @@ func (r *stubRuntime) TrafficStats() trafficStats {
 		CoverPaddingBytes:       r.coverPaddingBytes,
 		CoverDummyWireBytes:     r.coverDummyWireBytes,
 		CoverProfileTransitions: r.coverProfileTransitions,
+		CoverBurstCount:         r.coverBurstCount,
+		CoverDummySelected:      r.coverDummySelected,
+		CoverDummyRejected:      r.coverDummyRejected,
+		CoverAddedDelayMicros:   r.coverAddedDelayMicros,
+		CoverMaxDelayMicros:     r.coverMaxDelayMicros,
 		CoverWebSessions:        r.coverWebSessions,
 		CoverRealtimeSessions:   r.coverRealtimeSessions,
 		CoverStreamSessions:     r.coverStreamSessions,

@@ -120,6 +120,11 @@ type trafficStats struct {
 	CoverPaddingBytes       int64
 	CoverDummyWireBytes     int64
 	CoverProfileTransitions int64
+	CoverBurstCount         int64
+	CoverDummySelected      int64
+	CoverDummyRejected      int64
+	CoverAddedDelayMicros   int64
+	CoverMaxDelayMicros     int64
 	CoverWebSessions        int64
 	CoverRealtimeSessions   int64
 	CoverStreamSessions     int64
@@ -1791,6 +1796,11 @@ func aggregateProtocolTrafficStats(muxStats []session.Stats, coverStats []cover.
 		result.CoverPaddingBytes = saturatingProtocolStatAdd(result.CoverPaddingBytes, stats.PaddingBytes)
 		result.CoverDummyWireBytes = saturatingProtocolStatAdd(result.CoverDummyWireBytes, stats.DummyWireBytes)
 		result.CoverProfileTransitions = saturatingProtocolStatAdd(result.CoverProfileTransitions, stats.ProfileTransitions)
+		result.CoverBurstCount = saturatingProtocolStatAdd(result.CoverBurstCount, stats.BurstCount)
+		result.CoverDummySelected = saturatingProtocolStatAdd(result.CoverDummySelected, stats.DummyRequestsSelected)
+		result.CoverDummyRejected = saturatingProtocolStatAdd(result.CoverDummyRejected, stats.DummyRequestsRejected)
+		result.CoverAddedDelayMicros = saturatingProtocolStatAdd(result.CoverAddedDelayMicros, stats.AddedDelayMicros)
+		result.CoverMaxDelayMicros = max(result.CoverMaxDelayMicros, int64(min(stats.MaxPlannedDelayMicros, uint64(^uint64(0)>>1))))
 		switch stats.TrafficClass {
 		case cover.TrafficWeb:
 			result.CoverWebSessions = saturatingProtocolStatAdd(result.CoverWebSessions, 1)
@@ -1874,6 +1884,11 @@ func (r *np2Runtime) TrafficStats() trafficStats {
 		CoverPaddingBytes:       protocolStats.CoverPaddingBytes,
 		CoverDummyWireBytes:     protocolStats.CoverDummyWireBytes,
 		CoverProfileTransitions: protocolStats.CoverProfileTransitions,
+		CoverBurstCount:         protocolStats.CoverBurstCount,
+		CoverDummySelected:      protocolStats.CoverDummySelected,
+		CoverDummyRejected:      protocolStats.CoverDummyRejected,
+		CoverAddedDelayMicros:   protocolStats.CoverAddedDelayMicros,
+		CoverMaxDelayMicros:     protocolStats.CoverMaxDelayMicros,
 		CoverWebSessions:        protocolStats.CoverWebSessions,
 		CoverRealtimeSessions:   protocolStats.CoverRealtimeSessions,
 		CoverStreamSessions:     protocolStats.CoverStreamSessions,
@@ -2045,6 +2060,18 @@ func CoverDummyWireByteCount() int64 { return defaultController.trafficStats().C
 func CoverProfileTransitionCount() int64 {
 	return defaultController.trafficStats().CoverProfileTransitions
 }
+
+func CoverBurstCount() int64 { return defaultController.trafficStats().CoverBurstCount }
+
+func CoverDummySelectedCount() int64 { return defaultController.trafficStats().CoverDummySelected }
+
+func CoverDummyRejectedCount() int64 { return defaultController.trafficStats().CoverDummyRejected }
+
+func CoverAddedDelayMicroseconds() int64 {
+	return defaultController.trafficStats().CoverAddedDelayMicros
+}
+
+func CoverMaxDelayMicroseconds() int64 { return defaultController.trafficStats().CoverMaxDelayMicros }
 
 func CoverWebSessionCount() int64 { return defaultController.trafficStats().CoverWebSessions }
 

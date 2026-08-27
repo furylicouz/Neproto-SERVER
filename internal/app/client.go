@@ -34,6 +34,12 @@ type ProbeResult struct {
 	MosaicEnabled         bool
 	CoverClass            string
 	CoverTransitions      uint64
+	CoverVariantID        uint8
+	CoverBurstCount       uint64
+	CoverDummySelected    uint64
+	CoverDummyRejected    uint64
+	CoverAddedDelayMicros uint64
+	CoverMaxDelayMicros   uint64
 	ConstellationEnabled  bool
 	ForwardSecrecyEnabled bool
 }
@@ -289,6 +295,12 @@ func ProbeClient(ctx context.Context, config config.Client, mode ProbeMode) (Pro
 		Kind: selected.Kind, UsedFallback: selected.UsedFallback,
 		MosaicEnabled: coverStats.MosaicEnabled, CoverClass: coverClass,
 		CoverTransitions:      coverStats.ProfileTransitions,
+		CoverVariantID:        coverStats.VariantID,
+		CoverBurstCount:       coverStats.BurstCount,
+		CoverDummySelected:    coverStats.DummyRequestsSelected,
+		CoverDummyRejected:    coverStats.DummyRequestsRejected,
+		CoverAddedDelayMicros: coverStats.AddedDelayMicros,
+		CoverMaxDelayMicros:   coverStats.MaxPlannedDelayMicros,
 		ConstellationEnabled:  negotiated && extensions.Capabilities&protocol.CapabilityConstellationContinuity != 0,
 		ForwardSecrecyEnabled: negotiated && extensions.Capabilities&protocol.CapabilityForwardSecrecy != 0,
 	}, nil

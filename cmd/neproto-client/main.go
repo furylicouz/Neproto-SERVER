@@ -103,6 +103,12 @@ func writeProbeResult(writer io.Writer, result app.ProbeResult) {
 		mode, result.CoverClass, result.CoverTransitions,
 	)
 	fmt.Fprintf(
+		writer,
+		"mosaic_variant=%d bursts=%d dummy_selected=%d dummy_rejected=%d added_delay_us=%d max_delay_us=%d\n",
+		result.CoverVariantID, result.CoverBurstCount, result.CoverDummySelected,
+		result.CoverDummyRejected, result.CoverAddedDelayMicros, result.CoverMaxDelayMicros,
+	)
+	fmt.Fprintf(
 		writer, "constellation=%t forward_secrecy=%t\n",
 		result.ConstellationEnabled, result.ForwardSecrecyEnabled,
 	)

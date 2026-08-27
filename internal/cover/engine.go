@@ -43,13 +43,19 @@ type DummyDecision struct {
 }
 
 type Stats struct {
-	RealBytes          uint64
-	PaddingBytes       uint64
-	DummyBytes         uint64
-	MosaicEnabled      bool
-	TrafficClass       TrafficClass
-	ActiveProfile      ProfileID
-	ProfileTransitions uint64
+	RealBytes             uint64
+	PaddingBytes          uint64
+	DummyBytes            uint64
+	MosaicEnabled         bool
+	TrafficClass          TrafficClass
+	ActiveProfile         ProfileID
+	ProfileTransitions    uint64
+	VariantID             uint8
+	BurstCount            uint64
+	DummyRequestsSelected uint64
+	DummyRequestsRejected uint64
+	AddedDelayMicros      uint64
+	MaxPlannedDelayMicros uint64
 }
 
 func (s Stats) OverheadBytes() uint64 {
@@ -61,6 +67,7 @@ type Engine struct {
 
 	baselineProfile    ProfileID
 	activeProfile      ProfileID
+	activeVariantID    uint8
 	profile            profileDefinition
 	profiles           profileSet
 	maxOverheadPercent uint64
@@ -119,9 +126,12 @@ func (e *Engine) PlanReal(now time.Time, wireBytes int) (RealDecision, error) {
 	e.stats.PaddingBytes = saturatingAdd(e.stats.PaddingBytes, uint64(paddingBytes))
 
 	delay := time.Duration(0)
-	if e.lastRealPlan.IsZero() || now.Before(e.lastRealPlan) ||
-		now.Sub(e.lastRealPlan) >= realBurstIdleThreshold {
+	burstStart := e.lastRealPlan.IsZero() || now.Before(e.lastRealPlan) ||
+		now.Sub(e.lastRealPlan) >= realBurstIdleThreshold
+	if burstStart {
+		e.stats.BurstCount = saturatingAdd(e.stats.BurstCount, 1)
 		delay = e.randomDelayRange(0, e.profile.limits.MaxRealDelay, e.profile.delayShape)
+		e.recordPlannedDelay(delay)
 	}
 	e.lastRealPlan = now
 	return RealDecision{
@@ -147,19 +157,22 @@ func (e *Engine) PlanDummy(now time.Time) DummyDecision {
 		affordable++
 	}
 	if affordable == 0 {
+		e.stats.DummyRequestsRejected = saturatingAdd(e.stats.DummyRequestsRejected, 1)
 		return DummyDecision{}
 	}
 	size := e.profile.dummySizes[e.random.uniform(uint64(affordable))]
 	e.creditUnits -= uint64(size) * 100
 	e.stats.DummyBytes = saturatingAdd(e.stats.DummyBytes, uint64(size))
+	delay := e.randomDelayRange(
+		e.profile.minDummyDelay,
+		e.profile.maxDummyDelay,
+		e.profile.delayShape,
+	)
+	e.recordPlannedDelay(delay)
 	return DummyDecision{
 		Scheduled: true,
 		Bytes:     size,
-		SendAt: now.Add(e.randomDelayRange(
-			e.profile.minDummyDelay,
-			e.profile.maxDummyDelay,
-			e.profile.delayShape,
-		)),
+		SendAt:    now.Add(delay),
 	}
 }
 
@@ -171,6 +184,7 @@ func (e *Engine) Stats() Stats {
 	stats.TrafficClass = e.mosaic.class
 	stats.ActiveProfile = e.activeProfile
 	stats.ProfileTransitions = e.mosaic.transitions
+	stats.VariantID = e.activeVariantID
 	return stats
 }
 
@@ -229,11 +243,19 @@ func (e *Engine) shouldScheduleDummy() bool {
 	if len(e.profile.dummySizes) == 0 || e.profile.dummyGateNumerator == 0 {
 		return false
 	}
+	selected := false
 	if e.profile.dummyGateNumerator >= e.profile.dummyGateDenominator {
-		return true
+		selected = true
+	} else {
+		selected = e.random.uniform(uint64(e.profile.dummyGateDenominator)) <
+			uint64(e.profile.dummyGateNumerator)
 	}
-	return e.random.uniform(uint64(e.profile.dummyGateDenominator)) <
-		uint64(e.profile.dummyGateNumerator)
+	if selected {
+		e.stats.DummyRequestsSelected = saturatingAdd(e.stats.DummyRequestsSelected, 1)
+	} else {
+		e.stats.DummyRequestsRejected = saturatingAdd(e.stats.DummyRequestsRejected, 1)
+	}
+	return selected
 }
 
 func (e *Engine) randomDelayRange(minimum, maximum time.Duration, shape delayShape) time.Duration {
@@ -252,6 +274,17 @@ func (e *Engine) randomDelayRange(minimum, maximum time.Duration, shape delaySha
 		}
 	}
 	return minimum + time.Duration(selected)*jitterStep
+}
+
+func (e *Engine) recordPlannedDelay(delay time.Duration) {
+	if delay <= 0 {
+		return
+	}
+	microseconds := uint64(delay / time.Microsecond)
+	e.stats.AddedDelayMicros = saturatingAdd(e.stats.AddedDelayMicros, microseconds)
+	if microseconds > e.stats.MaxPlannedDelayMicros {
+		e.stats.MaxPlannedDelayMicros = microseconds
+	}
 }
 
 func saturatingAdd(left, right uint64) uint64 {

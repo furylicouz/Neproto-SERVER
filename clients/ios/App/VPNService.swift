@@ -484,7 +484,9 @@ final class VPNService: ObservableObject {
                         "sent_cells", "received_cells", "sent_cell_payload_bytes", "received_payload_bytes",
                         "window_updates_sent", "window_updates_received",
                         "cover_real_wire_bytes", "cover_padding_bytes", "cover_dummy_wire_bytes",
-                        "cover_profile_transitions", "cover_web_sessions", "cover_realtime_sessions", "cover_stream_sessions",
+                        "cover_profile_transitions", "cover_bursts", "cover_dummy_selected", "cover_dummy_rejected",
+                        "cover_added_delay_us", "cover_max_delay_us",
+                        "cover_web_sessions", "cover_realtime_sessions", "cover_stream_sessions",
                         "network_changes", "reconnects", "migrations",
                     ].compactMap { key -> String? in
                         guard let value = object[key] else { return nil }

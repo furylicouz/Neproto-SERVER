@@ -152,9 +152,11 @@ func (e *Engine) setMosaicClass(class TrafficClass) {
 	e.activeProfile = profile
 	derived, ok := e.profiles.definition(profile)
 	if !ok {
+		e.activeVariantID = 0
 		e.profile = profileDefinitions[profile]
 		return
 	}
+	e.activeVariantID = derived.variantID
 	e.profile = derived.definition
 }
 

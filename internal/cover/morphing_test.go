@@ -1,6 +1,7 @@
 package cover
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -102,6 +103,46 @@ func TestMosaicDummyUsesDerivedGapDelay(t *testing.T) {
 	}
 	if planned < 8 {
 		t.Fatalf("only %d dummy cells were planned", planned)
+	}
+}
+
+func TestMosaicStatsExposeOnlyBoundedAggregates(t *testing.T) {
+	engine := newMosaicTestEngine(t, ProfileWeb, 0)
+	if !engine.EnableMosaic() {
+		t.Fatal("enable Mosaic")
+	}
+	start := time.Unix(2_000_000_000, 0)
+	for index := 0; index < 512; index++ {
+		now := start.Add(time.Duration(index) * 100 * time.Millisecond)
+		decision, err := engine.PlanReal(now, 400)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if decision.ScheduleDummy {
+			_ = engine.PlanDummy(now)
+		}
+	}
+
+	stats := engine.Stats()
+	if stats.VariantID == 0 || stats.BurstCount != 512 ||
+		stats.DummyRequestsSelected == 0 || stats.DummyRequestsRejected == 0 ||
+		stats.AddedDelayMicros == 0 || stats.MaxPlannedDelayMicros == 0 ||
+		stats.MaxPlannedDelayMicros > uint64(ProfileLimits(ProfileWeb).MaxRealDelay/time.Microsecond) {
+		t.Fatalf("unexpected aggregate stats: %+v", stats)
+	}
+
+	allowed := map[string]bool{
+		"RealBytes": true, "PaddingBytes": true, "DummyBytes": true,
+		"MosaicEnabled": true, "TrafficClass": true, "ActiveProfile": true,
+		"ProfileTransitions": true, "VariantID": true, "BurstCount": true,
+		"DummyRequestsSelected": true, "DummyRequestsRejected": true,
+		"AddedDelayMicros": true, "MaxPlannedDelayMicros": true,
+	}
+	statsType := reflect.TypeOf(stats)
+	for index := 0; index < statsType.NumField(); index++ {
+		if field := statsType.Field(index); !allowed[field.Name] {
+			t.Fatalf("production stats expose non-approved field %q", field.Name)
+		}
 	}
 }
 

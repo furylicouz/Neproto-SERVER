@@ -27,12 +27,16 @@ func TestWriteProbeResultPreservesStatusAndAddsCoverDiagnostics(t *testing.T) {
 	writeProbeResult(&output, app.ProbeResult{
 		Kind: protocol.CarrierHTTPS, UsedFallback: true,
 		MosaicEnabled: true, CoverClass: "stream", CoverTransitions: 3,
+		CoverVariantID: 17, CoverBurstCount: 23,
+		CoverDummySelected: 11, CoverDummyRejected: 7,
+		CoverAddedDelayMicros: 4_200, CoverMaxDelayMicros: 900,
 		ConstellationEnabled: true, ForwardSecrecyEnabled: true,
 	})
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	if len(lines) != 3 || lines[0] != "carrier=https fallback=true authentication=ok" ||
+	if len(lines) != 4 || lines[0] != "carrier=https fallback=true authentication=ok" ||
 		lines[1] != "cover=mosaic class=stream transitions=3" ||
-		lines[2] != "constellation=true forward_secrecy=true" {
+		lines[2] != "mosaic_variant=17 bursts=23 dummy_selected=11 dummy_rejected=7 added_delay_us=4200 max_delay_us=900" ||
+		lines[3] != "constellation=true forward_secrecy=true" {
 		t.Fatalf("probe output=%q", output.String())
 	}
 }

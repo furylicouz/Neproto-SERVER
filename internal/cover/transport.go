@@ -26,15 +26,21 @@ type TransportConfig struct {
 }
 
 type TransportStats struct {
-	RealMessages       uint64
-	DummyMessages      uint64
-	RealWireBytes      uint64
-	PaddingBytes       uint64
-	DummyWireBytes     uint64
-	MosaicEnabled      bool
-	TrafficClass       TrafficClass
-	ActiveProfile      ProfileID
-	ProfileTransitions uint64
+	RealMessages          uint64
+	DummyMessages         uint64
+	RealWireBytes         uint64
+	PaddingBytes          uint64
+	DummyWireBytes        uint64
+	MosaicEnabled         bool
+	TrafficClass          TrafficClass
+	ActiveProfile         ProfileID
+	ProfileTransitions    uint64
+	VariantID             uint8
+	BurstCount            uint64
+	DummyRequestsSelected uint64
+	DummyRequestsRejected uint64
+	AddedDelayMicros      uint64
+	MaxPlannedDelayMicros uint64
 }
 
 func (s TransportStats) ActualOverheadBytes() uint64 {
@@ -146,6 +152,11 @@ func (t *Transport) Stats() TransportStats {
 		DummyWireBytes: t.dummyWireBytes.Load(), MosaicEnabled: schedule.MosaicEnabled,
 		TrafficClass: schedule.TrafficClass, ActiveProfile: schedule.ActiveProfile,
 		ProfileTransitions: schedule.ProfileTransitions,
+		VariantID:          schedule.VariantID, BurstCount: schedule.BurstCount,
+		DummyRequestsSelected: schedule.DummyRequestsSelected,
+		DummyRequestsRejected: schedule.DummyRequestsRejected,
+		AddedDelayMicros:      schedule.AddedDelayMicros,
+		MaxPlannedDelayMicros: schedule.MaxPlannedDelayMicros,
 	}
 }
 
