@@ -5,8 +5,9 @@ modify the server and it is not installed by NeProto Web.
 
 ## Prerequisite
 
-Install the matching stable `NeProto-Setup-np2-0.5.19-x64.exe` first. Keep the
-candidate ZIP extracted on disk until testing and rollback are complete.
+Install the stable `NeProto-Setup-<same-version>-x64.exe` that exactly matches
+the `version` field in `candidate-manifest.json`. Keep the candidate ZIP
+extracted on disk until testing and rollback are complete.
 
 ## Install
 
