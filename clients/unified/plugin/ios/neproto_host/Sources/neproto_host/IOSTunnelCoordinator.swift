@@ -27,11 +27,13 @@ enum IOSVPNProtocolFactory {
   ) -> NETunnelProviderProtocol {
     let tunnelProtocol = NETunnelProviderProtocol()
     tunnelProtocol.providerBundleIdentifier = providerBundleID
-    tunnelProtocol.serverAddress = profile.serverIdentity
+    let concreteServerAddress = profile.serverAddress?.trimmingCharacters(in: .whitespacesAndNewlines)
+    tunnelProtocol.serverAddress = concreteServerAddress.flatMap { $0.isEmpty ? nil : $0 }
+      ?? profile.serverIdentity
     tunnelProtocol.passwordReference = credentialReference
     tunnelProtocol.providerConfiguration = providerConfiguration
-    tunnelProtocol.includeAllNetworks = false
-    tunnelProtocol.enforceRoutes = true
+    tunnelProtocol.includeAllNetworks = true
+    tunnelProtocol.enforceRoutes = false
     return tunnelProtocol
   }
 }
@@ -85,12 +87,12 @@ final class IOSTunnelCoordinator: IOSTunnelManaging {
     }
 
     let manager = managers[profile.id] ?? NETunnelProviderManager()
-		let tunnelProtocol = IOSVPNProtocolFactory.make(
-		  profile: profile,
-		  providerConfiguration: providerConfiguration,
-		  credentialReference: credentialReference,
-		  providerBundleID: providerBundleID
-		)
+    let tunnelProtocol = IOSVPNProtocolFactory.make(
+      profile: profile,
+      providerConfiguration: providerConfiguration,
+      credentialReference: credentialReference,
+      providerBundleID: providerBundleID
+    )
     manager.localizedDescription = "NeProto — \(profile.name)"
     manager.protocolConfiguration = tunnelProtocol
     manager.isEnabled = true
