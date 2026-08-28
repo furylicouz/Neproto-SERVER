@@ -568,6 +568,42 @@ func TestSessionRouterReportsTCPStreamOpenOutcomes(t *testing.T) {
 	}
 }
 
+func TestSessionRouterReportsBoundedTCPStreamOpenLatency(t *testing.T) {
+	base := time.Date(2026, 8, 29, 1, 30, 0, 0, time.UTC)
+	ticks := []time.Time{
+		base,
+		base.Add(1200 * time.Millisecond),
+		base.Add(2 * time.Second),
+		base.Add(5500 * time.Millisecond),
+	}
+	router := &SessionRouter{
+		now: func() time.Time {
+			current := ticks[0]
+			ticks = ticks[1:]
+			return current
+		},
+		active: sessionRoute{open: func(context.Context, []byte) (streamConnection, error) {
+			return &stubStream{}, nil
+		}},
+	}
+	router.routes = []sessionRoute{router.active}
+
+	for index := 0; index < 2; index++ {
+		opener, err := router.pinStreamOpener()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := opener(context.Background(), []byte{1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	diagnostics := router.TCPStreamDiagnostics()
+	if diagnostics.LastOpenMilliseconds != 3500 || diagnostics.MaximumOpenMilliseconds != 3500 {
+		t.Fatalf("TCP stream latency diagnostics=%+v", diagnostics)
+	}
+}
+
 type stubStream struct{}
 
 func (*stubStream) Read([]byte) (int, error)    { return 0, io.EOF }

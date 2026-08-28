@@ -303,9 +303,10 @@ func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 	stack := r.stack
 	router := r.router
 	closed := r.closed
+	authenticated := r.authenticated
 	var carrierKind protocol.CarrierKind
-	if r.authenticated != nil {
-		carrierKind = r.authenticated.Carrier
+	if authenticated != nil {
+		carrierKind = authenticated.Carrier
 	}
 	addresses := append([]string(nil), r.addresses...)
 	quicStats := r.quicStats
@@ -324,6 +325,26 @@ func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 	if stack != nil {
 		result.UploadBytesPerSecond, result.DownloadBytesPerSecond,
 			result.UploadTotalBytes, result.DownloadTotalBytes = stack.TrafficStats()
+		dnsStats := stack.DNSAttributionStats()
+		result.DNSAttributionQueries = dnsStats.Queries
+		result.DNSAttributionResponses = dnsStats.Responses
+		result.DNSAttributionHits = dnsStats.Hits
+		result.DNSAttributionMisses = dnsStats.Misses
+		result.DNSAttributionCached = dnsStats.Cached
+		result.FirstFlightDomainHits = dnsStats.FirstFlightDomainHits
+		result.FirstFlightFallbacks = dnsStats.FirstFlightFallbacks
+	}
+	tcpDiagnostics := router.TCPStreamDiagnostics()
+	result.TCPStreamAttempts = tcpDiagnostics.Attempts
+	result.TCPStreamSuccesses = tcpDiagnostics.Successes
+	result.TCPStreamFailures = tcpDiagnostics.Failures
+	result.TCPStreamOpenLastMS = tcpDiagnostics.LastOpenMilliseconds
+	result.TCPStreamOpenMaxMS = tcpDiagnostics.MaximumOpenMilliseconds
+	if authenticated != nil && authenticated.Mux != nil {
+		muxStats := authenticated.Mux.Stats()
+		result.ActiveStreams = muxStats.ActiveStreams
+		result.FlowControlStalls = muxStats.FlowControlStalls
+		result.ProtocolErrors = muxStats.ProtocolErrors
 	}
 	if quicStats != nil {
 		stats := quicStats()

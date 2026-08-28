@@ -165,30 +165,45 @@ func (c *ClientCore) SnapshotJSON() string {
 	snapshot := core.Snapshot()
 	runtime := core.RuntimeSnapshot()
 	result := struct {
-		State                  clienthost.State        `json:"state"`
-		ProfileID              string                  `json:"profile_id,omitempty"`
-		Carrier                clienthost.Carrier      `json:"carrier"`
-		ConnectedAtUnixMS      int64                   `json:"connected_at_unix_ms"`
-		UploadBytesPerSecond   int64                   `json:"upload_bytes_per_second"`
-		DownloadBytesPerSecond int64                   `json:"download_bytes_per_second"`
-		UploadTotalBytes       int64                   `json:"upload_total_bytes"`
-		DownloadTotalBytes     int64                   `json:"download_total_bytes"`
-		Sequence               int64                   `json:"sequence"`
-		LastError              *clienthost.PublicError `json:"last_error,omitempty"`
-		UDPMode                string                  `json:"udp_mode,omitempty"`
-		CarrierPoolTarget      int64                   `json:"carrier_pool_target"`
-		CarrierPoolHealthy     int64                   `json:"carrier_pool_healthy"`
-		CarrierPoolAssignments int64                   `json:"carrier_pool_assignments"`
-		QUICMinRTTMS           int64                   `json:"quic_min_rtt_ms"`
-		QUICLatestRTTMS        int64                   `json:"quic_latest_rtt_ms"`
-		QUICSmoothedRTTMS      int64                   `json:"quic_smoothed_rtt_ms"`
-		QUICRTTDeviationMS     int64                   `json:"quic_rtt_deviation_ms"`
-		QUICBytesSent          uint64                  `json:"quic_bytes_sent"`
-		QUICPacketsSent        uint64                  `json:"quic_packets_sent"`
-		QUICBytesReceived      uint64                  `json:"quic_bytes_received"`
-		QUICPacketsReceived    uint64                  `json:"quic_packets_received"`
-		QUICBytesLost          uint64                  `json:"quic_bytes_lost"`
-		QUICPacketsLost        uint64                  `json:"quic_packets_lost"`
+		State                   clienthost.State        `json:"state"`
+		ProfileID               string                  `json:"profile_id,omitempty"`
+		Carrier                 clienthost.Carrier      `json:"carrier"`
+		ConnectedAtUnixMS       int64                   `json:"connected_at_unix_ms"`
+		UploadBytesPerSecond    int64                   `json:"upload_bytes_per_second"`
+		DownloadBytesPerSecond  int64                   `json:"download_bytes_per_second"`
+		UploadTotalBytes        int64                   `json:"upload_total_bytes"`
+		DownloadTotalBytes      int64                   `json:"download_total_bytes"`
+		Sequence                int64                   `json:"sequence"`
+		LastError               *clienthost.PublicError `json:"last_error,omitempty"`
+		UDPMode                 string                  `json:"udp_mode,omitempty"`
+		CarrierPoolTarget       int64                   `json:"carrier_pool_target"`
+		CarrierPoolHealthy      int64                   `json:"carrier_pool_healthy"`
+		CarrierPoolAssignments  int64                   `json:"carrier_pool_assignments"`
+		QUICMinRTTMS            int64                   `json:"quic_min_rtt_ms"`
+		QUICLatestRTTMS         int64                   `json:"quic_latest_rtt_ms"`
+		QUICSmoothedRTTMS       int64                   `json:"quic_smoothed_rtt_ms"`
+		QUICRTTDeviationMS      int64                   `json:"quic_rtt_deviation_ms"`
+		QUICBytesSent           uint64                  `json:"quic_bytes_sent"`
+		QUICPacketsSent         uint64                  `json:"quic_packets_sent"`
+		QUICBytesReceived       uint64                  `json:"quic_bytes_received"`
+		QUICPacketsReceived     uint64                  `json:"quic_packets_received"`
+		QUICBytesLost           uint64                  `json:"quic_bytes_lost"`
+		QUICPacketsLost         uint64                  `json:"quic_packets_lost"`
+		DNSAttributionQueries   uint64                  `json:"dns_attribution_queries"`
+		DNSAttributionResponses uint64                  `json:"dns_attribution_responses"`
+		DNSAttributionHits      uint64                  `json:"dns_attribution_hits"`
+		DNSAttributionMisses    uint64                  `json:"dns_attribution_misses"`
+		DNSAttributionCached    uint64                  `json:"dns_attribution_cached"`
+		FirstFlightDomainHits   uint64                  `json:"first_flight_domain_hits"`
+		FirstFlightFallbacks    uint64                  `json:"first_flight_fallbacks"`
+		TCPStreamAttempts       uint64                  `json:"tcp_stream_attempts"`
+		TCPStreamSuccesses      uint64                  `json:"tcp_stream_successes"`
+		TCPStreamFailures       uint64                  `json:"tcp_stream_failures"`
+		TCPStreamOpenLastMS     uint64                  `json:"tcp_stream_open_last_ms"`
+		TCPStreamOpenMaxMS      uint64                  `json:"tcp_stream_open_max_ms"`
+		ActiveStreams           uint64                  `json:"active_streams"`
+		FlowControlStalls       uint64                  `json:"flow_control_stalls"`
+		ProtocolErrors          uint64                  `json:"protocol_errors"`
 	}{
 		State: snapshot.State, ProfileID: snapshot.ProfileID, Carrier: snapshot.Carrier,
 		ConnectedAtUnixMS:    snapshot.ConnectedAtUnixMS,
@@ -202,6 +217,14 @@ func (c *ClientCore) SnapshotJSON() string {
 		QUICBytesSent: runtime.QUICBytesSent, QUICPacketsSent: runtime.QUICPacketsSent,
 		QUICBytesReceived: runtime.QUICBytesReceived, QUICPacketsReceived: runtime.QUICPacketsReceived,
 		QUICBytesLost: runtime.QUICBytesLost, QUICPacketsLost: runtime.QUICPacketsLost,
+		DNSAttributionQueries: runtime.DNSAttributionQueries, DNSAttributionResponses: runtime.DNSAttributionResponses,
+		DNSAttributionHits: runtime.DNSAttributionHits, DNSAttributionMisses: runtime.DNSAttributionMisses,
+		DNSAttributionCached:  runtime.DNSAttributionCached,
+		FirstFlightDomainHits: runtime.FirstFlightDomainHits, FirstFlightFallbacks: runtime.FirstFlightFallbacks,
+		TCPStreamAttempts: runtime.TCPStreamAttempts, TCPStreamSuccesses: runtime.TCPStreamSuccesses,
+		TCPStreamFailures: runtime.TCPStreamFailures, TCPStreamOpenLastMS: runtime.TCPStreamOpenLastMS,
+		TCPStreamOpenMaxMS: runtime.TCPStreamOpenMaxMS, ActiveStreams: runtime.ActiveStreams,
+		FlowControlStalls: runtime.FlowControlStalls, ProtocolErrors: runtime.ProtocolErrors,
 	}
 	raw, err := json.Marshal(result)
 	if err != nil {

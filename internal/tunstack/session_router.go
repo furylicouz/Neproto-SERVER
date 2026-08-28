@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"neproto.local/chameleon/internal/proxy"
 	"neproto.local/chameleon/internal/session"
@@ -23,6 +24,9 @@ type SessionRouter struct {
 	tcpAttempts   atomic.Uint64
 	tcpSuccesses  atomic.Uint64
 	tcpFailures   atomic.Uint64
+	tcpOpenLastMS atomic.Uint64
+	tcpOpenMaxMS  atomic.Uint64
+	now           func() time.Time
 	continuity    *ClientContinuityRouter
 	clientRoutes  *ClientRoutePolicy
 }
@@ -212,17 +216,18 @@ func (r *SessionRouter) pinStreamOpener() (streamOpenFunc, error) {
 	if continuityRouter != nil {
 		r.assignments.Add(1)
 		return func(ctx context.Context, metadata []byte) (streamConnection, error) {
+			started := r.nowTime()
 			r.tcpAttempts.Add(1)
 			if clientRoutes != nil {
 				var err error
 				metadata, err = clientRoutes.rewrite(metadata)
 				if err != nil {
-					r.tcpFailures.Add(1)
+					r.observeTCPStreamOpen(err, r.nowTime().Sub(started))
 					return nil, err
 				}
 			}
 			stream, err := continuityRouter.openStream(ctx, metadata)
-			r.observeTCPStreamOpen(err)
+			r.observeTCPStreamOpen(err, r.nowTime().Sub(started))
 			return stream, err
 		}, nil
 	}
@@ -232,27 +237,45 @@ func (r *SessionRouter) pinStreamOpener() (streamOpenFunc, error) {
 	}
 	r.assignments.Add(1)
 	return func(ctx context.Context, metadata []byte) (streamConnection, error) {
+		started := r.nowTime()
 		r.tcpAttempts.Add(1)
 		if clientRoutes != nil {
 			var err error
 			metadata, err = clientRoutes.rewrite(metadata)
 			if err != nil {
-				r.tcpFailures.Add(1)
+				r.observeTCPStreamOpen(err, r.nowTime().Sub(started))
 				return nil, err
 			}
 		}
 		stream, err := route.open(ctx, metadata)
-		r.observeTCPStreamOpen(err)
+		r.observeTCPStreamOpen(err, r.nowTime().Sub(started))
 		return stream, err
 	}, nil
 }
 
-func (r *SessionRouter) observeTCPStreamOpen(err error) {
+func (r *SessionRouter) observeTCPStreamOpen(err error, elapsed time.Duration) {
+	milliseconds := uint64(0)
+	if elapsed > 0 {
+		milliseconds = uint64(elapsed / time.Millisecond)
+	}
+	r.tcpOpenLastMS.Store(milliseconds)
+	for maximum := r.tcpOpenMaxMS.Load(); milliseconds > maximum; maximum = r.tcpOpenMaxMS.Load() {
+		if r.tcpOpenMaxMS.CompareAndSwap(maximum, milliseconds) {
+			break
+		}
+	}
 	if err != nil {
 		r.tcpFailures.Add(1)
 		return
 	}
 	r.tcpSuccesses.Add(1)
+}
+
+func (r *SessionRouter) nowTime() time.Time {
+	if r != nil && r.now != nil {
+		return r.now()
+	}
+	return time.Now()
 }
 
 func (r *SessionRouter) addRoute(route sessionRoute) (uint64, error) {
@@ -362,10 +385,28 @@ func (r *SessionRouter) PoolStats() (healthy int, assignments uint64) {
 // TCPStreamStats reports aggregate open outcomes without retaining target
 // addresses, domains, metadata or payloads.
 func (r *SessionRouter) TCPStreamStats() (attempts, successes, failures uint64) {
+	diagnostics := r.TCPStreamDiagnostics()
+	return diagnostics.Attempts, diagnostics.Successes, diagnostics.Failures
+}
+
+// TCPStreamOpenDiagnostics reports bounded aggregate stream-open outcomes and
+// latency without retaining target addresses, domains, metadata or payloads.
+type TCPStreamOpenDiagnostics struct {
+	Attempts                uint64
+	Successes               uint64
+	Failures                uint64
+	LastOpenMilliseconds    uint64
+	MaximumOpenMilliseconds uint64
+}
+
+func (r *SessionRouter) TCPStreamDiagnostics() TCPStreamOpenDiagnostics {
 	if r == nil {
-		return 0, 0, 0
+		return TCPStreamOpenDiagnostics{}
 	}
-	return r.tcpAttempts.Load(), r.tcpSuccesses.Load(), r.tcpFailures.Load()
+	return TCPStreamOpenDiagnostics{
+		Attempts: r.tcpAttempts.Load(), Successes: r.tcpSuccesses.Load(), Failures: r.tcpFailures.Load(),
+		LastOpenMilliseconds: r.tcpOpenLastMS.Load(), MaximumOpenMilliseconds: r.tcpOpenMaxMS.Load(),
+	}
 }
 
 func (r *SessionRouter) openUDP(

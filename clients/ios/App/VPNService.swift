@@ -483,6 +483,7 @@ final class VPNService: ObservableObject {
                         "dns_attribution_misses", "dns_attribution_cached",
                         "first_flight_domain_hits", "first_flight_fallbacks",
                         "tcp_stream_attempts", "tcp_stream_successes", "tcp_stream_failures",
+                        "tcp_stream_open_last_ms", "tcp_stream_open_max_ms",
                         "active_streams", "flow_control_stalls", "protocol_errors",
                         "sent_cells", "received_cells", "sent_cell_payload_bytes", "received_payload_bytes",
                         "window_updates_sent", "window_updates_received",

@@ -24,26 +24,41 @@ var (
 // RuntimeSnapshot contains bounded aggregate runtime data. It deliberately
 // excludes destinations, payloads, credentials and raw profile material.
 type RuntimeSnapshot struct {
-	Carrier                clienthost.Carrier
-	ServerAddresses        []string
-	UploadBytesPerSecond   int64
-	DownloadBytesPerSecond int64
-	UploadTotalBytes       int64
-	DownloadTotalBytes     int64
-	UDPMode                string
-	CarrierPoolTarget      int64
-	CarrierPoolHealthy     int64
-	CarrierPoolAssignments int64
-	QUICMinRTTMS           int64
-	QUICLatestRTTMS        int64
-	QUICSmoothedRTTMS      int64
-	QUICRTTDeviationMS     int64
-	QUICBytesSent          uint64
-	QUICPacketsSent        uint64
-	QUICBytesReceived      uint64
-	QUICPacketsReceived    uint64
-	QUICBytesLost          uint64
-	QUICPacketsLost        uint64
+	Carrier                 clienthost.Carrier
+	ServerAddresses         []string
+	UploadBytesPerSecond    int64
+	DownloadBytesPerSecond  int64
+	UploadTotalBytes        int64
+	DownloadTotalBytes      int64
+	UDPMode                 string
+	CarrierPoolTarget       int64
+	CarrierPoolHealthy      int64
+	CarrierPoolAssignments  int64
+	QUICMinRTTMS            int64
+	QUICLatestRTTMS         int64
+	QUICSmoothedRTTMS       int64
+	QUICRTTDeviationMS      int64
+	QUICBytesSent           uint64
+	QUICPacketsSent         uint64
+	QUICBytesReceived       uint64
+	QUICPacketsReceived     uint64
+	QUICBytesLost           uint64
+	QUICPacketsLost         uint64
+	DNSAttributionQueries   uint64
+	DNSAttributionResponses uint64
+	DNSAttributionHits      uint64
+	DNSAttributionMisses    uint64
+	DNSAttributionCached    uint64
+	FirstFlightDomainHits   uint64
+	FirstFlightFallbacks    uint64
+	TCPStreamAttempts       uint64
+	TCPStreamSuccesses      uint64
+	TCPStreamFailures       uint64
+	TCPStreamOpenLastMS     uint64
+	TCPStreamOpenMaxMS      uint64
+	ActiveStreams           uint64
+	FlowControlStalls       uint64
+	ProtocolErrors          uint64
 }
 
 type clientRouteRuntime interface {

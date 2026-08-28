@@ -112,13 +112,56 @@ func TestInstanceClientCoreSnapshotIncludesSanitizedStartFailure(t *testing.T) {
 	}
 }
 
+func TestInstanceClientCoreSnapshotIncludesBoundedRoutingDiagnostics(t *testing.T) {
+	runtime := clientcore.RuntimeSnapshot{
+		DNSAttributionQueries: 11, DNSAttributionResponses: 10,
+		DNSAttributionHits: 7, DNSAttributionMisses: 4, DNSAttributionCached: 3,
+		FirstFlightDomainHits: 6, FirstFlightFallbacks: 5,
+		TCPStreamAttempts: 9, TCPStreamSuccesses: 7, TCPStreamFailures: 2,
+		TCPStreamOpenLastMS: 1250, TCPStreamOpenMaxMS: 10_004,
+		ActiveStreams: 4, FlowControlStalls: 1, ProtocolErrors: 0,
+	}
+	core := newStrictClientCore(&fakeStrictCore{runtimeSnapshot: runtime})
+	raw := core.SnapshotJSON()
+	var snapshot struct {
+		DNSAttributionQueries   uint64 `json:"dns_attribution_queries"`
+		DNSAttributionResponses uint64 `json:"dns_attribution_responses"`
+		DNSAttributionHits      uint64 `json:"dns_attribution_hits"`
+		DNSAttributionMisses    uint64 `json:"dns_attribution_misses"`
+		DNSAttributionCached    uint64 `json:"dns_attribution_cached"`
+		FirstFlightDomainHits   uint64 `json:"first_flight_domain_hits"`
+		FirstFlightFallbacks    uint64 `json:"first_flight_fallbacks"`
+		TCPStreamAttempts       uint64 `json:"tcp_stream_attempts"`
+		TCPStreamSuccesses      uint64 `json:"tcp_stream_successes"`
+		TCPStreamFailures       uint64 `json:"tcp_stream_failures"`
+		TCPStreamOpenLastMS     uint64 `json:"tcp_stream_open_last_ms"`
+		TCPStreamOpenMaxMS      uint64 `json:"tcp_stream_open_max_ms"`
+		ActiveStreams           uint64 `json:"active_streams"`
+		FlowControlStalls       uint64 `json:"flow_control_stalls"`
+		ProtocolErrors          uint64 `json:"protocol_errors"`
+	}
+	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.DNSAttributionQueries != 11 || snapshot.DNSAttributionResponses != 10 ||
+		snapshot.DNSAttributionHits != 7 || snapshot.DNSAttributionMisses != 4 ||
+		snapshot.DNSAttributionCached != 3 || snapshot.FirstFlightDomainHits != 6 ||
+		snapshot.FirstFlightFallbacks != 5 || snapshot.TCPStreamAttempts != 9 ||
+		snapshot.TCPStreamSuccesses != 7 || snapshot.TCPStreamFailures != 2 ||
+		snapshot.TCPStreamOpenLastMS != 1250 || snapshot.TCPStreamOpenMaxMS != 10_004 ||
+		snapshot.ActiveStreams != 4 || snapshot.FlowControlStalls != 1 || snapshot.ProtocolErrors != 0 {
+		t.Fatalf("routing diagnostics=%+v raw=%s", snapshot, raw)
+	}
+}
+
 type fakeStrictCore struct {
-	events         *[]string
-	connect        func(context.Context) error
-	request        clientcore.ConnectRequest
-	fileDescriptor int
-	mtu            uint32
-	snapshot       clienthost.Snapshot
+	events          *[]string
+	connect         func(context.Context) error
+	request         clientcore.ConnectRequest
+	fileDescriptor  int
+	mtu             uint32
+	snapshot        clienthost.Snapshot
+	runtimeSnapshot clientcore.RuntimeSnapshot
 }
 
 func (f *fakeStrictCore) Connect(ctx context.Context, request clientcore.ConnectRequest) (clienthost.Snapshot, error) {
@@ -153,7 +196,10 @@ func (f *fakeStrictCore) Snapshot() clienthost.Snapshot {
 	}
 	return clienthost.Snapshot{State: clienthost.StateConnected, Carrier: clienthost.CarrierHTTP3WebTransport}
 }
-func (*fakeStrictCore) RuntimeSnapshot() clientcore.RuntimeSnapshot {
+func (f *fakeStrictCore) RuntimeSnapshot() clientcore.RuntimeSnapshot {
+	if f.runtimeSnapshot.Carrier != "" || f.runtimeSnapshot.DNSAttributionQueries != 0 {
+		return f.runtimeSnapshot
+	}
 	return clientcore.RuntimeSnapshot{
 		Carrier: clienthost.CarrierHTTP3WebTransport, ServerAddresses: []string{"8.8.8.8"},
 		QUICSmoothedRTTMS: 37, QUICPacketsSent: 1000, QUICPacketsLost: 25,
