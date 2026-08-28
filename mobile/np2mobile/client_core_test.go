@@ -92,12 +92,33 @@ func TestInstanceClientCoreSnapshotIncludesPayloadFreeQUICHealth(t *testing.T) {
 	}
 }
 
+func TestInstanceClientCoreSnapshotIncludesSanitizedStartFailure(t *testing.T) {
+	want := clienthost.PublicError{
+		Code: clienthost.CodeNP2AuthFailed, Stage: clienthost.StageNP2Authentication,
+		Message: "NP/2 authentication failed.", OperationID: "ios-start-test",
+	}
+	core := newStrictClientCore(&fakeStrictCore{snapshot: clienthost.Snapshot{
+		State: clienthost.StateFailed, Carrier: clienthost.CarrierNone, LastError: &want,
+	}})
+	raw := core.SnapshotJSON()
+	var snapshot struct {
+		LastError *clienthost.PublicError `json:"last_error"`
+	}
+	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.LastError == nil || *snapshot.LastError != want {
+		t.Fatalf("last error=%+v want=%+v raw=%s", snapshot.LastError, want, raw)
+	}
+}
+
 type fakeStrictCore struct {
 	events         *[]string
 	connect        func(context.Context) error
 	request        clientcore.ConnectRequest
 	fileDescriptor int
 	mtu            uint32
+	snapshot       clienthost.Snapshot
 }
 
 func (f *fakeStrictCore) Connect(ctx context.Context, request clientcore.ConnectRequest) (clienthost.Snapshot, error) {
@@ -125,7 +146,11 @@ func (f *fakeStrictCore) AttachPacketTunnel(_ context.Context, fd int, mtu uint3
 func (*fakeStrictCore) NetworkChanged(context.Context, string) (clienthost.Snapshot, error) {
 	return clienthost.Snapshot{State: clienthost.StateConnected}, nil
 }
-func (*fakeStrictCore) Snapshot() clienthost.Snapshot {
+
+func (f *fakeStrictCore) Snapshot() clienthost.Snapshot {
+	if f.snapshot.State != "" {
+		return f.snapshot
+	}
 	return clienthost.Snapshot{State: clienthost.StateConnected, Carrier: clienthost.CarrierHTTP3WebTransport}
 }
 func (*fakeStrictCore) RuntimeSnapshot() clientcore.RuntimeSnapshot {
