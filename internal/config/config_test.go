@@ -47,8 +47,23 @@ func TestLoadStrictClientAndServerConfigs(t *testing.T) {
 	if client.ProfileID() != cover.ProfileInteractive || client.WebRTCTimeout.Duration != 5*time.Second ||
 		client.HTTP3Timeout.Duration != 5*time.Second || client.HTTP3URL == "" ||
 		client.CarrierPolicy != CarrierPolicyPerformance || !client.RequireDatagrams ||
-		!client.EnableConstellation || !client.EnableForwardSecrecy {
+		client.CoverMode != CoverModeOff || !client.EnableConstellation || !client.EnableForwardSecrecy {
 		t.Fatalf("client normalization mismatch: %#v", client)
+	}
+	mosaicPath := filepath.Join(directory, "client-mosaic.json")
+	mosaicJSON := strings.Replace(clientJSON, `"profile":"interactive",`,
+		`"profile":"interactive","cover_mode":"mosaic",`, 1)
+	writeConfig(t, mosaicPath, mosaicJSON)
+	mosaic, err := LoadClient(mosaicPath)
+	if err != nil || mosaic.CoverMode != CoverModeMosaic {
+		t.Fatalf("load explicit Mosaic cover mode: mode=%q error=%v", mosaic.CoverMode, err)
+	}
+	invalidCoverPath := filepath.Join(directory, "client-invalid-cover.json")
+	invalidCoverJSON := strings.Replace(clientJSON, `"profile":"interactive",`,
+		`"profile":"interactive","cover_mode":"random",`, 1)
+	writeConfig(t, invalidCoverPath, invalidCoverJSON)
+	if _, err := LoadClient(invalidCoverPath); !errors.Is(err, ErrInvalidConfig) {
+		t.Fatalf("invalid cover mode error=%v", err)
 	}
 	udpFirstPath := filepath.Join(directory, "client-udp-first.json")
 	udpFirstJSON := strings.Replace(clientJSON, `"profile":"interactive",`,
@@ -113,7 +128,7 @@ func TestLoadStrictClientAndServerConfigs(t *testing.T) {
 		server.ClusterDirectory != filepath.Join(directory, "cluster") || server.ClusterCatalogTTL.Duration != time.Hour ||
 		!server.EnableHTTP3 || !server.EnableWebRTCDatagrams || !server.EnableHTTP3Datagrams ||
 		server.HTTP3Listen != ":443" || server.MaxHTTP3Sessions != 32 ||
-		server.Secret.Bytes() != client.Secret.Bytes() || !server.EnableConstellation ||
+		server.CoverMode != CoverModeOff || server.Secret.Bytes() != client.Secret.Bytes() || !server.EnableConstellation ||
 		!server.EnableForwardSecrecy {
 		t.Fatalf("server normalization mismatch: %#v", server)
 	}

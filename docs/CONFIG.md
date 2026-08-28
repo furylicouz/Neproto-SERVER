@@ -20,6 +20,7 @@ Generate a value with `neproto-server generate-secret`. Never place the value in
   "http3_url": "https://vpn.example.com/<private-http3-route>",
   "profile": "interactive",
   "carrier_policy": "performance",
+	"cover_mode": "off",
   "max_cover_overhead_percent": 30,
   "initial_window_bytes": 2097152,
   "max_streams": 128,
@@ -55,11 +56,16 @@ after idle. A value of `1` is the wire-compatible rollback and does not weaken
 or change NP/2 encryption. One inner TCP flow always remains on one carrier;
 UDP stays pinned to the primary carrier.
 
-### Mosaic cover behavior
+### Cover mode and Mosaic behavior
 
-There is deliberately no fourth `mosaic` configuration profile. A v2.2 client
-and server advertise `CapabilityMosaicCover` after authentication and activate
-it only when both sides select the capability:
+`cover_mode` defaults to `off`. In this performance mode the mandatory NP/2
+authentication, session-specific type map, cell AEAD, flow control, and
+multiplexing remain active, while padding, dummy cells, cover delays, and
+Mosaic classification are bypassed. Set `cover_mode` to `mosaic` explicitly on
+both peers only for a measured cover experiment. There is deliberately no
+fourth `mosaic` configuration profile. Mosaic peers advertise
+`CapabilityMosaicCover` after authentication and activate it only when both
+sides select the capability:
 
 | Configured profile | Legacy peer | Mosaic-capable peer |
 |---|---|---|
@@ -67,7 +73,8 @@ it only when both sides select the capability:
 | `web` | fixed web | starts web; may select realtime or stream locally |
 | `interactive` | fixed interactive | starts realtime; may select web or stream locally |
 
-`max_cover_overhead_percent` remains the global ceiling across all transitions.
+`max_cover_overhead_percent` is ignored in `off` mode and remains the global
+ceiling across all Mosaic transitions.
 The `stream` class is an internal zero-delay fast path, not a value accepted in
 JSON or an assertion that the outer carrier is HTTP/3. The normative state
 machine is in [`NP2-MOSAIC-SPEC.md`](NP2-MOSAIC-SPEC.md).
@@ -91,6 +98,7 @@ machine is in [`NP2-MOSAIC-SPEC.md`](NP2-MOSAIC-SPEC.md).
   "http3_key_file": "/etc/neproto/tls/privkey.pem",
   "udp_port_min": 40000,
   "udp_port_max": 40100,
+	"cover_mode": "off",
   "max_cover_overhead_percent": 30,
   "initial_window_bytes": 262144,
   "max_streams": 128,

@@ -209,6 +209,23 @@ Flow control is credit based. A sender cannot exceed the peer's advertised per-s
 
 The engine accepts real cells and produces a schedule of real, padded, and dummy carrier messages.
 
+`cover_mode` selects whether the authenticated sender installs that scheduling
+layer. `off` is the production performance default: encoded NP/2 cells pass
+directly from the multiplexer into the mandatory directional AEAD record layer,
+with no cover delay, padding, dummy cells, or Mosaic classification. TLS 1.3,
+NP/2 authentication, session-specific cell type mapping, ChaCha20-Poly1305,
+flow control, and multiplexing remain mandatory and unchanged. `mosaic` is an
+explicit opt-in that installs the cover transport and advertises
+`CapabilityMosaicCover`; a peer must not advertise that capability while its
+local `cover_mode` is `off`.
+
+Cover mode is sender-local and does not change cell or carrier framing. This
+allows a rolling upgrade: an `off` sender interoperates with an older covered
+receiver, while each direction independently follows the sender's local mode.
+An omitted `cover_mode` is interpreted as `off` so upgrading an existing
+deployment activates the performance path without rewriting stored secrets or
+onboarding profiles.
+
 | Profile | Intended shape | Default budget | Latency ceiling |
 |---|---|---:|---:|
 | `quiet` | Minimal overhead, no periodic dummy cells | 5% | 2 ms |
@@ -217,6 +234,8 @@ The engine accepts real cells and produces a schedule of real, padded, and dummy
 
 Rules:
 
+- `max_cover_overhead_percent` is ignored while `cover_mode=off` and remains
+  available for a later explicit switch back to `mosaic`.
 - Production client and administrative UIs expose one automatic mode. They
   serialize the backward-compatible base value `web`; legacy imported
   `quiet` and `interactive` values remain decodable but are normalized to

@@ -142,6 +142,7 @@ type controller struct {
 	runtime          mobileRuntime
 	serverAddr       string
 	carrier          string
+	coverMode        string
 	generation       uint64
 	migrationCancel  context.CancelFunc
 	migrationTimeout time.Duration
@@ -178,6 +179,7 @@ func (c *controller) start(raw []byte, secret string) error {
 	c.runtime = nil
 	c.serverAddr = ""
 	c.carrier = ""
+	c.coverMode = string(loaded.CoverMode)
 	c.migrationTimeout = mobileConnectDeadline(loaded)
 	clientRoutes := c.clientRoutes
 	c.mu.Unlock()
@@ -501,6 +503,12 @@ func (c *controller) stateName() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.state
+}
+
+func (c *controller) coverModeName() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.coverMode
 }
 
 func (c *controller) lastError() string {
@@ -1978,6 +1986,9 @@ func ServerAddresses() string { return defaultController.serverAddresses() }
 
 // Carrier returns http3, webrtc, or https for the active NP/2 session.
 func Carrier() string { return defaultController.carrierName() }
+
+// CoverMode returns off or mosaic for the active sanitized client profile.
+func CoverMode() string { return defaultController.coverModeName() }
 
 // UploadBytesPerSecond returns application payload bytes sent during the last
 // one-second statistics window.

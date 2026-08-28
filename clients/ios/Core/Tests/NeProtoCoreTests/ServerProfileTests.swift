@@ -40,6 +40,7 @@ struct ServerProfileTests {
         #expect(object["require_datagrams"] as? Bool == true)
         #expect(object["enable_constellation"] as? Bool == true)
         #expect(object["enable_forward_secrecy"] as? Bool == true)
+		#expect(object["cover_mode"] as? String == "off")
         #expect(object["max_cover_overhead_percent"] as? Int == 30)
         #expect(object["profile"] as? String == CoverProfile.web.rawValue)
         #expect(object["socks_listen"] == nil)

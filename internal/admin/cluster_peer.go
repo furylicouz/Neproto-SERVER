@@ -333,6 +333,7 @@ func (m *Manager) clusterPeerClientJSON(endpoint ClusterPeerEndpoint, secretPath
 		"webrtc_signaling_url":       "https://" + endpoint.ServerIdentity + endpoint.WebRTCPath,
 		"profile":                    "web",
 		"carrier_policy":             "performance",
+		"cover_mode":                 "off",
 		"max_cover_overhead_percent": 20,
 		"initial_window_bytes":       1048576,
 		"max_streams":                256,

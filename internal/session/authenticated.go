@@ -23,6 +23,7 @@ type AuthenticatedConfig struct {
 	MaxStreams              int
 	MaxCoverOverheadPercent uint8
 	MaxCoverBudgetBytes     int
+	DisableCover            bool
 	ExtensionOffer          *protocol.ExtensionParameters
 	ExtensionRequest        *protocol.ExtensionParameters
 	RequiredExtensions      protocol.ExtensionCapability
@@ -189,34 +190,39 @@ func startAuthenticated(
 	if err != nil {
 		return nil, closeAuthentication(connection, "select cover profile", err)
 	}
-	overhead := config.MaxCoverOverheadPercent
-	engine, err := cover.NewEngine(cover.Config{
-		Profile: profile, MaxOverheadPercent: overhead, MaxBudgetBytes: config.MaxCoverBudgetBytes,
-		Seed: deriveCoverSeed(keys.Padding, role, "schedule"),
-	})
-	if err != nil {
-		return nil, closeAuthentication(connection, "create cover engine", err)
-	}
 	encrypted, err := newEncryptedCarrier(connection, role, keys)
 	if err != nil {
 		return nil, closeAuthentication(connection, "create cell encryption", err)
 	}
-	covered, err := cover.NewTransport(cover.TransportConfig{
-		Carrier: encrypted, TypeMap: typeMap, Engine: engine,
-		PaddingSeed: deriveCoverSeed(keys.Padding, role, "padding"),
-	})
-	if err != nil {
-		return nil, closeAuthentication(encrypted, "create cover transport", err)
+	var covered *cover.Transport
+	var muxCarrier carrier.Carrier = encrypted
+	if !config.DisableCover {
+		overhead := config.MaxCoverOverheadPercent
+		engine, engineErr := cover.NewEngine(cover.Config{
+			Profile: profile, MaxOverheadPercent: overhead, MaxBudgetBytes: config.MaxCoverBudgetBytes,
+			Seed: deriveCoverSeed(keys.Padding, role, "schedule"),
+		})
+		if engineErr != nil {
+			return nil, closeAuthentication(encrypted, "create cover engine", engineErr)
+		}
+		covered, err = cover.NewTransport(cover.TransportConfig{
+			Carrier: encrypted, TypeMap: typeMap, Engine: engine,
+			PaddingSeed: deriveCoverSeed(keys.Padding, role, "padding"),
+		})
+		if err != nil {
+			return nil, closeAuthentication(encrypted, "create cover transport", err)
+		}
+		muxCarrier = covered
 	}
-	if config.EnableForwardSecrecy {
+	if config.EnableForwardSecrecy && covered != nil {
 		covered.PauseDummies()
 	}
 	mux, err := New(Config{
-		Role: role, Carrier: covered, TypeMap: typeMap,
+		Role: role, Carrier: muxCarrier, TypeMap: typeMap,
 		InitialWindow: config.InitialWindow, MaxStreams: config.MaxStreams,
 	})
 	if err != nil {
-		_ = covered.Close()
+		_ = muxCarrier.Close()
 		return nil, fmt.Errorf("authenticate carrier (start multiplexer): %w", err)
 	}
 	var datagrams *DatagramMux
@@ -233,6 +239,15 @@ func startAuthenticated(
 		CarrierRemoteAddresses: remoteAddresses, CredentialID: credentialID, DeviceID: deviceID,
 		extensions: newExtensionNegotiationState(), encrypted: encrypted,
 	}, nil
+}
+
+// CoverStats returns a zero snapshot for the direct AEAD fast path so callers
+// can report one stable diagnostic shape without installing the cover layer.
+func (a *Authenticated) CoverStats() cover.TransportStats {
+	if a == nil || a.Cover == nil {
+		return cover.TransportStats{}
+	}
+	return a.Cover.Stats()
 }
 
 func validateAuthenticatedConfig(ctx context.Context, connection carrier.Carrier, config AuthenticatedConfig) error {

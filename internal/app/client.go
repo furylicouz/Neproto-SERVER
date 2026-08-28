@@ -284,9 +284,12 @@ func ProbeClient(ctx context.Context, config config.Client, mode ProbeMode) (Pro
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	coverStats := authenticated.Cover.Stats()
+	coverStats := authenticated.CoverStats()
 	extensions, negotiated := authenticated.Extensions()
-	coverClass := "fixed-" + config.Profile
+	coverClass := "off"
+	if authenticated.Cover != nil {
+		coverClass = "fixed-" + config.Profile
+	}
 	if coverStats.MosaicEnabled {
 		coverClass = coverStats.TrafficClass.String()
 	}
@@ -357,6 +360,7 @@ func AuthenticateClientCarrier(
 		DeviceID: clientConfig.DeviceID,
 		Features: features, InitialWindow: clientConfig.InitialWindowBytes, MaxStreams: clientConfig.MaxStreams,
 		MaxCoverOverheadPercent: clientConfig.MaxCoverOverheadPercent,
+		DisableCover:            !clientConfig.CoverEnabled(),
 		ExtensionRequest:        &extensionRequest, RequiredExtensions: requiredExtensions,
 		ExtensionTimeout:     500 * time.Millisecond,
 		EnableForwardSecrecy: clientConfig.EnableForwardSecrecy,

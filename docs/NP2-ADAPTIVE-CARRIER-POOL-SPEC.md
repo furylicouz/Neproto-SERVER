@@ -3,7 +3,7 @@
 ## Objective
 
 Increase real mobile throughput without weakening NP/2 authentication, cell
-encryption, endpoint privacy, or Mosaic cover behavior. The mobile runtime may
+encryption, endpoint privacy, or the configured cover behavior. The mobile runtime may
 maintain a bounded pool of independent authenticated HTTPS carrier sessions and
 assign each new inner TCP flow to the least-loaded healthy session.
 
@@ -74,7 +74,8 @@ type sessionRoute struct {
 4. Warm the third session only after load/concurrency crosses the documented
    threshold; close it after a bounded idle interval.
 5. Every session independently performs NP/2 authentication, v2.2 extension
-   negotiation, key derivation, cell AEAD, replay protection, and Mosaic setup.
+   negotiation, key derivation, cell AEAD, and replay protection. It installs
+   Mosaic only when `cover_mode=mosaic` is explicitly configured.
 6. On network migration, stop pool growth, replace the primary using the current
    migration gate, drain old flows, then rebuild the pool on the new path.
 7. `Stop()` cancels all pending dials and closes every pool session promptly.
@@ -107,8 +108,8 @@ No destination, credential, route token, or per-stream identifier may be logged.
 
 - Go 1.26.x: configuration, authenticated sessions, TUN routing, mobile runtime.
 - Swift/NetworkExtension: profile serialization and bounded diagnostics only.
-- Existing `coder/websocket`, HTTP/3, WebRTC, cell AEAD, and Mosaic code; no new
-  dependency.
+- Existing `coder/websocket`, HTTP/3, WebRTC, cell AEAD, and optional Mosaic
+  code; no new dependency.
 
 ## Project structure
 
@@ -161,7 +162,8 @@ OPEN result.
 ### Always
 
 - Preserve credential authentication, server-identity binding, cell AEAD,
-  replay protection, extension negotiation, and Mosaic on every member.
+  replay protection, extension negotiation, and the configured cover mode on
+  every member.
 - Keep pool size and all queues bounded.
 - Keep UDP pinned to one authenticated primary.
 - Provide `max_parallel_carriers=1` rollback.
@@ -172,7 +174,7 @@ OPEN result.
 - Increasing the maximum above three.
 - Changing the NP/2 wire format or server authentication exchange.
 - Mixing HTTPS and HTTP/3 members in one pool.
-- Reducing cover overhead or disabling encryption.
+- Disabling authentication, cell encryption, or TLS/DTLS verification.
 
 ### Never
 
@@ -187,13 +189,15 @@ OPEN result.
 1. All current tests plus pool-specific unit, race, lifecycle, and migration
    tests pass.
 2. Existing profiles and single-carrier servers remain compatible.
-3. Encryption and Mosaic statistics remain active on every pool member.
+3. Encryption remains active on every pool member; cover statistics reflect
+   either the direct `off` path or explicitly configured Mosaic.
 4. Stop completes within the existing iOS lifecycle bound with one, two, or
    three members.
 5. No secondary failure disconnects a healthy primary VPN.
 6. Physical pooled-mode median throughput improves by at least 20 percent over
    single mode on the same route, or the feature remains disabled.
-7. Cover plus framing overhead remains inside the configured budget.
+7. When Mosaic is enabled, cover plus framing overhead remains inside the
+   configured budget.
 
 ## Open questions
 

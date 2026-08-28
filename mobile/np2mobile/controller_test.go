@@ -35,6 +35,9 @@ func TestControllerConnectsStartsTunnelOnceAndStops(t *testing.T) {
 	if got := controller.stateName(); got != "connected" {
 		t.Fatalf("state=%q, want connected", got)
 	}
+	if got := controller.coverModeName(); got != "off" {
+		t.Fatalf("cover mode=%q, want off", got)
+	}
 	if got := controller.serverAddresses(); got != "104.171.136.10" {
 		t.Fatalf("server routes=%q", got)
 	}

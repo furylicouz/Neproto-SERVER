@@ -60,6 +60,8 @@ func (RootSecret) GoString() string  { return "<redacted>" }
 
 type CarrierPolicy string
 
+type CoverMode string
+
 const (
 	CarrierPolicyPerformance CarrierPolicy = "performance"
 	CarrierPolicyUDPFirst    CarrierPolicy = "udp-first"
@@ -69,6 +71,11 @@ const (
 	// CarrierPolicyHTTPSOnly is the single-carrier TCP/TLS A/B policy. It keeps
 	// HTTP/3 and WebRTC endpoints out of the runtime configuration entirely.
 	CarrierPolicyHTTPSOnly CarrierPolicy = "https-only"
+
+	// CoverModeOff keeps the authenticated NP/2 data plane on the direct AEAD
+	// fast path. Mosaic remains available as an explicit, measurable opt-in.
+	CoverModeOff    CoverMode = "off"
+	CoverModeMosaic CoverMode = "mosaic"
 )
 
 type Client struct {
@@ -82,6 +89,7 @@ type Client struct {
 	HTTP3URL                string            `json:"http3_url,omitempty"`
 	Profile                 string            `json:"profile"`
 	CarrierPolicy           CarrierPolicy     `json:"carrier_policy,omitempty"`
+	CoverMode               CoverMode         `json:"cover_mode,omitempty"`
 	MaxCoverOverheadPercent uint8             `json:"max_cover_overhead_percent"`
 	InitialWindowBytes      uint64            `json:"initial_window_bytes"`
 	MaxStreams              int               `json:"max_streams"`
@@ -112,12 +120,17 @@ func (c Client) ProfileID() cover.ProfileID {
 
 func (c Client) HTTP3Configured() bool { return c.HTTP3URL != "" }
 
+func (c Client) CoverEnabled() bool { return c.CoverMode == CoverModeMosaic }
+
 func applyClientDefaults(client *Client, directMobile bool) {
 	if client == nil {
 		return
 	}
 	if client.CarrierPolicy == "" {
 		client.CarrierPolicy = CarrierPolicyPerformance
+	}
+	if client.CoverMode == "" {
+		client.CoverMode = CoverModeOff
 	}
 	if client.MaxParallelCarriers == 0 {
 		client.MaxParallelCarriers = 1
@@ -153,6 +166,7 @@ type Server struct {
 	HTTP3KeyFile            string                   `json:"http3_key_file,omitempty"`
 	UDPPortMin              uint16                   `json:"udp_port_min"`
 	UDPPortMax              uint16                   `json:"udp_port_max"`
+	CoverMode               CoverMode                `json:"cover_mode,omitempty"`
 	MaxCoverOverheadPercent uint8                    `json:"max_cover_overhead_percent"`
 	InitialWindowBytes      uint64                   `json:"initial_window_bytes"`
 	MaxStreams              int                      `json:"max_streams"`
@@ -317,6 +331,9 @@ func applyServerResourceDefaults(config *Server) {
 	if config == nil {
 		return
 	}
+	if config.CoverMode == "" {
+		config.CoverMode = CoverModeOff
+	}
 	limits := &config.ResourceLimits
 	setDefaultInt(&limits.MaxSessionsPerUser, min(8, config.MaxSessions))
 	setDefaultInt(&limits.MaxTCPConnectionsGlobal, max(6000, config.MaxTargetConnections))
@@ -449,6 +466,7 @@ func validateClient(config Client) error {
 		(config.CarrierPolicy != CarrierPolicyPerformance && config.CarrierPolicy != CarrierPolicyUDPFirst &&
 			config.CarrierPolicy != CarrierPolicyHTTP3Only && config.CarrierPolicy != CarrierPolicyHTTPSOnly) ||
 		len(config.ServerAddresses) > 8 || !validServerAddresses(config.ServerAddresses) ||
+		!validCoverMode(config.CoverMode) ||
 		config.MaxCoverOverheadPercent > 100 ||
 		config.InitialWindowBytes < 16*1024 || config.InitialWindowBytes > session.MaxInitialWindow ||
 		config.MaxStreams <= 0 || config.MaxStreams > maxStreams ||
@@ -544,6 +562,7 @@ func validateServer(config Server) error {
 		!validPrivatePath(config.HTTPSPath) || !validPrivatePath(config.WebRTCPath) ||
 		config.UDPPortMin < 1024 || config.UDPPortMax < config.UDPPortMin ||
 		int(config.UDPPortMax)-int(config.UDPPortMin)+1 > 1000 ||
+		!validCoverMode(config.CoverMode) ||
 		config.MaxCoverOverheadPercent > 100 ||
 		config.InitialWindowBytes < 16*1024 || config.InitialWindowBytes > session.MaxInitialWindow ||
 		config.MaxStreams <= 0 || config.MaxStreams > maxStreams ||
@@ -586,6 +605,12 @@ func validateServer(config Server) error {
 		return ErrInvalidConfig
 	}
 	return validatePublicListener(config.HTTP3Listen)
+}
+
+func (s Server) CoverEnabled() bool { return s.CoverMode == CoverModeMosaic }
+
+func validCoverMode(mode CoverMode) bool {
+	return mode == CoverModeOff || mode == CoverModeMosaic
 }
 
 func validOptionalAbsoluteDirectory(value string) bool {

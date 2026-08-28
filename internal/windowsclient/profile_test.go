@@ -52,6 +52,9 @@ func TestImportURIProducesDirectNP2Configuration(t *testing.T) {
 	if client.CarrierPolicy != config.CarrierPolicyHTTP3Only {
 		t.Fatalf("Windows diagnostic carrier policy=%q, want http3-only", client.CarrierPolicy)
 	}
+	if client.CoverMode != config.CoverModeOff {
+		t.Fatalf("Windows diagnostic cover mode=%q, want off", client.CoverMode)
+	}
 	if client.MaxParallelCarriers != 1 {
 		t.Fatalf("Windows diagnostic carrier pool=%d, want one HTTP/3 session", client.MaxParallelCarriers)
 	}

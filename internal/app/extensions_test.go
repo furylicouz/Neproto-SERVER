@@ -11,7 +11,7 @@ import (
 
 func TestProductionExtensionParametersEnableBoundedReliableUDP(t *testing.T) {
 	parameters := productionExtensionParameters(128)
-	if parameters.Capabilities != protocol.CapabilityReliableUDP|protocol.CapabilityMosaicCover ||
+	if parameters.Capabilities != protocol.CapabilityReliableUDP ||
 		parameters.MaxUDPAssociations != 128 || parameters.MaxUDPPayload != 65507 ||
 		parameters.UnreliableDatagramSize != 0 {
 		t.Fatalf("unexpected parameters: %+v", parameters)
@@ -22,6 +22,28 @@ func TestProductionExtensionParametersEnableBoundedReliableUDP(t *testing.T) {
 	limited := productionExtensionParameters(4096)
 	if limited.MaxUDPAssociations != 256 {
 		t.Fatalf("association cap=%d", limited.MaxUDPAssociations)
+	}
+}
+
+func TestProductionExtensionsAdvertiseMosaicOnlyWhenExplicitlyEnabled(t *testing.T) {
+	https := &extensionDatagramCarrier{kind: protocol.CarrierHTTPS}
+	if got := productionServerExtensionOffer(config.Server{MaxStreams: 8}, https); got.Capabilities&protocol.CapabilityMosaicCover != 0 {
+		t.Fatal("server advertised Mosaic while cover mode is off")
+	}
+	if got := productionClientExtensionRequest(config.Client{MaxStreams: 8}, https); got.Capabilities&protocol.CapabilityMosaicCover != 0 {
+		t.Fatal("client advertised Mosaic while cover mode is off")
+	}
+	serverOffer := productionServerExtensionOffer(config.Server{
+		MaxStreams: 8, CoverMode: config.CoverModeMosaic,
+	}, https)
+	if serverOffer.Capabilities&protocol.CapabilityMosaicCover == 0 {
+		t.Fatal("server did not advertise explicit Mosaic cover mode")
+	}
+	clientRequest := productionClientExtensionRequest(config.Client{
+		MaxStreams: 8, CoverMode: config.CoverModeMosaic,
+	}, https)
+	if clientRequest.Capabilities&protocol.CapabilityMosaicCover == 0 {
+		t.Fatal("client did not advertise explicit Mosaic cover mode")
 	}
 }
 

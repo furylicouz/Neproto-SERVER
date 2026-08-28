@@ -112,6 +112,144 @@ func TestAuthenticatedSessionCarriesStream(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedSessionCanBypassCoverTransport(t *testing.T) {
+	left, right := newMemoryCarrierPair()
+	secret := [protocol.RootSecretSize]byte{0x92, 0x18, 0x73}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	type result struct {
+		session *Authenticated
+		err     error
+	}
+	serverResult := make(chan result, 1)
+	go func() {
+		authenticated, err := AcceptServer(ctx, right, AuthenticatedConfig{
+			RootSecret: secret, ServerIdentity: "edge.example.test",
+			Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+			InitialWindow: 64 * 1024, MaxStreams: 8, DisableCover: true,
+		})
+		serverResult <- result{session: authenticated, err: err}
+	}()
+	client, err := ConnectClient(ctx, left, AuthenticatedConfig{
+		RootSecret: secret, ServerIdentity: "edge.example.test",
+		Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+		InitialWindow: 64 * 1024, MaxStreams: 8, DisableCover: true,
+	})
+	if err != nil {
+		t.Fatalf("authenticate client: %v", err)
+	}
+	server := <-serverResult
+	if server.err != nil {
+		t.Fatalf("authenticate server: %v", server.err)
+	}
+	t.Cleanup(func() {
+		_ = client.Mux.Close()
+		_ = server.session.Mux.Close()
+	})
+	if client.Cover != nil || server.session.Cover != nil {
+		t.Fatalf("cover transport installed in fast path: client=%v server=%v", client.Cover, server.session.Cover)
+	}
+
+	served := make(chan error, 1)
+	go func() {
+		incoming, acceptErr := server.session.Mux.Accept(ctx)
+		if acceptErr != nil {
+			served <- acceptErr
+			return
+		}
+		stream, acceptErr := incoming.Accept()
+		if acceptErr == nil {
+			_, acceptErr = io.Copy(stream, stream)
+		}
+		if acceptErr == nil {
+			acceptErr = stream.CloseWrite()
+		}
+		served <- acceptErr
+	}()
+	stream, err := client.Mux.Open(ctx, []byte("fast-path"))
+	if err != nil {
+		t.Fatalf("open fast-path stream: %v", err)
+	}
+	payload := bytes.Repeat([]byte{0x6a}, 256*1024)
+	writeResult := make(chan error, 1)
+	go func() {
+		_, writeErr := stream.Write(payload)
+		if writeErr == nil {
+			writeErr = stream.CloseWrite()
+		}
+		writeResult <- writeErr
+	}()
+	response, err := io.ReadAll(stream)
+	if err != nil || !bytes.Equal(response, payload) {
+		t.Fatalf("fast-path round trip mismatch: bytes=%d error=%v", len(response), err)
+	}
+	if err := <-writeResult; err != nil {
+		t.Fatalf("write fast-path stream: %v", err)
+	}
+	if err := <-served; err != nil {
+		t.Fatalf("serve fast-path stream: %v", err)
+	}
+}
+
+func TestAuthenticatedSessionCoverModesInteroperateDuringRollingUpgrade(t *testing.T) {
+	for _, tt := range []struct {
+		name               string
+		disableClientCover bool
+		disableServerCover bool
+	}{
+		{name: "new client with covered server", disableClientCover: true},
+		{name: "covered client with new server", disableServerCover: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			left, right := newMemoryCarrierPair()
+			secret := [protocol.RootSecretSize]byte{0x72, 0x6f, 0x6c, 0x6c}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			type result struct {
+				session *Authenticated
+				err     error
+			}
+			serverResult := make(chan result, 1)
+			go func() {
+				authenticated, err := AcceptServer(ctx, right, AuthenticatedConfig{
+					RootSecret: secret, ServerIdentity: "edge.example.test",
+					Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+					InitialWindow: 64 * 1024, MaxStreams: 8, MaxCoverOverheadPercent: 100,
+					DisableCover: tt.disableServerCover,
+				})
+				serverResult <- result{session: authenticated, err: err}
+			}()
+			client, err := ConnectClient(ctx, left, AuthenticatedConfig{
+				RootSecret: secret, ServerIdentity: "edge.example.test",
+				Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+				InitialWindow: 64 * 1024, MaxStreams: 8, MaxCoverOverheadPercent: 100,
+				DisableCover: tt.disableClientCover,
+			})
+			if err != nil {
+				t.Fatalf("authenticate client: %v", err)
+			}
+			server := <-serverResult
+			if server.err != nil {
+				t.Fatalf("authenticate server: %v", server.err)
+			}
+			t.Cleanup(func() {
+				_ = client.Mux.Close()
+				_ = server.session.Mux.Close()
+			})
+			if (client.Cover == nil) != tt.disableClientCover ||
+				(server.session.Cover == nil) != tt.disableServerCover {
+				t.Fatalf("unexpected cover layers: client=%v server=%v", client.Cover, server.session.Cover)
+			}
+			if err := client.Mux.Ping(ctx); err != nil {
+				t.Fatalf("client-to-server ping: %v", err)
+			}
+			if err := server.session.Mux.Ping(ctx); err != nil {
+				t.Fatalf("server-to-client ping: %v", err)
+			}
+		})
+	}
+}
+
 func TestAuthenticatedSessionCarriesDeviceIdentity(t *testing.T) {
 	left, right := newMemoryCarrierPair()
 	secret := [protocol.RootSecretSize]byte{0x83, 0x19, 0x47}
@@ -354,6 +492,7 @@ func TestAuthenticatedSessionRekeysWithX25519BeforeApplicationCells(t *testing.T
 		InitialWindow: 64 * 1024, MaxStreams: 8,
 		ExtensionOffer: &offer, ExtensionTimeout: time.Second,
 		EnableForwardSecrecy: true,
+		DisableCover:         true,
 	}
 	clientConfig := serverConfig
 	clientConfig.ExtensionOffer = nil
@@ -386,6 +525,9 @@ func TestAuthenticatedSessionRekeysWithX25519BeforeApplicationCells(t *testing.T
 	if client.Keys != server.Keys || client.Keys.Control == ([32]byte{}) ||
 		clientExtensions.ForwardSecretKeyShare == ([32]byte{}) {
 		t.Fatal("forward-secret session keys or key share mismatch")
+	}
+	if client.Cover != nil || server.Cover != nil {
+		t.Fatal("forward-secret fast path unexpectedly installed cover transport")
 	}
 	served := make(chan error, 1)
 	go func() {

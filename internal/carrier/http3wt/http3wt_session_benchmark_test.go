@@ -7,21 +7,43 @@ import (
 	"testing"
 	"time"
 
+	"neproto.local/chameleon/internal/carrier"
 	"neproto.local/chameleon/internal/cover"
 	"neproto.local/chameleon/internal/protocol"
 	"neproto.local/chameleon/internal/session"
 )
 
-func BenchmarkSessionCoverDownload(b *testing.B) {
+func BenchmarkSessionDownload(b *testing.B) {
+	for _, benchmark := range []struct {
+		name        string
+		payloadSize int
+		cover       bool
+	}{
+		{name: "fast-path-1400", payloadSize: 1400},
+		{name: "mosaic-1400", payloadSize: 1400, cover: true},
+		{name: "fast-path-20k", payloadSize: 20 * 1024},
+		{name: "mosaic-20k", payloadSize: 20 * 1024, cover: true},
+	} {
+		b.Run(benchmark.name, func(b *testing.B) {
+			benchmarkSessionDownload(b, benchmark.payloadSize, benchmark.cover)
+		})
+	}
+}
+
+func benchmarkSessionDownload(b *testing.B, payloadSize int, withCover bool) {
 	_, clientCarrier, serverCarrier := newCarrierPair(b, 1)
 	typeMap, err := protocol.NewTypeMap([32]byte{0xd1, 0x27})
 	if err != nil {
 		b.Fatal(err)
 	}
-	clientCover := newBenchmarkCover(b, clientCarrier, typeMap, 0x31, 0x41)
-	serverCover := newBenchmarkCover(b, serverCarrier, typeMap, 0x32, 0x42)
+	var clientTransport carrier.Carrier = clientCarrier
+	var serverTransport carrier.Carrier = serverCarrier
+	if withCover {
+		clientTransport = newBenchmarkCover(b, clientCarrier, typeMap, 0x31, 0x41)
+		serverTransport = newBenchmarkCover(b, serverCarrier, typeMap, 0x32, 0x42)
+	}
 	clientMux, err := session.New(session.Config{
-		Role: session.RoleClient, Carrier: clientCover, TypeMap: typeMap,
+		Role: session.RoleClient, Carrier: clientTransport, TypeMap: typeMap,
 		InitialWindow: 2 * 1024 * 1024, MaxStreams: 128,
 	})
 	if err != nil {
@@ -29,7 +51,7 @@ func BenchmarkSessionCoverDownload(b *testing.B) {
 	}
 	b.Cleanup(func() { _ = clientMux.Close() })
 	serverMux, err := session.New(session.Config{
-		Role: session.RoleServer, Carrier: serverCover, TypeMap: typeMap,
+		Role: session.RoleServer, Carrier: serverTransport, TypeMap: typeMap,
 		InitialWindow: 2 * 1024 * 1024, MaxStreams: 128,
 	})
 	if err != nil {
@@ -67,7 +89,7 @@ func BenchmarkSessionCoverDownload(b *testing.B) {
 		b.Fatal(ctx.Err())
 	}
 
-	payload := bytes.Repeat([]byte{0xa5}, 20*1024)
+	payload := bytes.Repeat([]byte{0xa5}, payloadSize)
 	received := make(chan error, 1)
 	go func() {
 		_, err := io.CopyN(io.Discard, clientStream, int64(b.N*len(payload)))

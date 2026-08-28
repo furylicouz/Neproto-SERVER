@@ -535,6 +535,7 @@ cat >"$temporary_server" <<EOF
   "http3_key_file": "/etc/neproto/tls/privkey.pem",
   "udp_port_min": 40000,
   "udp_port_max": 40100,
+  "cover_mode": "off",
   "max_cover_overhead_percent": 20,
   "initial_window_bytes": 1048576,
   "max_streams": 256,

@@ -258,14 +258,16 @@ and dropped; applications should keep datagrams within their negotiated MTU.
 
 ## Mosaic upgrade and diagnostics
 
-Mosaic is an optional authenticated v2.2 capability. Upgrade the server first,
-then clients. Each mixed-version combination remains usable:
+Mosaic is an optional authenticated v2.2 capability. `cover_mode=off` is the
+production default; upgrade the server first, then clients. Cover selection is
+direction-local and each mixed-version combination remains usable:
 
-1. A new server plus an old client selects the client's fixed profile.
-2. An old server plus a new client omits Mosaic from the capability
-   intersection and the client keeps its fixed profile.
-3. Two new peers activate Mosaic for `web` or `interactive`; `quiet` remains
-   fixed.
+1. A new server sends through the direct AEAD fast path to an old client; the
+   old client may continue sending its fixed cover cells to the new server.
+2. A new client sends through the direct AEAD fast path to an old server and
+   accepts the old server's covered cells.
+3. Two new peers use the direct fast path by default. Mosaic activates only
+   when both directions are explicitly configured with `cover_mode=mosaic`.
 
 Verify one carrier without starting a SOCKS listener:
 
@@ -273,21 +275,24 @@ Verify one carrier without starting a SOCKS listener:
 neproto-client probe --config /etc/neproto/client.json --carrier https
 ```
 
-Expected Mosaic-capable output:
+Expected production output:
 
 ```text
 carrier=https fallback=false authentication=ok
-cover=mosaic class=web transitions=0
+cover=off class=off transitions=0
 ```
 
-`cover=fixed` is not an authentication failure. It means the peer did not
-select the optional capability or the configured profile is `quiet`. The probe
-contains no sustained workload, so `class=web` and `transitions=0` are normal.
+`cover=fixed` or `cover=mosaic` is not an authentication failure. It means the
+local sender is still using an older fixed-cover configuration or the explicit
+Mosaic experiment. A probe contains no sustained workload, so zero transitions
+are normal.
 
-Rollback requires only restoring either peer's earlier binary; no config, QR,
-secret, or cell-format migration is needed. Do not infer DPI resistance from a
-successful probe. Validate throughput, latency, cover overhead, and packet
-captures separately on the intended network.
+Existing deployments whose config omits `cover_mode` can roll back by restoring
+the earlier binary. If a newly generated config contains `cover_mode`, remove
+that field before starting a pre-0.5.28 binary because older strict decoders do
+not know it. No QR, secret, or cell-format migration is needed. Do not infer
+DPI resistance from a successful probe. Validate throughput, latency, cover
+overhead, and packet captures separately on the intended network.
 
 ## Credential rotation
 

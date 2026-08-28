@@ -151,6 +151,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             "carrier": Np2mobileCarrier(),
             "data_plane": "direct-np2",
             "cell_encryption": "chacha20-poly1305",
+			"cover_mode": Np2mobileCoverMode(),
             "upload_bytes_per_second": Np2mobileUploadBytesPerSecond(),
             "download_bytes_per_second": Np2mobileDownloadBytesPerSecond(),
             "upload_total_bytes": Np2mobileUploadTotalBytes(),

@@ -21,7 +21,7 @@ func productionExtensionParameters(maxStreams int) protocol.ExtensionParameters 
 		maxAssociations = productionMaxUDPAssociations
 	}
 	return protocol.ExtensionParameters{
-		Capabilities:           protocol.CapabilityReliableUDP | protocol.CapabilityMosaicCover,
+		Capabilities:           protocol.CapabilityReliableUDP,
 		MaxUDPAssociations:     uint64(maxAssociations),
 		MaxUDPPayload:          productionMaxUDPPayload,
 		UDPIdleTimeoutMS:       productionUDPIdleTimeoutMS,
@@ -34,6 +34,7 @@ func productionServerExtensionOffer(
 	serverConfig config.Server, connection carrier.Carrier,
 ) protocol.ExtensionParameters {
 	parameters := productionExtensionParameters(serverConfig.MaxStreams)
+	addMosaicCapability(&parameters, serverConfig.CoverMode)
 	if serverConfig.EnableConstellation {
 		parameters.Capabilities |= protocol.CapabilityConstellationContinuity
 	}
@@ -44,6 +45,7 @@ func productionServerExtensionOffer(
 		return parameters
 	}
 	parameters = productionExtensionParametersForCarrier(serverConfig.MaxStreams, connection)
+	addMosaicCapability(&parameters, serverConfig.CoverMode)
 	if serverConfig.EnableConstellation {
 		parameters.Capabilities |= protocol.CapabilityConstellationContinuity
 	}
@@ -55,10 +57,17 @@ func productionClientExtensionRequest(
 	connection carrier.Carrier,
 ) protocol.ExtensionParameters {
 	parameters := productionExtensionParametersForCarrier(clientConfig.MaxStreams, connection)
+	addMosaicCapability(&parameters, clientConfig.CoverMode)
 	if clientConfig.EnableConstellation {
 		parameters.Capabilities |= protocol.CapabilityConstellationContinuity
 	}
 	return parameters
+}
+
+func addMosaicCapability(parameters *protocol.ExtensionParameters, mode config.CoverMode) {
+	if parameters != nil && mode == config.CoverModeMosaic {
+		parameters.Capabilities |= protocol.CapabilityMosaicCover
+	}
 }
 
 func productionExtensionParametersForCarrier(maxStreams int, connection carrier.Carrier) protocol.ExtensionParameters {

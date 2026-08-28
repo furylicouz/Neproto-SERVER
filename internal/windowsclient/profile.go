@@ -44,6 +44,7 @@ type directClientConfig struct {
 	HTTP3URL                string   `json:"http3_url,omitempty"`
 	Profile                 string   `json:"profile"`
 	CarrierPolicy           string   `json:"carrier_policy"`
+	CoverMode               string   `json:"cover_mode"`
 	MaxCoverOverheadPercent int      `json:"max_cover_overhead_percent"`
 	InitialWindowBytes      int      `json:"initial_window_bytes"`
 	MaxStreams              int      `json:"max_streams"`
@@ -82,8 +83,9 @@ func profileFromOnboarding(source onboarding.Profile, deviceID string) (Profile,
 	client := directClientConfig{
 		ServerIdentity: source.ServerIdentity, DeviceID: deviceID,
 		ServerAddresses: append([]string(nil), source.ServerAddresses...), SecretFile: "dpapi",
-		Profile: "web", CarrierPolicy: string(config.CarrierPolicyHTTP3Only), MaxCoverOverheadPercent: 30,
-		InitialWindowBytes: 2_097_152, MaxStreams: 128, MaxParallelCarriers: parallel,
+		Profile: "web", CarrierPolicy: string(config.CarrierPolicyHTTP3Only), CoverMode: string(config.CoverModeOff),
+		MaxCoverOverheadPercent: 30,
+		InitialWindowBytes:      2_097_152, MaxStreams: 128, MaxParallelCarriers: parallel,
 		RequireDatagrams: source.RequireDatagrams, EnableConstellation: source.EnableConstellation,
 		EnableForwardSecrecy: source.EnableForwardSecrecy,
 		CarrierCacheTTL:      "10m",

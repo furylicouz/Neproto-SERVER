@@ -192,10 +192,11 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
 			httpsURL: includeHTTPS ? "wss://\(serverIdentity)\(httpsPath)" : nil,
 			webRTCSignalingURL: includeWebRTC ? "https://\(serverIdentity)\(webRTCPath)" : nil,
 			http3URL: includeHTTP3 ? normalizedHTTP3Path.map { "https://\(serverIdentity)\($0)" } : nil,
-            // "web" is the backward-compatible wire value for Mosaic's
-            // automatic runtime web/realtime/stream classification.
+            // "web" preserves the authenticated profile feature used by old
+            // peers; cover_mode independently selects the direct fast path.
             profile: CoverProfile.web.rawValue,
 			carrierPolicy: carrierPolicy,
+			coverMode: "off",
             maxCoverOverheadPercent: 30,
             initialWindowBytes: 2_097_152,
             maxStreams: 128,
@@ -384,6 +385,7 @@ private struct ClientConfiguration: Codable {
     let http3URL: String?
     let profile: String
     let carrierPolicy: String
+	let coverMode: String
     let maxCoverOverheadPercent: Int
     let initialWindowBytes: Int
     let maxStreams: Int
@@ -406,6 +408,7 @@ private struct ClientConfiguration: Codable {
         case http3URL = "http3_url"
         case profile
         case carrierPolicy = "carrier_policy"
+		case coverMode = "cover_mode"
         case maxCoverOverheadPercent = "max_cover_overhead_percent"
         case initialWindowBytes = "initial_window_bytes"
         case maxStreams = "max_streams"

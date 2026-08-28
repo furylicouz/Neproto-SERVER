@@ -280,6 +280,7 @@ func serveAuthenticatedCarrier(
 			protocol.FeatureProfileWeb | protocol.FeatureProfileInteractive | protocol.FeatureDeviceIdentity,
 		InitialWindow: config.InitialWindowBytes, MaxStreams: config.MaxStreams,
 		MaxCoverOverheadPercent: config.MaxCoverOverheadPercent,
+		DisableCover:            !config.CoverEnabled(),
 		ExtensionOffer:          &extensionOffer,
 		EnableForwardSecrecy:    config.EnableForwardSecrecy,
 	})
@@ -377,7 +378,7 @@ func serveAuthenticatedCarrier(
 		if ctx.Err() != nil {
 			reason = observability.TerminalShutdown
 		}
-		metrics.SessionEnded(connection.Kind(), stats, authenticated.Cover.Stats(), reason)
+		metrics.SessionEnded(connection.Kind(), stats, authenticated.CoverStats(), reason)
 		if usageSession != nil {
 			_ = usageSession.Close()
 		}
