@@ -59,6 +59,23 @@ type RuntimeSnapshot struct {
 	ActiveStreams           uint64
 	FlowControlStalls       uint64
 	ProtocolErrors          uint64
+	SentCells               uint64
+	ReceivedCells           uint64
+	SentCellPayloadBytes    uint64
+	ReceivedPayloadBytes    uint64
+	WindowUpdatesSent       uint64
+	WindowUpdatesReceived   uint64
+	CoverMode               string
+	CoverVariantID          uint8
+	CoverRealWireBytes      uint64
+	CoverPaddingBytes       uint64
+	CoverDummyWireBytes     uint64
+	CoverProfileTransitions uint64
+	CoverBursts             uint64
+	CoverDummySelected      uint64
+	CoverDummyRejected      uint64
+	CoverAddedDelayUS       uint64
+	CoverMaxDelayUS         uint64
 }
 
 type clientRouteRuntime interface {

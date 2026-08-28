@@ -112,7 +112,7 @@ func TestInstanceClientCoreSnapshotIncludesSanitizedStartFailure(t *testing.T) {
 	}
 }
 
-func TestInstanceClientCoreSnapshotIncludesBoundedRoutingDiagnostics(t *testing.T) {
+func TestInstanceClientCoreSnapshotIncludesBoundedDiagnostics(t *testing.T) {
 	runtime := clientcore.RuntimeSnapshot{
 		DNSAttributionQueries: 11, DNSAttributionResponses: 10,
 		DNSAttributionHits: 7, DNSAttributionMisses: 4, DNSAttributionCached: 3,
@@ -120,6 +120,14 @@ func TestInstanceClientCoreSnapshotIncludesBoundedRoutingDiagnostics(t *testing.
 		TCPStreamAttempts: 9, TCPStreamSuccesses: 7, TCPStreamFailures: 2,
 		TCPStreamOpenLastMS: 1250, TCPStreamOpenMaxMS: 10_004,
 		ActiveStreams: 4, FlowControlStalls: 1, ProtocolErrors: 0,
+		SentCells: 101, ReceivedCells: 202,
+		SentCellPayloadBytes: 303, ReceivedPayloadBytes: 404,
+		WindowUpdatesSent: 5, WindowUpdatesReceived: 6,
+		CoverMode: "pulse", CoverVariantID: 7,
+		CoverRealWireBytes: 10_000, CoverPaddingBytes: 300, CoverDummyWireBytes: 0,
+		CoverProfileTransitions: 2, CoverBursts: 9,
+		CoverDummySelected: 3, CoverDummyRejected: 4,
+		CoverAddedDelayUS: 1_500, CoverMaxDelayUS: 1_900,
 	}
 	core := newStrictClientCore(&fakeStrictCore{runtimeSnapshot: runtime})
 	raw := core.SnapshotJSON()
@@ -139,6 +147,23 @@ func TestInstanceClientCoreSnapshotIncludesBoundedRoutingDiagnostics(t *testing.
 		ActiveStreams           uint64 `json:"active_streams"`
 		FlowControlStalls       uint64 `json:"flow_control_stalls"`
 		ProtocolErrors          uint64 `json:"protocol_errors"`
+		SentCells               uint64 `json:"sent_cells"`
+		ReceivedCells           uint64 `json:"received_cells"`
+		SentCellPayloadBytes    uint64 `json:"sent_cell_payload_bytes"`
+		ReceivedPayloadBytes    uint64 `json:"received_payload_bytes"`
+		WindowUpdatesSent       uint64 `json:"window_updates_sent"`
+		WindowUpdatesReceived   uint64 `json:"window_updates_received"`
+		CoverMode               string `json:"cover_mode"`
+		CoverVariantID          uint8  `json:"cover_variant_id"`
+		CoverRealWireBytes      uint64 `json:"cover_real_wire_bytes"`
+		CoverPaddingBytes       uint64 `json:"cover_padding_bytes"`
+		CoverDummyWireBytes     uint64 `json:"cover_dummy_wire_bytes"`
+		CoverProfileTransitions uint64 `json:"cover_profile_transitions"`
+		CoverBursts             uint64 `json:"cover_bursts"`
+		CoverDummySelected      uint64 `json:"cover_dummy_selected"`
+		CoverDummyRejected      uint64 `json:"cover_dummy_rejected"`
+		CoverAddedDelayUS       uint64 `json:"cover_added_delay_us"`
+		CoverMaxDelayUS         uint64 `json:"cover_max_delay_us"`
 	}
 	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
 		t.Fatal(err)
@@ -149,7 +174,15 @@ func TestInstanceClientCoreSnapshotIncludesBoundedRoutingDiagnostics(t *testing.
 		snapshot.FirstFlightFallbacks != 5 || snapshot.TCPStreamAttempts != 9 ||
 		snapshot.TCPStreamSuccesses != 7 || snapshot.TCPStreamFailures != 2 ||
 		snapshot.TCPStreamOpenLastMS != 1250 || snapshot.TCPStreamOpenMaxMS != 10_004 ||
-		snapshot.ActiveStreams != 4 || snapshot.FlowControlStalls != 1 || snapshot.ProtocolErrors != 0 {
+		snapshot.ActiveStreams != 4 || snapshot.FlowControlStalls != 1 || snapshot.ProtocolErrors != 0 ||
+		snapshot.SentCells != 101 || snapshot.ReceivedCells != 202 ||
+		snapshot.SentCellPayloadBytes != 303 || snapshot.ReceivedPayloadBytes != 404 ||
+		snapshot.WindowUpdatesSent != 5 || snapshot.WindowUpdatesReceived != 6 ||
+		snapshot.CoverMode != "pulse" || snapshot.CoverVariantID != 7 ||
+		snapshot.CoverRealWireBytes != 10_000 || snapshot.CoverPaddingBytes != 300 ||
+		snapshot.CoverDummyWireBytes != 0 || snapshot.CoverProfileTransitions != 2 ||
+		snapshot.CoverBursts != 9 || snapshot.CoverDummySelected != 3 || snapshot.CoverDummyRejected != 4 ||
+		snapshot.CoverAddedDelayUS != 1_500 || snapshot.CoverMaxDelayUS != 1_900 {
 		t.Fatalf("routing diagnostics=%+v raw=%s", snapshot, raw)
 	}
 }

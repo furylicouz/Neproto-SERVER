@@ -204,6 +204,23 @@ func (c *ClientCore) SnapshotJSON() string {
 		ActiveStreams           uint64                  `json:"active_streams"`
 		FlowControlStalls       uint64                  `json:"flow_control_stalls"`
 		ProtocolErrors          uint64                  `json:"protocol_errors"`
+		SentCells               uint64                  `json:"sent_cells"`
+		ReceivedCells           uint64                  `json:"received_cells"`
+		SentCellPayloadBytes    uint64                  `json:"sent_cell_payload_bytes"`
+		ReceivedPayloadBytes    uint64                  `json:"received_payload_bytes"`
+		WindowUpdatesSent       uint64                  `json:"window_updates_sent"`
+		WindowUpdatesReceived   uint64                  `json:"window_updates_received"`
+		CoverMode               string                  `json:"cover_mode"`
+		CoverVariantID          uint8                   `json:"cover_variant_id"`
+		CoverRealWireBytes      uint64                  `json:"cover_real_wire_bytes"`
+		CoverPaddingBytes       uint64                  `json:"cover_padding_bytes"`
+		CoverDummyWireBytes     uint64                  `json:"cover_dummy_wire_bytes"`
+		CoverProfileTransitions uint64                  `json:"cover_profile_transitions"`
+		CoverBursts             uint64                  `json:"cover_bursts"`
+		CoverDummySelected      uint64                  `json:"cover_dummy_selected"`
+		CoverDummyRejected      uint64                  `json:"cover_dummy_rejected"`
+		CoverAddedDelayUS       uint64                  `json:"cover_added_delay_us"`
+		CoverMaxDelayUS         uint64                  `json:"cover_max_delay_us"`
 	}{
 		State: snapshot.State, ProfileID: snapshot.ProfileID, Carrier: snapshot.Carrier,
 		ConnectedAtUnixMS:    snapshot.ConnectedAtUnixMS,
@@ -225,6 +242,15 @@ func (c *ClientCore) SnapshotJSON() string {
 		TCPStreamFailures: runtime.TCPStreamFailures, TCPStreamOpenLastMS: runtime.TCPStreamOpenLastMS,
 		TCPStreamOpenMaxMS: runtime.TCPStreamOpenMaxMS, ActiveStreams: runtime.ActiveStreams,
 		FlowControlStalls: runtime.FlowControlStalls, ProtocolErrors: runtime.ProtocolErrors,
+		SentCells: runtime.SentCells, ReceivedCells: runtime.ReceivedCells,
+		SentCellPayloadBytes: runtime.SentCellPayloadBytes, ReceivedPayloadBytes: runtime.ReceivedPayloadBytes,
+		WindowUpdatesSent: runtime.WindowUpdatesSent, WindowUpdatesReceived: runtime.WindowUpdatesReceived,
+		CoverMode: runtime.CoverMode, CoverVariantID: runtime.CoverVariantID,
+		CoverRealWireBytes: runtime.CoverRealWireBytes, CoverPaddingBytes: runtime.CoverPaddingBytes,
+		CoverDummyWireBytes: runtime.CoverDummyWireBytes, CoverProfileTransitions: runtime.CoverProfileTransitions,
+		CoverBursts: runtime.CoverBursts, CoverDummySelected: runtime.CoverDummySelected,
+		CoverDummyRejected: runtime.CoverDummyRejected, CoverAddedDelayUS: runtime.CoverAddedDelayUS,
+		CoverMaxDelayUS: runtime.CoverMaxDelayUS,
 	}
 	raw, err := json.Marshal(result)
 	if err != nil {

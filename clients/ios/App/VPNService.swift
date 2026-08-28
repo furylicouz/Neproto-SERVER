@@ -487,6 +487,7 @@ final class VPNService: ObservableObject {
                         "active_streams", "flow_control_stalls", "protocol_errors",
                         "sent_cells", "received_cells", "sent_cell_payload_bytes", "received_payload_bytes",
                         "window_updates_sent", "window_updates_received",
+                        "cover_mode", "cover_variant_id",
                         "cover_real_wire_bytes", "cover_padding_bytes", "cover_dummy_wire_bytes",
                         "cover_profile_transitions", "cover_bursts", "cover_dummy_selected", "cover_dummy_rejected",
                         "cover_added_delay_us", "cover_max_delay_us",

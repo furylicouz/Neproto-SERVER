@@ -345,6 +345,33 @@ func (r *authenticatedRuntime) RuntimeSnapshot() RuntimeSnapshot {
 		result.ActiveStreams = muxStats.ActiveStreams
 		result.FlowControlStalls = muxStats.FlowControlStalls
 		result.ProtocolErrors = muxStats.ProtocolErrors
+		result.SentCells = muxStats.SentCells
+		result.ReceivedCells = muxStats.ReceivedCells
+		result.SentCellPayloadBytes = muxStats.SentCellPayloadBytes
+		result.ReceivedPayloadBytes = muxStats.ReceivedPayloadBytes
+		result.WindowUpdatesSent = muxStats.WindowUpdatesSent
+		result.WindowUpdatesReceived = muxStats.WindowUpdatesReceived
+		coverStats := authenticated.CoverStats()
+		switch {
+		case coverStats.PulseEnabled:
+			result.CoverMode = "pulse"
+		case coverStats.MosaicEnabled:
+			result.CoverMode = "mosaic"
+		case authenticated.Cover != nil:
+			result.CoverMode = "fixed"
+		default:
+			result.CoverMode = "off"
+		}
+		result.CoverVariantID = coverStats.VariantID
+		result.CoverRealWireBytes = coverStats.RealWireBytes
+		result.CoverPaddingBytes = coverStats.PaddingBytes
+		result.CoverDummyWireBytes = coverStats.DummyWireBytes
+		result.CoverProfileTransitions = coverStats.ProfileTransitions
+		result.CoverBursts = coverStats.BurstCount
+		result.CoverDummySelected = coverStats.DummyRequestsSelected
+		result.CoverDummyRejected = coverStats.DummyRequestsRejected
+		result.CoverAddedDelayUS = coverStats.AddedDelayMicros
+		result.CoverMaxDelayUS = coverStats.MaxPlannedDelayMicros
 	}
 	if quicStats != nil {
 		stats := quicStats()
