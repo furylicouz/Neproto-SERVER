@@ -30,6 +30,28 @@ func TestParseMobileClientAcceptsStrictHTTPSOnlyPolicy(t *testing.T) {
 	}
 }
 
+func TestParseMobileClientAcceptsPulseInStrictHTTPSOnlyPolicy(t *testing.T) {
+	secret := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x42}, 32))
+	raw := []byte(`{
+  "server_identity":"vpn.example.test","secret_file":"keychain",
+  "server_addresses":["8.8.8.8"],
+  "https_url":"wss://vpn.example.test/private/https/session",
+  "profile":"web","carrier_policy":"https-only","cover_mode":"pulse",
+  "max_cover_overhead_percent":5,"initial_window_bytes":2097152,
+  "max_streams":128,"max_parallel_carriers":1,
+  "https_timeout":"10s","carrier_cache_ttl":"10m"
+}`)
+
+	client, err := ParseMobileClientBytes(raw, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.CoverMode != CoverModePulse || !client.PulseCoverEnabled() ||
+		client.MaxCoverOverheadPercent != 5 {
+		t.Fatalf("unexpected HTTPS-only Pulse profile: %+v", client)
+	}
+}
+
 func TestParseMobileClientRejectsAlternateCarrierInHTTPSOnlyPolicy(t *testing.T) {
 	secret := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x42}, 32))
 	raw := []byte(`{

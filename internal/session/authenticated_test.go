@@ -265,6 +265,8 @@ func TestAuthenticatedSessionInstallsSenderLocalPulse(t *testing.T) {
 			secret := [protocol.RootSecretSize]byte{0x70, 0x75, 0x6c, 0x73, 0x65}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
+			offer := productionExtensionParameters()
+			request := offer
 			type result struct {
 				session *Authenticated
 				err     error
@@ -277,6 +279,8 @@ func TestAuthenticatedSessionInstallsSenderLocalPulse(t *testing.T) {
 					InitialWindow: 64 * 1024, MaxStreams: 8,
 					MaxCoverOverheadPercent: 100,
 					DisableCover:            !tt.serverPulse, EnablePulse: tt.serverPulse,
+					ExtensionOffer: &offer, ExtensionTimeout: time.Second,
+					EnableForwardSecrecy: true,
 				})
 				serverResult <- result{session: authenticated, err: err}
 			}()
@@ -286,6 +290,8 @@ func TestAuthenticatedSessionInstallsSenderLocalPulse(t *testing.T) {
 				InitialWindow: 64 * 1024, MaxStreams: 8,
 				MaxCoverOverheadPercent: 100,
 				DisableCover:            !tt.clientPulse, EnablePulse: tt.clientPulse,
+				ExtensionRequest: &request, ExtensionTimeout: time.Second,
+				EnableForwardSecrecy: true,
 			})
 			if err != nil {
 				t.Fatalf("authenticate client: %v", err)
@@ -305,6 +311,12 @@ func TestAuthenticatedSessionInstallsSenderLocalPulse(t *testing.T) {
 			}
 			if client.CoverStats().MosaicEnabled || server.session.CoverStats().MosaicEnabled {
 				t.Fatal("Pulse incorrectly enabled negotiated Mosaic")
+			}
+			if _, negotiated, err := client.WaitExtensions(ctx); err != nil || !negotiated {
+				t.Fatalf("client extension negotiation: negotiated=%t err=%v", negotiated, err)
+			}
+			if _, negotiated, err := server.session.WaitExtensions(ctx); err != nil || !negotiated {
+				t.Fatalf("server extension negotiation: negotiated=%t err=%v", negotiated, err)
 			}
 			if err := client.Mux.Ping(ctx); err != nil {
 				t.Fatalf("client-to-server ping: %v", err)

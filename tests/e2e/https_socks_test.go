@@ -23,6 +23,15 @@ import (
 )
 
 func TestSOCKSConnectOverAuthenticatedHTTPSCarrier(t *testing.T) {
+	runHTTPSCarrierSOCKSE2E(t, false)
+}
+
+func TestSOCKSConnectOverPulseClientAndOffHTTPSServer(t *testing.T) {
+	runHTTPSCarrierSOCKSE2E(t, true)
+}
+
+func runHTTPSCarrierSOCKSE2E(t *testing.T, pulseClient bool) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	acceptor, err := httpsws.NewAcceptor(httpsws.AcceptorConfig{Path: "/static/chunks/connect"})
@@ -51,10 +60,40 @@ func TestSOCKSConnectOverAuthenticatedHTTPSCarrier(t *testing.T) {
 	}
 	defer clientCarrier.Close()
 	defer serverCarrier.Close()
-	runSOCKSE2E(t, ctx, clientCarrier, serverCarrier)
+	if !pulseClient {
+		runSOCKSE2E(t, ctx, clientCarrier, serverCarrier)
+		return
+	}
+	features := protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb
+	serverConfig := session.AuthenticatedConfig{
+		RootSecret: [protocol.RootSecretSize]byte{0x8a, 0x4f, 0x11, 0xd3}, ServerIdentity: "edge.example.test",
+		Features: features, InitialWindow: 128 * 1024, MaxStreams: 32,
+		DisableCover: true,
+	}
+	clientConfig := serverConfig
+	clientConfig.DisableCover = false
+	clientConfig.EnablePulse = true
+	clientConfig.MaxCoverOverheadPercent = 5
+	runSOCKSE2EWithConfig(t, ctx, clientCarrier, serverCarrier, clientConfig, serverConfig)
 }
 
 func runSOCKSE2E(t *testing.T, parent context.Context, clientCarrier, serverCarrier carrier.Carrier) {
+	t.Helper()
+	authConfig := session.AuthenticatedConfig{
+		RootSecret: [protocol.RootSecretSize]byte{0x8a, 0x4f, 0x11, 0xd3}, ServerIdentity: "edge.example.test",
+		Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+		InitialWindow: 128 * 1024, MaxStreams: 32,
+		MaxCoverOverheadPercent: 30,
+	}
+	runSOCKSE2EWithConfig(t, parent, clientCarrier, serverCarrier, authConfig, authConfig)
+}
+
+func runSOCKSE2EWithConfig(
+	t *testing.T,
+	parent context.Context,
+	clientCarrier, serverCarrier carrier.Carrier,
+	clientConfig, serverConfig session.AuthenticatedConfig,
+) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
@@ -73,25 +112,18 @@ func runSOCKSE2E(t *testing.T, parent context.Context, clientCarrier, serverCarr
 		targetDone <- acceptErr
 	}()
 
-	secret := [protocol.RootSecretSize]byte{0x8a, 0x4f, 0x11, 0xd3}
-	authConfig := session.AuthenticatedConfig{
-		RootSecret: secret, ServerIdentity: "edge.example.test",
-		Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
-		InitialWindow: 128 * 1024, MaxStreams: 32,
-		MaxCoverOverheadPercent: 30,
-	}
 	serverAuth := make(chan struct {
 		session *session.Authenticated
 		err     error
 	}, 1)
 	go func() {
-		authenticated, authErr := session.AcceptServer(ctx, serverCarrier, authConfig)
+		authenticated, authErr := session.AcceptServer(ctx, serverCarrier, serverConfig)
 		serverAuth <- struct {
 			session *session.Authenticated
 			err     error
 		}{authenticated, authErr}
 	}()
-	clientSession, err := session.ConnectClient(ctx, clientCarrier, authConfig)
+	clientSession, err := session.ConnectClient(ctx, clientCarrier, clientConfig)
 	if err != nil {
 		t.Fatalf("authenticate client: %v", err)
 	}
