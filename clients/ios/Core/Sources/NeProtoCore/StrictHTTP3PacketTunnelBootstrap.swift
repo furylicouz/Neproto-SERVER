@@ -148,12 +148,13 @@ private func makeStrictPacketTunnelSnapshot(
     } catch {
         throw StrictPacketTunnelBootstrapError.invalidClientConfiguration
     }
+    let requiredCoverMode = carrier == .https ? "pulse" : "off"
     guard !clientData.isEmpty,
           clientData.count <= StrictPacketTunnelLimits.maximumClientConfigurationBytes,
           let clientJSON = String(data: clientData, encoding: .utf8),
           let clientObject = try? JSONSerialization.jsonObject(with: clientData) as? [String: Any],
           clientObject["max_parallel_carriers"] as? Int == 1,
-          clientObject["cover_mode"] as? String == "off" else {
+          clientObject["cover_mode"] as? String == requiredCoverMode else {
         throw StrictPacketTunnelBootstrapError.invalidClientConfiguration
     }
     try validateStrictCarrier(clientObject, carrier: carrier)

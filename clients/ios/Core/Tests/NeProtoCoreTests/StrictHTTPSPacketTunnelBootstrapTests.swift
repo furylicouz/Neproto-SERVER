@@ -39,7 +39,8 @@ struct StrictHTTPSPacketTunnelBootstrapTests {
         #expect(object["https_url"] as? String == "wss://vpn.example.com/private/https/session")
         #expect(object["max_parallel_carriers"] as? Int == 1)
         #expect(object["require_datagrams"] as? Bool == false)
-        #expect(object["cover_mode"] as? String == "off")
+        #expect(object["cover_mode"] as? String == "pulse")
+        #expect(object["max_cover_overhead_percent"] as? Int == 5)
         #expect(object["http3_url"] == nil)
         #expect(object["webrtc_signaling_url"] == nil)
     }

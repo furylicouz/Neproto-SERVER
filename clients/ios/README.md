@@ -61,13 +61,15 @@ export`. Старые v1 QR продолжают импортироваться 
 передают HTTP/3 route, политику `require_datagrams` и безопасный предел
 параллельных carrier-соединений.
 
-Нативный Packet Tunnel преобразует сохранённый профиль в ограниченный
-`carrier_policy=http3-only`: один HTTP/3 carrier, без скрытого HTTPS/WebRTC
-fallback и без continuity/pool старого runtime. Каждое подключение проходит
-NP/2-аутентификацию, согласование v2.2 и обязательное шифрование. Конфигурация
-использует `cover_mode=off`: Mosaic не добавляет задержки, padding и dummy
-cells. Профиль без HTTP/3 route остаётся импортируемым для миграции, но строгий
-Packet Tunnel отклонит его до сетевого подключения.
+Текущий нативный Packet Tunnel кандидат преобразует сохранённый профиль в
+`carrier_policy=https-only`: один HTTPS WebSocket carrier, без скрытого
+HTTP/3/WebRTC fallback и без continuity/pool старого runtime. Каждое
+подключение проходит NP/2-аутентификацию, согласование v2.2 и обязательное
+шифрование ячеек. Конфигурация использует `cover_mode=pulse` с жёстким пределом
+5%: профиль размеров и burst-задержек выводится заново для каждой сессии,
+задержка внутри активного bulk/media burst равна нулю, dummy cells в v1 не
+отправляются. Старый HTTP/3-only A/B генератор остаётся в Core для сравнения и
+использует `cover_mode=off`.
 
 Routes начинаются с `/`, имеют длину не менее 16 символов и не совпадают.
 Root secret не попадает в UserDefaults, provider payload, проект или логи.

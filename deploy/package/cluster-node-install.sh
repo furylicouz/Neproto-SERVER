@@ -155,7 +155,7 @@ jq -n \
   '{
     server_identity:$identity,server_addresses:$addresses,secret_file:$secret_file,
     socks_listen:"127.0.0.1:0",https_url:$https_url,webrtc_signaling_url:$webrtc_url,http3_url:$http3_url,
-    profile:"web",carrier_policy:"performance",cover_mode:"off",max_cover_overhead_percent:20,
+    profile:"web",carrier_policy:"performance",cover_mode:"pulse",max_cover_overhead_percent:5,
     initial_window_bytes:1048576,max_streams:256,max_parallel_carriers:3,max_socks_connections:256,
     webrtc_timeout:"5s",https_timeout:"10s",http3_timeout:"5s",carrier_cache_ttl:"10m",
     enable_constellation:false,enable_forward_secrecy:true

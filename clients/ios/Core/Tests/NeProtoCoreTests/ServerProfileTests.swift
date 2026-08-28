@@ -112,6 +112,8 @@ struct ServerProfileTests {
 		#expect(object["https_url"] as? String == "wss://vpn.example.com/private/https/session")
 		#expect(object["https_timeout"] as? String == "10s")
 		#expect(object["require_datagrams"] as? Bool == false)
+		#expect(object["cover_mode"] as? String == "pulse")
+		#expect(object["max_cover_overhead_percent"] as? Int == 5)
 		#expect(object["http3_url"] == nil)
 		#expect(object["http3_timeout"] == nil)
 		#expect(object["webrtc_signaling_url"] == nil)

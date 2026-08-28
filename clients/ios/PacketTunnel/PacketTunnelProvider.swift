@@ -330,7 +330,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         object["server_routes"] = core.serverAddresses()
         object["data_plane"] = "direct-np2"
         object["cell_encryption"] = "chacha20-poly1305"
-        object["cover_mode"] = "off"
+        object["cover_mode"] = "pulse"
         object["quic_fallbacks"] = 0
         object["carrier_pool_scale_ups"] = 0
         object["carrier_pool_failures"] = 0

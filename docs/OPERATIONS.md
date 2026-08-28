@@ -256,18 +256,19 @@ the same loopback listener. The TCP control connection must stay open for the
 UDP relay lifetime. Fragmented SOCKS UDP packets are intentionally unsupported
 and dropped; applications should keep datagrams within their negotiated MTU.
 
-## Mosaic upgrade and diagnostics
+## Pulse rollout, rollback, and Mosaic diagnostics
 
-Mosaic is an optional authenticated v2.2 capability. `cover_mode=off` is the
-production default; upgrade the server first, then clients. Cover selection is
-direction-local and each mixed-version combination remains usable:
+Pulse is the low-overhead production candidate; Mosaic remains an optional
+authenticated v2.2 capability. Upgrade the server binary before writing
+`cover_mode=pulse`, then upgrade clients. Cover selection is direction-local
+and each mixed-mode combination remains wire-compatible:
 
-1. A new server sends through the direct AEAD fast path to an old client; the
-   old client may continue sending its fixed cover cells to the new server.
-2. A new client sends through the direct AEAD fast path to an old server and
-   accepts the old server's covered cells.
-3. Two new peers use the direct fast path by default. Mosaic activates only
-   when both directions are explicitly configured with `cover_mode=mosaic`.
+1. A Pulse sender emits ordinary authenticated NP/2 cells with bounded padding;
+   an `off` or older covered receiver already decodes those cells.
+2. An `off` sender remains on the direct AEAD path while the opposite direction
+   may independently use Pulse.
+3. Mosaic activates only when both peers advertise and select its capability;
+   Pulse never advertises it.
 
 Verify one carrier without starting a SOCKS listener:
 
@@ -279,20 +280,20 @@ Expected production output:
 
 ```text
 carrier=https fallback=false authentication=ok
-cover=off class=off transitions=0
+cover=pulse class=pulse transitions=0
 ```
 
-`cover=fixed` or `cover=mosaic` is not an authentication failure. It means the
-local sender is still using an older fixed-cover configuration or the explicit
-Mosaic experiment. A probe contains no sustained workload, so zero transitions
-are normal.
+`cover=off`, `cover=fixed`, or `cover=mosaic` is not an authentication failure.
+It identifies the local sender mode. A probe contains no sustained workload,
+so zero Mosaic transitions are normal.
 
-Existing deployments whose config omits `cover_mode` can roll back by restoring
-the earlier binary. If a newly generated config contains `cover_mode`, remove
-that field before starting a pre-0.5.28 binary because older strict decoders do
-not know it. No QR, secret, or cell-format migration is needed. Do not infer
-DPI resistance from a successful probe. Validate throughput, latency, cover
-overhead, and packet captures separately on the intended network.
+Rollback Pulse by setting `cover_mode=off` and restarting the service; no QR,
+secret, or cell-format migration is needed. A binary that predates the `pulse`
+configuration value will reject it locally even though the cell wire format is
+compatible, so change the configuration before rolling that binary back. Do
+not infer DPI resistance from a successful probe. Validate throughput,
+latency, cover overhead, and packet captures separately on the intended
+network.
 
 ## Credential rotation
 

@@ -20,8 +20,8 @@ Generate a value with `neproto-server generate-secret`. Never place the value in
   "http3_url": "https://vpn.example.com/<private-http3-route>",
   "profile": "interactive",
   "carrier_policy": "performance",
-	"cover_mode": "off",
-  "max_cover_overhead_percent": 30,
+	"cover_mode": "pulse",
+  "max_cover_overhead_percent": 5,
   "initial_window_bytes": 2097152,
   "max_streams": 128,
   "max_parallel_carriers": 3,
@@ -56,14 +56,21 @@ after idle. A value of `1` is the wire-compatible rollback and does not weaken
 or change NP/2 encryption. One inner TCP flow always remains on one carrier;
 UDP stays pinned to the primary carrier.
 
-### Cover mode and Mosaic behavior
+### Cover modes
 
-`cover_mode` defaults to `off`. In this performance mode the mandatory NP/2
+`cover_mode` defaults to `off`. In that diagnostic mode the mandatory NP/2
 authentication, session-specific type map, cell AEAD, flow control, and
 multiplexing remain active, while padding, dummy cells, cover delays, and
-Mosaic classification are bypassed. Set `cover_mode` to `mosaic` explicitly on
-both peers only for a measured cover experiment. There is deliberately no
-fourth `mosaic` configuration profile. Mosaic peers advertise
+Mosaic classification are bypassed. `pulse` enables the production-candidate
+sender-local scheduler: its overhead is capped at 5%, it delays only burst
+starts by at most 2 ms, and v1 emits no dummy cells. Client and server may
+enable Pulse independently because it does not change the cell format or
+advertise a new capability. The normative contract is in
+[`NP2-PULSE-SPEC.md`](NP2-PULSE-SPEC.md).
+
+Set `cover_mode` to `mosaic` explicitly on both peers only for a measured legacy
+cover experiment. There is deliberately no fourth `mosaic` configuration
+profile. Mosaic peers advertise
 `CapabilityMosaicCover` after authentication and activate it only when both
 sides select the capability:
 
@@ -73,8 +80,8 @@ sides select the capability:
 | `web` | fixed web | starts web; may select realtime or stream locally |
 | `interactive` | fixed interactive | starts realtime; may select web or stream locally |
 
-`max_cover_overhead_percent` is ignored in `off` mode and remains the global
-ceiling across all Mosaic transitions.
+`max_cover_overhead_percent` is ignored in `off` mode, hard-capped to 5 in
+`pulse`, and remains the global ceiling across all Mosaic transitions.
 The `stream` class is an internal zero-delay fast path, not a value accepted in
 JSON or an assertion that the outer carrier is HTTP/3. The normative state
 machine is in [`NP2-MOSAIC-SPEC.md`](NP2-MOSAIC-SPEC.md).
@@ -98,8 +105,8 @@ machine is in [`NP2-MOSAIC-SPEC.md`](NP2-MOSAIC-SPEC.md).
   "http3_key_file": "/etc/neproto/tls/privkey.pem",
   "udp_port_min": 40000,
   "udp_port_max": 40100,
-	"cover_mode": "off",
-  "max_cover_overhead_percent": 30,
+	"cover_mode": "pulse",
+  "max_cover_overhead_percent": 5,
   "initial_window_bytes": 262144,
   "max_streams": 128,
   "max_sessions": 32,

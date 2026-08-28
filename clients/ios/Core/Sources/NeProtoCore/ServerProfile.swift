@@ -184,6 +184,8 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
 		let includeWebRTC = carrierPolicy != "http3-only" && carrierPolicy != "https-only"
 		let includeHTTP3 = carrierPolicy != "https-only"
 		let strictHTTPS = carrierPolicy == "https-only"
+		let coverMode = strictHTTPS ? "pulse" : "off"
+		let coverOverheadPercent = strictHTTPS ? 5 : 30
         let configuration = ClientConfiguration(
             serverIdentity: serverIdentity,
             deviceID: deviceID?.uuidString.lowercased(),
@@ -193,11 +195,11 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
 			webRTCSignalingURL: includeWebRTC ? "https://\(serverIdentity)\(webRTCPath)" : nil,
 			http3URL: includeHTTP3 ? normalizedHTTP3Path.map { "https://\(serverIdentity)\($0)" } : nil,
             // "web" preserves the authenticated profile feature used by old
-            // peers; cover_mode independently selects the direct fast path.
+            // peers; Pulse is sender-local and does not change NP/2 framing.
             profile: CoverProfile.web.rawValue,
 			carrierPolicy: carrierPolicy,
-			coverMode: "off",
-            maxCoverOverheadPercent: 30,
+			coverMode: coverMode,
+            maxCoverOverheadPercent: coverOverheadPercent,
             initialWindowBytes: 2_097_152,
             maxStreams: 128,
 			maxParallelCarriers: parallelCarriers,

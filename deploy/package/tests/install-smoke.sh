@@ -102,7 +102,8 @@ test_mode() {
   grep -q '"enable_http3_datagrams": true' "$root/etc/neproto/server.json"
   grep -q '"enable_constellation": true' "$root/etc/neproto/server.json"
   grep -q '"enable_forward_secrecy": true' "$root/etc/neproto/server.json"
-  grep -q '"cover_mode": "off"' "$root/etc/neproto/server.json"
+  grep -q '"cover_mode": "pulse"' "$root/etc/neproto/server.json"
+  grep -q '"max_cover_overhead_percent": 5' "$root/etc/neproto/server.json"
   grep -q '"max_udp_associations_global": 10000' "$root/etc/neproto/server.json"
   grep -q '"target_creates_per_second_per_user": 2000' "$root/etc/neproto/server.json"
   [[ -s $root/etc/neproto/tls/fullchain.pem && -s $root/etc/neproto/tls/privkey.pem ]]
@@ -276,7 +277,8 @@ EOF
   grep -q '"node_id": "master"' "$root/etc/neproto/cluster/accepted-peers.json"
   grep -q 'vpn.example.com' "$root/etc/neproto/cluster/peers/master/client.json"
   grep -q '"enable_constellation": false' "$root/etc/neproto/cluster/peers/master/client.json"
-  grep -q '"cover_mode": "off"' "$root/etc/neproto/cluster/peers/master/client.json"
+  grep -q '"cover_mode": "pulse"' "$root/etc/neproto/cluster/peers/master/client.json"
+  grep -q '"max_cover_overhead_percent": 5' "$root/etc/neproto/cluster/peers/master/client.json"
   [[ -s $root/etc/neproto/users/active/AQEBAQEBAQEBAQEBAQEBAQ.secret ]]
 
   jq --arg https_path "$p7" --arg webrtc_path "$p8" --arg http3_path "$p9" \
