@@ -135,6 +135,26 @@ test_mode() {
   grep -q '"cluster_master_node_id": "master"' "$server_json"
   grep -q '"cluster_peer_directory": "/etc/neproto/cluster/peers"' "$server_json"
   grep -q '"cluster_peer_map_file": "/etc/neproto/cluster/accepted-peers.json"' "$server_json"
+
+  cluster_runtime=$(mktemp "$root/cluster-edge-runtime.XXXXXX")
+  jq 'del(.cluster_directory, .cluster_catalog_ttl) | . + {
+    cluster_node_id: "edge-fi",
+    cluster_master_node_id: "master",
+    cluster_peer_directory: "/etc/neproto/cluster/peers",
+    cluster_peer_map_file: "/etc/neproto/cluster/accepted-peers.json"
+  }' "$server_json" >"$cluster_runtime"
+  mv -f -- "$cluster_runtime" "$server_json"
+
+  NEPROTO_TEST_MODE=1 "$package_dir/install.sh" --root "$root" --mode "$mode" \
+    --domain vpn.example.com --addresses 8.8.8.8 "${web_arguments[@]}" --non-interactive --skip-start
+  jq -e '
+    .cluster_node_id == "edge-fi" and
+    .cluster_master_node_id == "master" and
+    .cluster_peer_directory == "/etc/neproto/cluster/peers" and
+    .cluster_peer_map_file == "/etc/neproto/cluster/accepted-peers.json" and
+    (.cluster_directory // "") == "" and
+    (.cluster_catalog_ttl // "") == ""
+  ' "$server_json" >/dev/null
   [[ $(<"$root/etc/neproto/web-admin.secret") == "$admin_secret_before" ]]
   [[ $(stat -c %a "$root/var/backups/neproto") == 700 ]]
   find "$root/var/backups/neproto" -mindepth 2 -maxdepth 2 -name web-admin.secret -type f -print -quit | grep -q .
@@ -206,9 +226,9 @@ test_mode() {
   NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user add --name "Smoke Service Keeper" --profile quiet >/dev/null
   NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user revoke --id "$identifier" >/dev/null
   [[ ! -e $root/etc/neproto/users/active/$identifier.secret ]]
-  grep -q "$identifier" "$root/etc/neproto/users/index.json"
+  grep -q -- "$identifier" "$root/etc/neproto/users/index.json"
   NEPROTO_TEST_ROOT=$root "$root/usr/local/bin/neprotoctl" user delete --id "$identifier" --confirm DELETE >/dev/null
-  ! grep -q "$identifier" "$root/etc/neproto/users/index.json"
+  ! grep -q -- "$identifier" "$root/etc/neproto/users/index.json"
   if find "$root/etc/neproto/users/revoked" -maxdepth 1 -name "$identifier*.secret" -print -quit | grep -q .; then
     return 1
   fi

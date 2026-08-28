@@ -486,16 +486,20 @@ if [[ -s $server_config ]]; then
       cluster_peer_directory: (.cluster_peer_directory // ""),
       cluster_peer_map_file: (.cluster_peer_map_file // "")
     } |
-    if .cluster_directory == "" then {}
-    elif .cluster_directory != "/etc/neproto/cluster" or .cluster_catalog_ttl != "1h" then
-      error("invalid managed cluster catalog paths")
-    elif .cluster_node_id == "" and .cluster_master_node_id == "" and
-         .cluster_peer_directory == "" and .cluster_peer_map_file == "" then
+    (.cluster_directory == "" and .cluster_catalog_ttl == "") as $catalog_empty |
+    (.cluster_directory == "/etc/neproto/cluster" and .cluster_catalog_ttl == "1h") as $catalog_valid |
+    (.cluster_node_id == "" and .cluster_master_node_id == "" and
+     .cluster_peer_directory == "" and .cluster_peer_map_file == "") as $peer_empty |
+    ((.cluster_node_id | test("^[a-z0-9][a-z0-9_-]{0,63}$")) and
+     (.cluster_master_node_id | test("^[a-z0-9][a-z0-9_-]{0,63}$")) and
+     .cluster_peer_directory == "/etc/neproto/cluster/peers" and
+     .cluster_peer_map_file == "/etc/neproto/cluster/accepted-peers.json") as $peer_valid |
+    if $catalog_empty and $peer_empty then {}
+    elif $catalog_valid and $peer_empty then
       {cluster_directory, cluster_catalog_ttl}
-    elif (.cluster_node_id | test("^[a-z0-9][a-z0-9_-]{0,63}$")) and
-         (.cluster_master_node_id | test("^[a-z0-9][a-z0-9_-]{0,63}$")) and
-         .cluster_peer_directory == "/etc/neproto/cluster/peers" and
-         .cluster_peer_map_file == "/etc/neproto/cluster/accepted-peers.json" then .
+    elif $catalog_empty and $peer_valid then
+      {cluster_node_id, cluster_master_node_id, cluster_peer_directory, cluster_peer_map_file}
+    elif $catalog_valid and $peer_valid then .
     else error("invalid managed cluster runtime") end
   ' "$server_config") || die 'existing NP/2 cluster runtime is invalid'
 fi

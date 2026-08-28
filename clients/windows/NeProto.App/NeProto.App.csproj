@@ -8,7 +8,7 @@
     <AssemblyName>NeProto</AssemblyName>
     <RootNamespace>NeProto.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version Condition="'$(Version)' == ''">0.5.25</Version>
+    <Version Condition="'$(Version)' == ''">0.5.26</Version>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <SelfContained>true</SelfContained>
