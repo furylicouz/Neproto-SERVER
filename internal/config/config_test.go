@@ -58,6 +58,15 @@ func TestLoadStrictClientAndServerConfigs(t *testing.T) {
 	if err != nil || mosaic.CoverMode != CoverModeMosaic {
 		t.Fatalf("load explicit Mosaic cover mode: mode=%q error=%v", mosaic.CoverMode, err)
 	}
+	pulsePath := filepath.Join(directory, "client-pulse.json")
+	pulseJSON := strings.Replace(clientJSON, `"profile":"interactive",`,
+		`"profile":"interactive","cover_mode":"pulse",`, 1)
+	writeConfig(t, pulsePath, pulseJSON)
+	pulse, err := LoadClient(pulsePath)
+	if err != nil || pulse.CoverMode != CoverModePulse || !pulse.CoverEnabled() || !pulse.PulseCoverEnabled() {
+		t.Fatalf("load Pulse cover mode: mode=%q enabled=%t pulse=%t error=%v",
+			pulse.CoverMode, pulse.CoverEnabled(), pulse.PulseCoverEnabled(), err)
+	}
 	invalidCoverPath := filepath.Join(directory, "client-invalid-cover.json")
 	invalidCoverJSON := strings.Replace(clientJSON, `"profile":"interactive",`,
 		`"profile":"interactive","cover_mode":"random",`, 1)

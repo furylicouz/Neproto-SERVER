@@ -24,6 +24,7 @@ type AuthenticatedConfig struct {
 	MaxCoverOverheadPercent uint8
 	MaxCoverBudgetBytes     int
 	DisableCover            bool
+	EnablePulse             bool
 	ExtensionOffer          *protocol.ExtensionParameters
 	ExtensionRequest        *protocol.ExtensionParameters
 	RequiredExtensions      protocol.ExtensionCapability
@@ -205,6 +206,9 @@ func startAuthenticated(
 		if engineErr != nil {
 			return nil, closeAuthentication(encrypted, "create cover engine", engineErr)
 		}
+		if config.EnablePulse && !engine.EnablePulse() {
+			return nil, closeAuthentication(encrypted, "enable Pulse cover", cover.ErrInvalidConfig)
+		}
 		covered, err = cover.NewTransport(cover.TransportConfig{
 			Carrier: encrypted, TypeMap: typeMap, Engine: engine,
 			PaddingSeed: deriveCoverSeed(keys.Padding, role, "padding"),
@@ -257,6 +261,9 @@ func validateAuthenticatedConfig(ctx context.Context, connection carrier.Carrier
 		config.InitialWindow > MaxInitialWindow || config.MaxStreams <= 0 ||
 		config.MaxCoverOverheadPercent > 100 || config.MaxCoverBudgetBytes < 0 ||
 		config.MaxCoverBudgetBytes > cover.MaxWireCellBytes {
+		return ErrInvalidConfig
+	}
+	if config.DisableCover && config.EnablePulse {
 		return ErrInvalidConfig
 	}
 	if err := validateExtensionConfig(config); err != nil {

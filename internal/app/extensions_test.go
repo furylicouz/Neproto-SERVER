@@ -33,6 +33,12 @@ func TestProductionExtensionsAdvertiseMosaicOnlyWhenExplicitlyEnabled(t *testing
 	if got := productionClientExtensionRequest(config.Client{MaxStreams: 8}, https); got.Capabilities&protocol.CapabilityMosaicCover != 0 {
 		t.Fatal("client advertised Mosaic while cover mode is off")
 	}
+	if got := productionServerExtensionOffer(config.Server{MaxStreams: 8, CoverMode: config.CoverModePulse}, https); got.Capabilities&protocol.CapabilityMosaicCover != 0 {
+		t.Fatal("server advertised Mosaic while Pulse is sender-local")
+	}
+	if got := productionClientExtensionRequest(config.Client{MaxStreams: 8, CoverMode: config.CoverModePulse}, https); got.Capabilities&protocol.CapabilityMosaicCover != 0 {
+		t.Fatal("client advertised Mosaic while Pulse is sender-local")
+	}
 	serverOffer := productionServerExtensionOffer(config.Server{
 		MaxStreams: 8, CoverMode: config.CoverModeMosaic,
 	}, https)

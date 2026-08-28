@@ -281,6 +281,7 @@ func serveAuthenticatedCarrier(
 		InitialWindow: config.InitialWindowBytes, MaxStreams: config.MaxStreams,
 		MaxCoverOverheadPercent: config.MaxCoverOverheadPercent,
 		DisableCover:            !config.CoverEnabled(),
+		EnablePulse:             config.PulseCoverEnabled(),
 		ExtensionOffer:          &extensionOffer,
 		EnableForwardSecrecy:    config.EnableForwardSecrecy,
 	})

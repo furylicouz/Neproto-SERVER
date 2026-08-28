@@ -32,6 +32,7 @@ type ProbeResult struct {
 	Kind                  protocol.CarrierKind
 	UsedFallback          bool
 	MosaicEnabled         bool
+	PulseEnabled          bool
 	CoverClass            string
 	CoverTransitions      uint64
 	CoverVariantID        uint8
@@ -292,11 +293,13 @@ func ProbeClient(ctx context.Context, config config.Client, mode ProbeMode) (Pro
 	}
 	if coverStats.MosaicEnabled {
 		coverClass = coverStats.TrafficClass.String()
+	} else if coverStats.PulseEnabled {
+		coverClass = "pulse"
 	}
 	_ = authenticated.Mux.Close()
 	return ProbeResult{
 		Kind: selected.Kind, UsedFallback: selected.UsedFallback,
-		MosaicEnabled: coverStats.MosaicEnabled, CoverClass: coverClass,
+		MosaicEnabled: coverStats.MosaicEnabled, PulseEnabled: coverStats.PulseEnabled, CoverClass: coverClass,
 		CoverTransitions:      coverStats.ProfileTransitions,
 		CoverVariantID:        coverStats.VariantID,
 		CoverBurstCount:       coverStats.BurstCount,
@@ -361,6 +364,7 @@ func AuthenticateClientCarrier(
 		Features: features, InitialWindow: clientConfig.InitialWindowBytes, MaxStreams: clientConfig.MaxStreams,
 		MaxCoverOverheadPercent: clientConfig.MaxCoverOverheadPercent,
 		DisableCover:            !clientConfig.CoverEnabled(),
+		EnablePulse:             clientConfig.PulseCoverEnabled(),
 		ExtensionRequest:        &extensionRequest, RequiredExtensions: requiredExtensions,
 		ExtensionTimeout:     500 * time.Millisecond,
 		EnableForwardSecrecy: clientConfig.EnableForwardSecrecy,

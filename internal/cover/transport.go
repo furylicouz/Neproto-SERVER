@@ -32,6 +32,7 @@ type TransportStats struct {
 	PaddingBytes          uint64
 	DummyWireBytes        uint64
 	MosaicEnabled         bool
+	PulseEnabled          bool
 	TrafficClass          TrafficClass
 	ActiveProfile         ProfileID
 	ProfileTransitions    uint64
@@ -150,6 +151,7 @@ func (t *Transport) Stats() TransportStats {
 		RealMessages: t.realMessages.Load(), DummyMessages: t.dummyMessages.Load(),
 		RealWireBytes: t.realWireBytes.Load(), PaddingBytes: t.paddingBytes.Load(),
 		DummyWireBytes: t.dummyWireBytes.Load(), MosaicEnabled: schedule.MosaicEnabled,
+		PulseEnabled: schedule.PulseEnabled,
 		TrafficClass: schedule.TrafficClass, ActiveProfile: schedule.ActiveProfile,
 		ProfileTransitions: schedule.ProfileTransitions,
 		VariantID:          schedule.VariantID, BurstCount: schedule.BurstCount,

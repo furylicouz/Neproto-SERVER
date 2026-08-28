@@ -47,6 +47,7 @@ type Stats struct {
 	PaddingBytes          uint64
 	DummyBytes            uint64
 	MosaicEnabled         bool
+	PulseEnabled          bool
 	TrafficClass          TrafficClass
 	ActiveProfile         ProfileID
 	ProfileTransitions    uint64
@@ -76,6 +77,7 @@ type Engine struct {
 	random             *coverRandom
 	stats              Stats
 	mosaic             mosaicState
+	pulse              pulseState
 	lastRealPlan       time.Time
 }
 
@@ -91,6 +93,10 @@ func NewEngine(config Config) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	pulse, err := derivePulseProfile(config.Seed)
+	if err != nil {
+		return nil, err
+	}
 	maxBudgetBytes := config.MaxBudgetBytes
 	if maxBudgetBytes == 0 {
 		maxBudgetBytes = defaultMaxBudgetBytes
@@ -103,6 +109,7 @@ func NewEngine(config Config) (*Engine, error) {
 		maxOverheadPercent: uint64(config.MaxOverheadPercent),
 		maxCreditUnits:     uint64(maxBudgetBytes) * 100,
 		random:             newCoverRandom(config.Seed),
+		pulse:              pulseState{profile: pulse},
 	}, nil
 }
 
@@ -181,7 +188,11 @@ func (e *Engine) Stats() Stats {
 	defer e.mu.Unlock()
 	stats := e.stats
 	stats.MosaicEnabled = e.mosaic.enabled
+	stats.PulseEnabled = e.pulse.enabled
 	stats.TrafficClass = e.mosaic.class
+	if e.pulse.enabled {
+		stats.TrafficClass = TrafficWeb
+	}
 	stats.ActiveProfile = e.activeProfile
 	stats.ProfileTransitions = e.mosaic.transitions
 	stats.VariantID = e.activeVariantID
@@ -196,7 +207,7 @@ func (e *Engine) EnableMosaic() bool {
 	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.baselineProfile == ProfileQuiet {
+	if e.baselineProfile == ProfileQuiet || e.pulse.enabled {
 		return false
 	}
 	if e.mosaic.enabled {
@@ -235,8 +246,24 @@ func (e *Engine) desiredPadding(wireBytes int) int {
 	}
 	lookahead := max(1, int(e.profile.bucketLookahead))
 	choices := min(lookahead, len(e.profile.buckets)-first)
-	target := e.profile.buckets[first+int(e.random.uniform(uint64(choices)))]
-	return target - wireBytes
+	choice := 0
+	pulseSample := uint64(0)
+	if e.pulse.enabled {
+		pulseSample = e.random.uint64()
+		gate := e.pulse.profile.paddingGate
+		if uint16(pulseSample)%uint16(gate.denominator) >= uint16(gate.numerator) {
+			return 0
+		}
+		choice = int(uint16(pulseSample>>16) % uint16(choices))
+	} else {
+		choice = int(e.random.uniform(uint64(choices)))
+	}
+	target := e.profile.buckets[first+choice]
+	desired := target - wireBytes
+	if e.pulse.enabled {
+		desired = e.pulseScalePadding(desired, pulseSample>>32)
+	}
+	return desired
 }
 
 func (e *Engine) shouldScheduleDummy() bool {

@@ -97,6 +97,8 @@ func writeProbeResult(writer io.Writer, result app.ProbeResult) {
 	mode := "fixed"
 	if result.MosaicEnabled {
 		mode = "mosaic"
+	} else if result.PulseEnabled {
+		mode = "pulse"
 	}
 	fmt.Fprintf(
 		writer, "cover=%s class=%s transitions=%d\n",
@@ -104,7 +106,7 @@ func writeProbeResult(writer io.Writer, result app.ProbeResult) {
 	)
 	fmt.Fprintf(
 		writer,
-		"mosaic_variant=%d bursts=%d dummy_selected=%d dummy_rejected=%d added_delay_us=%d max_delay_us=%d\n",
+		"cover_variant=%d bursts=%d dummy_selected=%d dummy_rejected=%d added_delay_us=%d max_delay_us=%d\n",
 		result.CoverVariantID, result.CoverBurstCount, result.CoverDummySelected,
 		result.CoverDummyRejected, result.CoverAddedDelayMicros, result.CoverMaxDelayMicros,
 	)

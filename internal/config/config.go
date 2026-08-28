@@ -74,7 +74,10 @@ const (
 
 	// CoverModeOff keeps the authenticated NP/2 data plane on the direct AEAD
 	// fast path. Mosaic remains available as an explicit, measurable opt-in.
-	CoverModeOff    CoverMode = "off"
+	CoverModeOff CoverMode = "off"
+	// CoverModePulse enables the bounded sender-local NP/2 Pulse scheduler. It
+	// does not advertise the legacy negotiated Mosaic capability.
+	CoverModePulse  CoverMode = "pulse"
 	CoverModeMosaic CoverMode = "mosaic"
 )
 
@@ -120,7 +123,11 @@ func (c Client) ProfileID() cover.ProfileID {
 
 func (c Client) HTTP3Configured() bool { return c.HTTP3URL != "" }
 
-func (c Client) CoverEnabled() bool { return c.CoverMode == CoverModeMosaic }
+func (c Client) CoverEnabled() bool {
+	return c.CoverMode == CoverModePulse || c.CoverMode == CoverModeMosaic
+}
+
+func (c Client) PulseCoverEnabled() bool { return c.CoverMode == CoverModePulse }
 
 func applyClientDefaults(client *Client, directMobile bool) {
 	if client == nil {
@@ -607,10 +614,14 @@ func validateServer(config Server) error {
 	return validatePublicListener(config.HTTP3Listen)
 }
 
-func (s Server) CoverEnabled() bool { return s.CoverMode == CoverModeMosaic }
+func (s Server) CoverEnabled() bool {
+	return s.CoverMode == CoverModePulse || s.CoverMode == CoverModeMosaic
+}
+
+func (s Server) PulseCoverEnabled() bool { return s.CoverMode == CoverModePulse }
 
 func validCoverMode(mode CoverMode) bool {
-	return mode == CoverModeOff || mode == CoverModeMosaic
+	return mode == CoverModeOff || mode == CoverModePulse || mode == CoverModeMosaic
 }
 
 func validOptionalAbsoluteDirectory(value string) bool {

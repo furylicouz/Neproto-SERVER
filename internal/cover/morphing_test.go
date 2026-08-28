@@ -133,7 +133,7 @@ func TestMosaicStatsExposeOnlyBoundedAggregates(t *testing.T) {
 
 	allowed := map[string]bool{
 		"RealBytes": true, "PaddingBytes": true, "DummyBytes": true,
-		"MosaicEnabled": true, "TrafficClass": true, "ActiveProfile": true,
+		"MosaicEnabled": true, "PulseEnabled": true, "TrafficClass": true, "ActiveProfile": true,
 		"ProfileTransitions": true, "VariantID": true, "BurstCount": true,
 		"DummyRequestsSelected": true, "DummyRequestsRejected": true,
 		"AddedDelayMicros": true, "MaxPlannedDelayMicros": true,

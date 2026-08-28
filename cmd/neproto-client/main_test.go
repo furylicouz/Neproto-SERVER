@@ -35,9 +35,21 @@ func TestWriteProbeResultPreservesStatusAndAddsCoverDiagnostics(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 4 || lines[0] != "carrier=https fallback=true authentication=ok" ||
 		lines[1] != "cover=mosaic class=stream transitions=3" ||
-		lines[2] != "mosaic_variant=17 bursts=23 dummy_selected=11 dummy_rejected=7 added_delay_us=4200 max_delay_us=900" ||
+		lines[2] != "cover_variant=17 bursts=23 dummy_selected=11 dummy_rejected=7 added_delay_us=4200 max_delay_us=900" ||
 		lines[3] != "constellation=true forward_secrecy=true" {
 		t.Fatalf("probe output=%q", output.String())
+	}
+}
+
+func TestWriteProbeResultNamesPulseWithoutMosaicCapability(t *testing.T) {
+	var output bytes.Buffer
+	writeProbeResult(&output, app.ProbeResult{
+		Kind: protocol.CarrierHTTPS, PulseEnabled: true, CoverClass: "pulse",
+		CoverVariantID: 9, CoverBurstCount: 4, CoverMaxDelayMicros: 2_000,
+	})
+	if !strings.Contains(output.String(), "cover=pulse class=pulse transitions=0\n") ||
+		!strings.Contains(output.String(), "cover_variant=9 bursts=4") {
+		t.Fatalf("Pulse probe output=%q", output.String())
 	}
 }
 

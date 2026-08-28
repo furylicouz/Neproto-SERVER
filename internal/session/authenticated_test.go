@@ -250,6 +250,72 @@ func TestAuthenticatedSessionCoverModesInteroperateDuringRollingUpgrade(t *testi
 	}
 }
 
+func TestAuthenticatedSessionInstallsSenderLocalPulse(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		clientPulse bool
+		serverPulse bool
+	}{
+		{name: "Pulse client with off server", clientPulse: true},
+		{name: "off client with Pulse server", serverPulse: true},
+		{name: "Pulse in both directions", clientPulse: true, serverPulse: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			left, right := newMemoryCarrierPair()
+			secret := [protocol.RootSecretSize]byte{0x70, 0x75, 0x6c, 0x73, 0x65}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			type result struct {
+				session *Authenticated
+				err     error
+			}
+			serverResult := make(chan result, 1)
+			go func() {
+				authenticated, err := AcceptServer(ctx, right, AuthenticatedConfig{
+					RootSecret: secret, ServerIdentity: "edge.example.test",
+					Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+					InitialWindow: 64 * 1024, MaxStreams: 8,
+					MaxCoverOverheadPercent: 100,
+					DisableCover:            !tt.serverPulse, EnablePulse: tt.serverPulse,
+				})
+				serverResult <- result{session: authenticated, err: err}
+			}()
+			client, err := ConnectClient(ctx, left, AuthenticatedConfig{
+				RootSecret: secret, ServerIdentity: "edge.example.test",
+				Features:      protocol.FeatureMultiplex | protocol.FeatureCellAEAD | protocol.FeatureProfileWeb,
+				InitialWindow: 64 * 1024, MaxStreams: 8,
+				MaxCoverOverheadPercent: 100,
+				DisableCover:            !tt.clientPulse, EnablePulse: tt.clientPulse,
+			})
+			if err != nil {
+				t.Fatalf("authenticate client: %v", err)
+			}
+			server := <-serverResult
+			if server.err != nil {
+				t.Fatalf("authenticate server: %v", server.err)
+			}
+			t.Cleanup(func() {
+				_ = client.Mux.Close()
+				_ = server.session.Mux.Close()
+			})
+			if client.CoverStats().PulseEnabled != tt.clientPulse ||
+				server.session.CoverStats().PulseEnabled != tt.serverPulse {
+				t.Fatalf("Pulse direction mismatch: client=%+v server=%+v",
+					client.CoverStats(), server.session.CoverStats())
+			}
+			if client.CoverStats().MosaicEnabled || server.session.CoverStats().MosaicEnabled {
+				t.Fatal("Pulse incorrectly enabled negotiated Mosaic")
+			}
+			if err := client.Mux.Ping(ctx); err != nil {
+				t.Fatalf("client-to-server ping: %v", err)
+			}
+			if err := server.session.Mux.Ping(ctx); err != nil {
+				t.Fatalf("server-to-client ping: %v", err)
+			}
+		})
+	}
+}
+
 func TestAuthenticatedSessionCarriesDeviceIdentity(t *testing.T) {
 	left, right := newMemoryCarrierPair()
 	secret := [protocol.RootSecretSize]byte{0x83, 0x19, 0x47}
