@@ -137,6 +137,40 @@ struct ServerProfileTests {
         #expect(!String(decoding: payload, as: UTF8.self).contains("secret"))
     }
 
+    @Test("only the primary cluster profile can request the signed catalog")
+    func identifiesClusterCatalogSource() {
+        let publicKey = Data(repeating: 0x44, count: 32).base64URLEncodedString()
+        func profile(nodeID: String?) -> ServerProfile {
+            ServerProfile(
+                credentialID: "credential-1",
+                name: nodeID ?? "Bootstrap",
+                serverIdentity: "vpn.example.com",
+                serverAddress: "8.8.8.8",
+                httpsPath: "/private/https/session",
+                webRTCPath: "/private/webrtc/offer",
+                clusterID: "np2-cluster",
+                catalogPublicKey: publicKey,
+                clusterNodeID: nodeID,
+                managedByCluster: nodeID != nil,
+                coverProfile: .web
+            )
+        }
+
+        #expect(profile(nodeID: nil).isClusterCatalogSource)
+        #expect(profile(nodeID: "master").isClusterCatalogSource)
+        #expect(!profile(nodeID: "2").isClusterCatalogSource)
+
+        let standalone = ServerProfile(
+            name: "Standalone",
+            serverIdentity: "standalone.example.com",
+            serverAddress: "1.1.1.1",
+            httpsPath: "/private/https/session",
+            webRTCPath: "/private/webrtc/offer",
+            coverProfile: .web
+        )
+        #expect(!standalone.isClusterCatalogSource)
+    }
+
     @Test("missing pinned endpoint is never replaced with a baked-in server")
     func rejectsMissingPinnedEndpoint() throws {
         let profile = ServerProfile(

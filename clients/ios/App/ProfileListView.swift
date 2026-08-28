@@ -199,10 +199,15 @@ struct ProfileListView: View {
 
     private func refreshSubscription(_ subscription: NativeSubscriptionSection) {
         guard !refreshingSubscriptionIDs.contains(subscription.id) else { return }
-        guard let connectedProfile = subscription.profiles.first(where: {
+        let connectedProfiles = subscription.profiles.filter {
             vpnService.status(for: $0.id) == .connected
-        }) else {
+        }
+        guard !connectedProfiles.isEmpty else {
             vpnService.lastError = "Для обновления подписки сначала подключитесь к одному из её серверов."
+            return
+        }
+        guard let connectedProfile = connectedProfiles.first(where: \.isClusterCatalogSource) else {
+            vpnService.lastError = "Каталог подписки выдаёт основной сервер Primary. Подключитесь к нему и повторите обновление."
             return
         }
 
@@ -279,8 +284,7 @@ struct ProfileListView: View {
 
     private func synchronizeConnectedClusters() {
         for profile in profileStore.profiles {
-            guard profile.clusterID != nil,
-                  profile.catalogPublicKey != nil,
+            guard profile.isClusterCatalogSource,
                   let sessionID = vpnService.clusterCatalogSessionID(profileID: profile.id),
                   clusterCatalogRefreshGate.shouldStart(
                       profileID: profile.id,

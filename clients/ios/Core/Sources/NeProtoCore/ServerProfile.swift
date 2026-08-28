@@ -146,6 +146,14 @@ public struct ServerProfile: Codable, Identifiable, Equatable, Sendable {
         }
     }
 
+    /// The signed cluster catalog is served by the imported bootstrap and the
+    /// fixed NP/2 primary node. Managed edge profiles carry the same catalog
+    /// pin for verification, but they are not catalog endpoints.
+    public var isClusterCatalogSource: Bool {
+        guard clusterID != nil, catalogPublicKey != nil else { return false }
+        return clusterNodeID == nil || clusterNodeID == "master"
+    }
+
     public func clientConfigurationJSON(deviceID: UUID? = nil) throws -> Data {
 		try clientConfigurationJSON(deviceID: deviceID, carrierPolicy: "performance", parallelCarriers: maxParallelCarriers)
 	}
