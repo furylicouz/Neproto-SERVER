@@ -10,7 +10,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let migrationQueue = DispatchQueue(label: "com.neproto.packet-tunnel.migration", qos: .utility)
     private let shutdownQueue = DispatchQueue(label: "com.neproto.packet-tunnel.shutdown", qos: .utility)
     private let stateLock = NSLock()
-    private let logger = Logger(subsystem: "NeProto", category: "StrictHTTP3PacketTunnel")
+    private let logger = Logger(subsystem: "NeProto", category: "StrictHTTPSPacketTunnel")
 
     private var core: Np2mobileClientCore?
     private var runtimeMonitor: DispatchSourceTimer?
@@ -35,7 +35,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 			return
 		}
         runtimeQueue.async { [weak self] in
-            self?.startStrictHTTP3Tunnel(completion: completion)
+            self?.startStrictHTTPSTunnel(completion: completion)
                 ?? completion.call(Self.xpcSafeError(TunnelProviderError.providerReleased))
         }
     }
@@ -44,7 +44,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         with reason: NEProviderStopReason,
         completionHandler: @escaping () -> Void
     ) {
-        logger.notice("Stopping strict HTTP/3 Packet Tunnel, reason=\(reason.rawValue)")
+        logger.notice("Stopping strict HTTPS Packet Tunnel, reason=\(reason.rawValue)")
         let completion = TunnelStopCompletion(completionHandler)
         let owned: Np2mobileClientCore? = stateLock.withLock {
             stopping = true
@@ -63,7 +63,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
                 do {
                     try owned.close()
                 } catch {
-                    self.logMobileFailure("Closing strict HTTP/3 ClientCore failed", error: error as NSError)
+                    self.logMobileFailure("Closing strict HTTPS ClientCore failed", error: error as NSError)
                 }
             }
 			self.stateLock.withLock {
@@ -98,14 +98,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         completionHandler?(Self.providerSnapshot(for: activeCore))
     }
 
-    private func startStrictHTTP3Tunnel(completion: TunnelStartCompletion) {
+    private func startStrictHTTPSTunnel(completion: TunnelStartCompletion) {
         var createdCore: Np2mobileClientCore?
         do {
             let tunnelProtocol = try requireTunnelProtocol()
             guard let persistentReference = tunnelProtocol.passwordReference else {
                 throw TunnelProviderError.missingSecretReference
             }
-            let bootstrap = try StrictHTTP3PacketTunnelBootstrap(
+            let bootstrap = try StrictHTTPSPacketTunnelBootstrap(
                 providerConfiguration: tunnelProtocol.providerConfiguration ?? [:],
                 credentialReference: persistentReference
             )
@@ -113,7 +113,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             try bootstrap.profile.validate(secret: secret)
 
             var mobileError: NSError?
-            guard let newCore = Np2mobileNewStrictHTTP3ClientCore(&mobileError) else {
+            guard let newCore = Np2mobileNewStrictHTTPSClientCore(&mobileError) else {
                 throw mobileError ?? TunnelProviderError.clientCoreUnavailable
             }
             createdCore = newCore
@@ -165,7 +165,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 						guard self.stateLock.withLock({ self.core === newCore && !self.stopping }) else {
 							throw TunnelProviderError.stopping
 						}
-                        self.logger.notice("Strict HTTP/3 WebTransport Packet Tunnel is connected")
+                        self.logger.notice("Strict HTTPS WebSocket Packet Tunnel is connected")
                         completion.call(nil)
                     } catch {
                         self.finishStartFailure(core: newCore, error: error, completion: completion)
@@ -190,7 +190,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             try? failedCore.close()
         }
         let safeError = Self.xpcSafeError(error)
-        logger.error("Strict HTTP/3 Packet Tunnel start failed: domain=\(safeError.domain, privacy: .public) code=\(safeError.code)")
+        logger.error("Strict HTTPS Packet Tunnel start failed: domain=\(safeError.domain, privacy: .public) code=\(safeError.code)")
         completion.call(safeError)
     }
 
@@ -264,14 +264,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
 			}
 			self.reasserting = false
 			if let migrationError {
-				self.logMobileFailure("Strict HTTP/3 reconnect exhausted", error: migrationError)
+				self.logMobileFailure("Strict HTTPS reconnect exhausted", error: migrationError)
 				self.terminateAfterRuntimeFailure(
 					expectedCore,
 					error: migrationError
 				)
 				return
 			}
-			self.logger.notice("Network transition retained strict HTTP/3 WebTransport")
+			self.logger.notice("Network transition retained strict HTTPS WebSocket")
 			let repeatMigration = self.stateLock.withLock {
 				guard self.core === expectedCore, !self.stopping else {
 					self.migrationGate.reset()
@@ -435,13 +435,13 @@ private enum TunnelProviderError: Error, LocalizedError {
         case .invalidConfiguration: "Некорректная конфигурация NP/2."
 		case .alreadyActive: "Packet Tunnel уже запускается или подключён."
         case .missingSecretReference: "Ссылка на ключ NP/2 отсутствует."
-        case .clientCoreUnavailable: "HTTP/3 ClientCore недоступен."
+        case .clientCoreUnavailable: "HTTPS ClientCore недоступен."
         case .invalidClientRoutes: "Некорректный снимок маршрутов NP/2."
-        case .connectFailed: "HTTP/3 WebTransport соединение не установлено."
+        case .connectFailed: "HTTPS WebSocket соединение не установлено."
         case .missingTunnelFileDescriptor: "iOS не предоставила дескриптор utun."
         case .packetDataPlaneFailed: "Пакетный путь NP/2 не запустился."
         case .runtimeStopped: "Сессия NP/2 неожиданно остановилась."
-        case .reconnectFailed: "HTTP/3 переподключение исчерпано."
+        case .reconnectFailed: "HTTPS переподключение исчерпано."
         case .stopping: "Packet Tunnel уже останавливается."
         case .providerReleased: "Системный VPN provider был остановлен."
         }
