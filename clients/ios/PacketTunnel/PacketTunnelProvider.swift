@@ -8,101 +8,35 @@ import OSLog
 final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
     private let runtimeQueue = DispatchQueue(label: "com.neproto.packet-tunnel.runtime", qos: .userInitiated)
     private let migrationQueue = DispatchQueue(label: "com.neproto.packet-tunnel.migration", qos: .utility)
+    private let shutdownQueue = DispatchQueue(label: "com.neproto.packet-tunnel.shutdown", qos: .utility)
     private let stateLock = NSLock()
-    private let logger = Logger(subsystem: "NeProto", category: "PacketTunnel")
-    private var monitor: DispatchSourceTimer?
+    private let logger = Logger(subsystem: "NeProto", category: "StrictHTTP3PacketTunnel")
+
+    private var core: Np2mobileClientCore?
+    private var runtimeMonitor: DispatchSourceTimer?
     private var pathMonitor: NWPathMonitor?
-    private var lastNetworkPathSignature: String?
+    private var lastPathSignature: String?
+    private var starting = false
     private var stopping = false
+    private var migrationGate = StrictNetworkMigrationGate()
 
     override func startTunnel(
-        options: [String: NSObject]? = nil,
+        options _: [String: NSObject]? = nil,
         completionHandler: @escaping (Error?) -> Void
     ) {
-        logger.notice("Packet Tunnel start requested")
         let completion = TunnelStartCompletion(completionHandler)
-        stateLock.lock()
-        stopping = false
-        stateLock.unlock()
-        do {
-            let tunnelProtocol = try requireTunnelProtocol()
-            let profile = try requireProfile(from: tunnelProtocol)
-            guard let persistentReference = tunnelProtocol.passwordReference else {
-                throw TunnelProviderError.missingSecretReference
-            }
-            let secret = try KeychainSecretStore().read(persistentReference: persistentReference)
-            try profile.validate(secret: secret)
-            logger.notice("Profile and Keychain secret validated")
-            guard let rawDeviceID = tunnelProtocol.providerConfiguration?["device_id"] as? String,
-                  let deviceID = UUID(uuidString: rawDeviceID),
-                  deviceID != UUID(uuidString: "00000000-0000-0000-0000-000000000000") else {
-                throw TunnelProviderError.invalidConfiguration
-            }
-            let clientJSON = String(
-                decoding: try profile.clientConfigurationJSON(deviceID: deviceID),
-                as: UTF8.self
-            )
-
-            let routeData = tunnelProtocol.providerConfiguration?["client_routes"] as? Data ?? Data("[]".utf8)
-            guard let routeJSON = String(data: routeData, encoding: .utf8) else {
-                throw TunnelProviderError.invalidClientRoutes
-            }
-            var routeError: NSError?
-            guard Np2mobileSetClientRoutesJSON(routeJSON, &routeError) else {
-                logMobileFailure("NP/2 client route snapshot rejected", error: routeError)
-                throw routeError ?? TunnelProviderError.invalidClientRoutes
-            }
-            logger.notice("Immutable NP/2 client route snapshot installed")
-
-            var mobileError: NSError?
-            guard Np2mobileStart(clientJSON, secret, &mobileError) else {
-                logMobileFailure("NP/2 encrypted session start failed", error: mobileError)
-                throw mobileError ?? TunnelProviderError.np2StartFailed
-            }
-            let routeExclusions = try ServerRouteExclusions(Np2mobileServerAddresses())
-            let excludedIPv4 = routeExclusions.ipv4.joined(separator: ",")
-            let excludedIPv6 = routeExclusions.ipv6.joined(separator: ",")
-            logger.notice(
-                "Carrier route exclusions: IPv4=\(excludedIPv4, privacy: .public) IPv6=\(excludedIPv6, privacy: .public)"
-            )
-            logger.notice("Encrypted NP/2 session connected")
-
-            setTunnelNetworkSettings(Self.networkSettings(excluding: routeExclusions)) { [weak self] error in
-                guard let self else {
-                    Np2mobileStop()
-                    completion.call(TunnelProviderError.providerReleased)
-                    return
-                }
-                if let error {
-                    self.logger.error("Installing tunnel network settings failed")
-                    Np2mobileStop()
-                    completion.call(Self.xpcSafeError(error))
-                    return
-                }
-                let descriptor = neproto_duplicate_tunnel_file_descriptor()
-                guard descriptor >= 0 else {
-                    self.logger.error("No duplicated utun file descriptor was found")
-                    Np2mobileStop()
-                    completion.call(Self.xpcSafeError(TunnelProviderError.missingTunnelFileDescriptor))
-                    return
-                }
-                var tunnelError: NSError?
-                guard Np2mobileStartPacketTunnel(Int64(descriptor), &tunnelError) else {
-                    self.logMobileFailure("Direct NP/2 packet data plane failed", error: tunnelError)
-                    Np2mobileStop()
-                    completion.call(Self.xpcSafeError(tunnelError ?? TunnelProviderError.packetDataPlaneFailed))
-                    return
-                }
-                self.logger.notice("Direct utun-to-NP/2 data plane is running")
-                self.startRuntimeMonitor()
-                self.startNetworkPathMonitor()
-                completion.call(nil)
-            }
-        } catch {
-            let nsError = error as NSError
-            logger.error("Packet Tunnel start failed: domain=\(nsError.domain, privacy: .public) code=\(nsError.code)")
-            Np2mobileStop()
-            completionHandler(Self.xpcSafeError(error))
+		let accepted = stateLock.withLock {
+			guard !starting, !stopping, core == nil else { return false }
+			starting = true
+			return true
+		}
+		guard accepted else {
+			completion.call(Self.xpcSafeError(TunnelProviderError.alreadyActive))
+			return
+		}
+        runtimeQueue.async { [weak self] in
+            self?.startStrictHTTP3Tunnel(completion: completion)
+                ?? completion.call(Self.xpcSafeError(TunnelProviderError.providerReleased))
         }
     }
 
@@ -110,95 +44,262 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         with reason: NEProviderStopReason,
         completionHandler: @escaping () -> Void
     ) {
-        logger.notice("Packet Tunnel stop requested, reason=\(reason.rawValue)")
+        logger.notice("Stopping strict HTTP/3 Packet Tunnel, reason=\(reason.rawValue)")
         let completion = TunnelStopCompletion(completionHandler)
-        stateLock.lock()
-        stopping = true
-        let activeMonitor = monitor
-        monitor = nil
-        let activePathMonitor = pathMonitor
-        pathMonitor = nil
-        lastNetworkPathSignature = nil
-        stateLock.unlock()
-        activeMonitor?.cancel()
-        activePathMonitor?.cancel()
-        runtimeQueue.async {
-            let startedAt = DispatchTime.now().uptimeNanoseconds
-            Np2mobileStop()
-            let elapsedMilliseconds = (DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000
-            self.logger.notice("NP/2 runtime stopped in \(elapsedMilliseconds, privacy: .public) ms")
+        let owned: Np2mobileClientCore? = stateLock.withLock {
+            stopping = true
+            runtimeMonitor?.cancel()
+            runtimeMonitor = nil
+            pathMonitor?.cancel()
+            pathMonitor = nil
+            lastPathSignature = nil
+			migrationGate.reset()
+            let result = core
+            core = nil
+            return result
+        }
+        shutdownQueue.async {
+            if let owned {
+                do {
+                    try owned.close()
+                } catch {
+                    self.logMobileFailure("Closing strict HTTP/3 ClientCore failed", error: error as NSError)
+                }
+            }
+			self.stateLock.withLock {
+				self.starting = false
+				self.stopping = false
+			}
             completion.call()
         }
     }
 
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)? = nil) {
+        guard messageData.count <= 256 else {
+            completionHandler?(nil)
+            return
+        }
+        let activeCore = stateLock.withLock { core }
+        guard let activeCore else {
+            completionHandler?(Data(#"{"state":"disconnected","carrier":"none"}"#.utf8))
+            return
+        }
         if String(data: messageData, encoding: .utf8) == "np2-cluster-catalog" {
             var catalogError: NSError?
-            let catalog = Np2mobileCatalogJSON(&catalogError)
-            if let catalogError {
-                logger.error("Cluster catalog request failed: domain=\(catalogError.domain, privacy: .public) code=\(catalogError.code)")
+            let catalog = activeCore.catalogJSON(&catalogError)
+            if catalogError != nil || catalog.utf8.count > 256 * 1024 {
+                logMobileFailure("Cluster catalog request failed", error: catalogError)
                 completionHandler?(nil)
                 return
             }
-            completionHandler?(catalog.data(using: .utf8))
+            completionHandler?(Data(catalog.utf8))
             return
         }
-        let response: [String: Any] = [
-            "state": Np2mobileState(),
-            "version": Np2mobileVersion(),
-            "last_error": Np2mobileLastError(),
-            "server_routes": Np2mobileServerAddresses(),
-            "carrier": Np2mobileCarrier(),
-            "data_plane": "direct-np2",
-            "cell_encryption": "chacha20-poly1305",
-			"cover_mode": Np2mobileCoverMode(),
-            "upload_bytes_per_second": Np2mobileUploadBytesPerSecond(),
-            "download_bytes_per_second": Np2mobileDownloadBytesPerSecond(),
-            "upload_total_bytes": Np2mobileUploadTotalBytes(),
-            "download_total_bytes": Np2mobileDownloadTotalBytes(),
-            "udp_mode": Np2mobileUDPMode(),
-            "quic_fallbacks": Np2mobileQUICFallbackCount(),
-            "carrier_pool_target": Np2mobileCarrierPoolTarget(),
-            "carrier_pool_healthy": Np2mobileCarrierPoolHealthy(),
-            "carrier_pool_assignments": Np2mobileCarrierPoolAssignments(),
-            "carrier_pool_scale_ups": Np2mobileCarrierPoolScaleUpCount(),
-            "carrier_pool_failures": Np2mobileCarrierPoolFailureCount(),
-            "dns_attribution_queries": Np2mobileDNSAttributionQueryCount(),
-            "dns_attribution_responses": Np2mobileDNSAttributionResponseCount(),
-            "dns_attribution_hits": Np2mobileDNSAttributionHitCount(),
-            "dns_attribution_misses": Np2mobileDNSAttributionMissCount(),
-            "dns_attribution_cached": Np2mobileDNSAttributionCachedCount(),
-            "first_flight_domain_hits": Np2mobileFirstFlightDomainHitCount(),
-            "first_flight_fallbacks": Np2mobileFirstFlightFallbackCount(),
-            "tcp_stream_attempts": Np2mobileTCPStreamAttemptCount(),
-            "tcp_stream_successes": Np2mobileTCPStreamSuccessCount(),
-            "tcp_stream_failures": Np2mobileTCPStreamFailureCount(),
-            "active_streams": Np2mobileActiveStreamCount(),
-            "flow_control_stalls": Np2mobileFlowControlStallCount(),
-            "protocol_errors": Np2mobileProtocolErrorCount(),
-            "sent_cells": Np2mobileSentCellCount(),
-            "received_cells": Np2mobileReceivedCellCount(),
-            "sent_cell_payload_bytes": Np2mobileSentCellPayloadByteCount(),
-            "received_payload_bytes": Np2mobileReceivedPayloadByteCount(),
-            "window_updates_sent": Np2mobileWindowUpdateSentCount(),
-            "window_updates_received": Np2mobileWindowUpdateReceivedCount(),
-            "cover_real_wire_bytes": Np2mobileCoverRealWireByteCount(),
-            "cover_padding_bytes": Np2mobileCoverPaddingByteCount(),
-            "cover_dummy_wire_bytes": Np2mobileCoverDummyWireByteCount(),
-            "cover_profile_transitions": Np2mobileCoverProfileTransitionCount(),
-            "cover_bursts": Np2mobileCoverBurstCount(),
-            "cover_dummy_selected": Np2mobileCoverDummySelectedCount(),
-            "cover_dummy_rejected": Np2mobileCoverDummyRejectedCount(),
-            "cover_added_delay_us": Np2mobileCoverAddedDelayMicroseconds(),
-            "cover_max_delay_us": Np2mobileCoverMaxDelayMicroseconds(),
-            "cover_web_sessions": Np2mobileCoverWebSessionCount(),
-            "cover_realtime_sessions": Np2mobileCoverRealtimeSessionCount(),
-            "cover_stream_sessions": Np2mobileCoverStreamSessionCount(),
-            "network_changes": Np2mobileNetworkChangeCount(),
-            "reconnects": Np2mobileReconnectCount(),
-            "migrations": Np2mobileMigrationCount(),
-        ]
-        completionHandler?(try? JSONSerialization.data(withJSONObject: response, options: [.sortedKeys]))
+        completionHandler?(Self.providerSnapshot(for: activeCore))
+    }
+
+    private func startStrictHTTP3Tunnel(completion: TunnelStartCompletion) {
+        var createdCore: Np2mobileClientCore?
+        do {
+            let tunnelProtocol = try requireTunnelProtocol()
+            guard let persistentReference = tunnelProtocol.passwordReference else {
+                throw TunnelProviderError.missingSecretReference
+            }
+            let bootstrap = try StrictHTTP3PacketTunnelBootstrap(
+                providerConfiguration: tunnelProtocol.providerConfiguration ?? [:],
+                credentialReference: persistentReference
+            )
+            let secret = try KeychainSecretStore().read(persistentReference: bootstrap.credentialReference)
+            try bootstrap.profile.validate(secret: secret)
+
+            var mobileError: NSError?
+            guard let newCore = Np2mobileNewStrictHTTP3ClientCore(&mobileError) else {
+                throw mobileError ?? TunnelProviderError.clientCoreUnavailable
+            }
+            createdCore = newCore
+            guard stateLock.withLock({
+				guard starting, !stopping, core == nil else { return false }
+                core = newCore
+                return true
+            }) else {
+                throw TunnelProviderError.stopping
+            }
+            try newCore.setClientRoutesJSON(bootstrap.clientRoutesJSON)
+            try newCore.connect(
+                bootstrap.clientConfigurationJSON,
+                secret: secret,
+                operationID: Self.operationID(prefix: "ios-start"),
+                profileID: bootstrap.profileID
+            )
+            let exclusions = try ServerRouteExclusions(newCore.serverAddresses())
+            guard !stateLock.withLock({ stopping }) else {
+                throw TunnelProviderError.stopping
+            }
+
+            setTunnelNetworkSettings(Self.networkSettings(excluding: exclusions)) { [weak self] settingsError in
+                guard let self else {
+                    try? newCore.close()
+                    completion.call(Self.xpcSafeError(TunnelProviderError.providerReleased))
+                    return
+                }
+                self.runtimeQueue.async {
+                    do {
+                        if let settingsError { throw settingsError }
+                        guard !self.stateLock.withLock({ self.stopping }) else {
+                            throw TunnelProviderError.stopping
+                        }
+                        let descriptor = neproto_duplicate_tunnel_file_descriptor()
+                        guard descriptor >= 0 else {
+                            throw TunnelProviderError.missingTunnelFileDescriptor
+                        }
+                        try newCore.attachPacketTunnel(Int64(descriptor), mtu: 1_500)
+						guard self.stateLock.withLock({
+							guard self.core === newCore, !self.stopping else { return false }
+							self.starting = false
+							return true
+						}) else {
+							throw TunnelProviderError.stopping
+						}
+                        self.startRuntimeMonitor(for: newCore)
+                        self.startNetworkPathMonitor(for: newCore)
+						guard self.stateLock.withLock({ self.core === newCore && !self.stopping }) else {
+							throw TunnelProviderError.stopping
+						}
+                        self.logger.notice("Strict HTTP/3 WebTransport Packet Tunnel is connected")
+                        completion.call(nil)
+                    } catch {
+                        self.finishStartFailure(core: newCore, error: error, completion: completion)
+                    }
+                }
+            }
+        } catch {
+            finishStartFailure(core: createdCore, error: error, completion: completion)
+        }
+    }
+
+    private func finishStartFailure(
+        core failedCore: Np2mobileClientCore?,
+        error: Error,
+        completion: TunnelStartCompletion
+    ) {
+		stateLock.withLock { starting = false }
+        if let failedCore {
+            stateLock.withLock {
+                if core === failedCore { core = nil }
+            }
+            try? failedCore.close()
+        }
+        let safeError = Self.xpcSafeError(error)
+        logger.error("Strict HTTP/3 Packet Tunnel start failed: domain=\(safeError.domain, privacy: .public) code=\(safeError.code)")
+        completion.call(safeError)
+    }
+
+    private func startRuntimeMonitor(for expectedCore: Np2mobileClientCore) {
+        let timer = DispatchSource.makeTimerSource(queue: runtimeQueue)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self, weak expectedCore] in
+            guard let self, let expectedCore,
+                  self.stateLock.withLock({ self.core === expectedCore && !self.stopping }) else { return }
+            guard let data = expectedCore.snapshotJSON().data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let state = object["state"] as? String,
+                  state == "failed" || state == "disconnected" else { return }
+            self.terminateAfterRuntimeFailure(expectedCore, error: TunnelProviderError.runtimeStopped)
+        }
+		timer.resume()
+        stateLock.withLock {
+			guard core === expectedCore, !stopping else {
+				timer.cancel()
+				return
+			}
+            runtimeMonitor?.cancel()
+            runtimeMonitor = timer
+        }
+    }
+
+    private func startNetworkPathMonitor(for expectedCore: Np2mobileClientCore) {
+        let monitor = NWPathMonitor()
+        let coreReference = SendableClientCoreReference(expectedCore)
+        monitor.pathUpdateHandler = { [weak self, coreReference] path in
+            guard let self else { return }
+            let expectedCore = coreReference.value
+            let signature = Self.networkPathSignature(path)
+            let changed = self.stateLock.withLock {
+                guard self.core === expectedCore, !self.stopping else { return false }
+                defer { self.lastPathSignature = signature }
+				guard self.lastPathSignature.map({ $0 != signature }) ?? false else { return false }
+				return self.migrationGate.pathChanged()
+            }
+            guard changed else { return }
+			self.scheduleNetworkMigration(for: expectedCore)
+        }
+		monitor.start(queue: runtimeQueue)
+        stateLock.withLock {
+			guard core === expectedCore, !stopping else {
+				monitor.cancel()
+				return
+			}
+            pathMonitor?.cancel()
+            pathMonitor = monitor
+            lastPathSignature = nil
+        }
+    }
+
+	private func scheduleNetworkMigration(for expectedCore: Np2mobileClientCore) {
+		migrationQueue.async { [weak self, weak expectedCore] in
+			guard let self, let expectedCore else { return }
+			guard self.stateLock.withLock({ self.core === expectedCore && !self.stopping }) else {
+				self.stateLock.withLock {
+					self.migrationGate.reset()
+				}
+				return
+			}
+			self.reasserting = true
+			let migrationError: NSError?
+			do {
+				try expectedCore.networkChanged(Self.operationID(prefix: "ios-network"))
+				migrationError = nil
+			} catch {
+				migrationError = error as NSError
+			}
+			self.reasserting = false
+			if let migrationError {
+				self.logMobileFailure("Strict HTTP/3 reconnect exhausted", error: migrationError)
+				self.terminateAfterRuntimeFailure(
+					expectedCore,
+					error: migrationError
+				)
+				return
+			}
+			self.logger.notice("Network transition retained strict HTTP/3 WebTransport")
+			let repeatMigration = self.stateLock.withLock {
+				guard self.core === expectedCore, !self.stopping else {
+					self.migrationGate.reset()
+					return false
+				}
+				return self.migrationGate.completed()
+			}
+			if repeatMigration {
+				self.scheduleNetworkMigration(for: expectedCore)
+			}
+		}
+	}
+
+    private func terminateAfterRuntimeFailure(_ failedCore: Np2mobileClientCore, error: Error) {
+        let shouldTerminate = stateLock.withLock {
+            guard core === failedCore, !stopping else { return false }
+            stopping = true
+            core = nil
+            runtimeMonitor?.cancel()
+            runtimeMonitor = nil
+            pathMonitor?.cancel()
+            pathMonitor = nil
+			migrationGate.reset()
+            return true
+        }
+        guard shouldTerminate else { return }
+        try? failedCore.close()
+        cancelTunnelWithError(Self.xpcSafeError(error))
     }
 
     private func requireTunnelProtocol() throws -> NETunnelProviderProtocol {
@@ -206,86 +307,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
             throw TunnelProviderError.invalidConfiguration
         }
         return tunnelProtocol
-    }
-
-    private func requireProfile(from tunnelProtocol: NETunnelProviderProtocol) throws -> ServerProfile {
-        guard let payload = tunnelProtocol.providerConfiguration?["profile_payload"] as? Data else {
-            throw TunnelProviderError.invalidConfiguration
-        }
-        return try ServerProfile(providerPayload: payload)
-    }
-
-    private func startRuntimeMonitor() {
-        let timer = DispatchSource.makeTimerSource(queue: runtimeQueue)
-        timer.schedule(deadline: .now() + 1, repeating: 1)
-        timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            let state = Np2mobileState()
-            guard state == "failed" || state == "stopped" else { return }
-            self.stateLock.lock()
-            let shouldCancel = !self.stopping
-            self.stopping = true
-            let activeMonitor = self.monitor
-            self.monitor = nil
-            self.stateLock.unlock()
-            activeMonitor?.cancel()
-            guard shouldCancel else { return }
-            let detail = Np2mobileLastError()
-            self.logger.error("NP/2 runtime stopped unexpectedly: \(detail, privacy: .public)")
-            self.cancelTunnelWithError(
-                NSError(
-                    domain: "com.neproto.ios.PacketTunnel",
-                    code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "NP/2 runtime stopped: \(detail)"]
-                )
-            )
-        }
-        stateLock.lock()
-        monitor?.cancel()
-        monitor = timer
-        stateLock.unlock()
-        timer.resume()
-    }
-
-    private func startNetworkPathMonitor() {
-        let pathMonitor = NWPathMonitor()
-        pathMonitor.pathUpdateHandler = { [weak self] path in
-            guard let self else { return }
-            let signature = Self.networkPathSignature(path)
-            self.stateLock.lock()
-            let changed = self.lastNetworkPathSignature.map { $0 != signature } ?? false
-            self.lastNetworkPathSignature = signature
-            self.stateLock.unlock()
-            guard changed else { return }
-            self.logger.notice("Network path changed; probing active NP/2 carrier")
-            self.migrationQueue.async { [weak self] in
-                guard let self else { return }
-                self.stateLock.lock()
-                let shouldMigrate = !self.stopping
-                self.stateLock.unlock()
-                guard shouldMigrate else { return }
-                var migrationError: NSError?
-                guard Np2mobileNetworkChanged(&migrationError) else {
-                    self.logMobileFailure("NP/2 carrier migration did not complete", error: migrationError)
-                    return
-                }
-                self.logger.notice("NP/2 network transition completed: carrier=\(Np2mobileCarrier(), privacy: .public) reconnects=\(Np2mobileReconnectCount(), privacy: .public)")
-            }
-        }
-        stateLock.lock()
-        self.pathMonitor?.cancel()
-        self.pathMonitor = pathMonitor
-        lastNetworkPathSignature = nil
-        stateLock.unlock()
-        pathMonitor.start(queue: runtimeQueue)
-    }
-
-    private static func networkPathSignature(_ path: NWPath) -> String {
-        let interfaceTypes: [NWInterface.InterfaceType] = [.wifi, .cellular, .wiredEthernet, .loopback, .other]
-        let activeTypes = interfaceTypes.filter { path.usesInterfaceType($0) }
-            .map { String(describing: $0) }
-            .joined(separator: ",")
-        return "\(path.status)-\(activeTypes)-v4:\(path.supportsIPv4)-v6:\(path.supportsIPv6)-exp:\(path.isExpensive)-con:\(path.isConstrained)"
     }
 
     private func logMobileFailure(_ message: StaticString, error: NSError?) {
@@ -296,14 +317,37 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
     }
 
-    private static func networkSettings(
-        excluding serverRoutes: ServerRouteExclusions
-    ) -> NEPacketTunnelNetworkSettings {
-        // The NP/2 carrier is authenticated before this default route is
-        // installed. A carrier failure terminates the tunnel instead of
-        // reconnecting through its own utun route.
-        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "198.18.0.2")
+    private static func operationID(prefix: String) -> String {
+        "\(prefix)-\(UUID().uuidString.lowercased())"
+    }
 
+    private static func providerSnapshot(for core: Np2mobileClientCore) -> Data {
+        guard let raw = core.snapshotJSON().data(using: .utf8),
+              var object = try? JSONSerialization.jsonObject(with: raw) as? [String: Any] else {
+            return Data(#"{"state":"failed","carrier":"none"}"#.utf8)
+        }
+        object["version"] = Np2mobileVersion()
+        object["server_routes"] = core.serverAddresses()
+        object["data_plane"] = "direct-np2"
+        object["cell_encryption"] = "chacha20-poly1305"
+        object["cover_mode"] = "off"
+        object["quic_fallbacks"] = 0
+        object["carrier_pool_scale_ups"] = 0
+        object["carrier_pool_failures"] = 0
+        return (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]))
+            ?? Data(#"{"state":"failed","carrier":"none"}"#.utf8)
+    }
+
+    private static func networkPathSignature(_ path: Network.NWPath) -> String {
+        let types: [Network.NWInterface.InterfaceType] = [.wifi, .cellular, .wiredEthernet, .loopback, .other]
+        let active = types.filter { path.usesInterfaceType($0) }
+            .map { String(describing: $0) }
+            .joined(separator: ",")
+        return "\(path.status)-\(active)-v4:\(path.supportsIPv4)-v6:\(path.supportsIPv6)-exp:\(path.isExpensive)-con:\(path.isConstrained)"
+    }
+
+    private static func networkSettings(excluding serverRoutes: ServerRouteExclusions) -> NEPacketTunnelNetworkSettings {
+        let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "198.18.0.2")
         let ipv4 = NEIPv4Settings(addresses: ["198.18.0.1"], subnetMasks: ["255.255.255.252"])
         ipv4.includedRoutes = [NEIPv4Route.default()]
         ipv4.excludedRoutes = serverRoutes.ipv4.map {
@@ -318,9 +362,6 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         }
         settings.ipv6Settings = ipv6
 
-        // DNS packets travel inside the encrypted NP/2 tunnel. Keeping DNS on
-        // the tunnel data plane lets NP2Mobile retain a short-lived in-memory
-        // domain-to-address attribution for authoritative domain/GeoSite routes.
         let dns = NEDNSSettings(servers: ["1.1.1.1", "1.0.0.1"])
         dns.matchDomains = [""]
         settings.dnsSettings = dns
@@ -337,51 +378,72 @@ final class PacketTunnelProvider: NEPacketTunnelProvider, @unchecked Sendable {
         )
     }
 }
+private final class SendableClientCoreReference: @unchecked Sendable {
+    let value: Np2mobileClientCore
+
+    init(_ value: Np2mobileClientCore) {
+        self.value = value
+    }
+}
 
 private final class TunnelStartCompletion: @unchecked Sendable {
-    private let callback: (Error?) -> Void
+    private let lock = NSLock()
+    private var callback: ((Error?) -> Void)?
 
-    init(_ callback: @escaping (Error?) -> Void) {
-        self.callback = callback
-    }
+    init(_ callback: @escaping (Error?) -> Void) { self.callback = callback }
 
     func call(_ error: Error?) {
-        callback(error)
+        let owned = lock.withLock {
+            defer { callback = nil }
+            return callback
+        }
+        owned?(error)
     }
 }
 
 private final class TunnelStopCompletion: @unchecked Sendable {
-    private let callback: () -> Void
+    private let lock = NSLock()
+    private var callback: (() -> Void)?
 
-    init(_ callback: @escaping () -> Void) {
-        self.callback = callback
-    }
+    init(_ callback: @escaping () -> Void) { self.callback = callback }
 
     func call() {
-        callback()
+        let owned = lock.withLock {
+            defer { callback = nil }
+            return callback
+        }
+        owned?()
     }
 }
 
 private enum TunnelProviderError: Error, LocalizedError {
     case invalidConfiguration
+    case alreadyActive
     case missingSecretReference
-    case np2StartFailed
+    case clientCoreUnavailable
+    case invalidClientRoutes
+    case connectFailed
     case missingTunnelFileDescriptor
     case packetDataPlaneFailed
     case runtimeStopped
+    case reconnectFailed
+    case stopping
     case providerReleased
-    case invalidClientRoutes
 
     var errorDescription: String? {
         switch self {
         case .invalidConfiguration: "Некорректная конфигурация NP/2."
+		case .alreadyActive: "Packet Tunnel уже запускается или подключён."
         case .missingSecretReference: "Ссылка на ключ NP/2 отсутствует."
-        case .np2StartFailed: "Зашифрованная сессия NP/2 не запустилась."
+        case .clientCoreUnavailable: "HTTP/3 ClientCore недоступен."
+        case .invalidClientRoutes: "Некорректный снимок маршрутов NP/2."
+        case .connectFailed: "HTTP/3 WebTransport соединение не установлено."
         case .missingTunnelFileDescriptor: "iOS не предоставила дескриптор utun."
-        case .packetDataPlaneFailed: "Прямой сетевой стек NP/2 не запустился."
+        case .packetDataPlaneFailed: "Пакетный путь NP/2 не запустился."
         case .runtimeStopped: "Сессия NP/2 неожиданно остановилась."
+        case .reconnectFailed: "HTTP/3 переподключение исчерпано."
+        case .stopping: "Packet Tunnel уже останавливается."
         case .providerReleased: "Системный VPN provider был остановлен."
-        case .invalidClientRoutes: "Некорректный снимок локальных маршрутов NP/2."
         }
     }
 }

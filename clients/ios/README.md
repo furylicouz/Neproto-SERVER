@@ -6,7 +6,7 @@
 
 ```text
 iOS apps → utun → userspace IPv4/IPv6 TCP+UDP → encrypted NP/2
-         → HTTP/3, WebRTC, or HTTPS carrier → NP/2 server → target service
+         → HTTP/3 WebTransport carrier → NP/2 server → target service
 ```
 
 iOS-клиент не поднимает локальный SOCKS5 и не использует `hev-socks5-tunnel`.
@@ -17,7 +17,7 @@ ChaCha20-Poly1305 независимо от внешнего TLS/DTLS carrier.
 ## Возможности
 
 - несколько серверных профилей;
-- performance-first HTTPS/WebSocket с HTTP/3/WebTransport и WebRTC fallback;
+- строгий HTTP/3/WebTransport runtime без HTTPS/WebRTC fallback;
 - системный VPN для TCP- и UDP-трафика IPv4 и IPv6;
 - DNS внутри зашифрованного NP/2 data plane с краткоживущей in-memory
   атрибуцией доменов для правил Domain и GeoSite;
@@ -61,14 +61,13 @@ export`. Старые v1 QR продолжают импортироваться 
 передают HTTP/3 route, политику `require_datagrams` и безопасный предел
 параллельных carrier-соединений.
 
-Настраивать ускорение вручную не нужно. Все старые и новые мобильные
-`performance`-профили автоматически используют адаптивный режим: два carrier-
-соединения прогреваются в фоне, третье создаётся только под нагрузкой и
-закрывается после простоя. Каждое соединение независимо проходит NP/2
-аутентификацию, согласование v2.2 и обязательное шифрование; один TCP-поток
-между соединениями не дробится. Производственная конфигурация использует
-`cover_mode=off`: Mosaic не добавляет задержки, padding и dummy cells, но его
-можно явно включить для лабораторных сравнений.
+Нативный Packet Tunnel преобразует сохранённый профиль в ограниченный
+`carrier_policy=http3-only`: один HTTP/3 carrier, без скрытого HTTPS/WebRTC
+fallback и без continuity/pool старого runtime. Каждое подключение проходит
+NP/2-аутентификацию, согласование v2.2 и обязательное шифрование. Конфигурация
+использует `cover_mode=off`: Mosaic не добавляет задержки, padding и dummy
+cells. Профиль без HTTP/3 route остаётся импортируемым для миграции, но строгий
+Packet Tunnel отклонит его до сетевого подключения.
 
 Routes начинаются с `/`, имеют длину не менее 16 символов и не совпадают.
 Root secret не попадает в UserDefaults, provider payload, проект или логи.
@@ -92,22 +91,11 @@ Tunnel.
 
 `PacketTunnelProvider` handles Wi-Fi/cellular path changes outside the stop
 queue. It first sends an authenticated NP/2 `PING/PONG` over the current
-session. A surviving carrier stays active. Otherwise the client performs
-bounded automatic carrier selection, atomically switches new TUN flows to the
-replacement session, and drains existing streams on the previous session for
-at most 30 seconds. A reconnect failure does not tear down a still-live old
-session, and `stopTunnel` cancels migration immediately instead of waiting for
-its timeout.
+HTTP/3 session. A surviving session stays active; otherwise the strict core
+performs a bounded same-HTTP/3 replacement and atomically hands over the packet
+path. It never dials HTTPS or WebRTC during this phase.
 
-Initial connection is connectivity-first: HTTPS may establish the tunnel while
-HTTP/3 is still authenticating. When HTTPS is primary, a bounded background
-probe gives HTTP/3 and then WebRTC a complete attempt without exposing a mode
-selector to the user. A successfully authenticated faster carrier is promoted
-automatically; new TCP and UDP flows use it while existing streams drain on the
-previous carrier. HTTPS remains the compatibility path when native datagram
-carriers are unavailable.
-
-The app diagnostics expose aggregate network-change, reconnect, and migration
-counters without server routes, credentials, destinations, or payloads. This
-behavior must be validated on a signed physical iPhone; Simulator and unsigned
-iphoneos builds prove compilation/linking only.
+The app diagnostics expose aggregate throughput plus QUIC RTT, packet, byte,
+and loss counters without credentials, destinations, or payloads. This behavior
+must be validated on a signed physical iPhone; Simulator and unsigned iphoneos
+builds prove compilation/linking only.
