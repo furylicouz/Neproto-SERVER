@@ -214,10 +214,13 @@ layer. `off` is the production performance default: encoded NP/2 cells pass
 directly from the multiplexer into the mandatory directional AEAD record layer,
 with no cover delay, padding, dummy cells, or Mosaic classification. TLS 1.3,
 NP/2 authentication, session-specific cell type mapping, ChaCha20-Poly1305,
-flow control, and multiplexing remain mandatory and unchanged. `mosaic` is an
-explicit opt-in that installs the cover transport and advertises
-`CapabilityMosaicCover`; a peer must not advertise that capability while its
-local `cover_mode` is `off`.
+flow control, and multiplexing remain mandatory and unchanged. `pulse` installs
+the low-overhead sender-local scheduler defined in
+[`NP2-PULSE-SPEC.md`](NP2-PULSE-SPEC.md). It does not advertise a new wire
+capability and is bounded to 5% overhead and 2 ms burst-start delay. `mosaic` is
+the legacy explicit opt-in that installs the adaptive cover transport and
+advertises `CapabilityMosaicCover`; a peer must not advertise that capability
+while its local `cover_mode` is `off` or `pulse`.
 
 Cover mode is sender-local and does not change cell or carrier framing. This
 allows a rolling upgrade: an `off` sender interoperates with an older covered
@@ -232,10 +235,15 @@ onboarding profiles.
 | `web` | Asymmetric request/response bursts and bucketed records | 20% | 12 ms |
 | `interactive` | Frequent small messages with bounded jitter and idle keepalive | 30% | 20 ms |
 
+`pulse` is a cover mode rather than a user-selected traffic profile. It uses a
+session-derived performance family with a hard 5% overhead cap, at most 512
+padding bytes per cell, at most 2 ms on burst starts, zero delay on following
+cells, and no dummy cells in v1.
+
 Rules:
 
-- `max_cover_overhead_percent` is ignored while `cover_mode=off` and remains
-  available for a later explicit switch back to `mosaic`.
+- `max_cover_overhead_percent` is ignored while `cover_mode=off`, capped at 5
+  while `cover_mode=pulse`, and applied as configured for legacy `mosaic`.
 - Production client and administrative UIs expose one automatic mode. They
   serialize the backward-compatible base value `web`; legacy imported
   `quiet` and `interactive` values remain decodable but are normalized to
