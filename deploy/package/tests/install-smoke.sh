@@ -9,6 +9,7 @@ temporary_root=${NEPROTO_TEST_TMPDIR:-/var/lib}
 }
 "$package_dir/tests/platform-smoke.sh"
 "$package_dir/tests/sync-certificate-smoke.sh"
+bash "$package_dir/tests/docker-neproto-ca-smoke.sh" "$package_dir/docker/Dockerfile.neproto"
 architecture=${1:-amd64}
 expected_version=${2:-}
 [[ -x $package_dir/bin/$architecture/neproto-server ]]
